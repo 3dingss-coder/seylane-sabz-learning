@@ -211,7 +211,7 @@ export function CompletionReport({
                 r.overdue ? (
                   <span className="font-bold text-danger">دیرکرد</span>
                 ) : r.lagging ? (
-                  <span className="font-bold text-warning">عقب</span>
+                  <span className="font-bold text-warning-fg">عقب</span>
                 ) : (
                   STATUS_LABEL[r.status]
                 ),

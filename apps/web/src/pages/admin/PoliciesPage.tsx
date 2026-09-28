@@ -256,7 +256,7 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
           ذخیره سیاست‌ها
         </Button>
         {initial.updatedAt && (
-          <p className="text-center text-xs text-muted">
+          <p className="text-center text-xs text-muted-fg">
             آخرین تغییر: {faDateTime(initial.updatedAt)}
           </p>
         )}

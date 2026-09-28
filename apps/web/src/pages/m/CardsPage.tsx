@@ -80,7 +80,9 @@ export function CardsPage() {
                       <span
                         className={cn(
                           'flex size-14 items-center justify-center rounded-full',
-                          b.earned ? 'bg-primary-light text-primary' : 'bg-background text-muted',
+                          b.earned
+                            ? 'bg-primary-light text-primary'
+                            : 'bg-background text-muted-fg',
                         )}
                       >
                         {b.earned ? (
@@ -124,7 +126,7 @@ export function CardsPage() {
                     <p className="text-xs text-text-secondary">{faDate(l.createdAt)}</p>
                   </div>
                   <span
-                    className={cn('font-bold', l.amount >= 0 ? 'text-success' : 'text-danger')}
+                    className={cn('font-bold', l.amount >= 0 ? 'text-success-fg' : 'text-danger')}
                     dir="ltr"
                   >
                     {l.amount >= 0 ? '+' : ''}

@@ -10,6 +10,10 @@ name: Deploy
 #   VITE_API_BASE      e.g. https://europe-west1-<project>.cloudfunctions.net/api
 #   ALLOWED_ORIGINS    e.g. https://learn.example.com,https://localhost   (https://localhost = Android app)
 #   VITE_SENTRY_DSN    optional
+#   APP_URL            public web URL, e.g. https://learn.example.com (email links + absolute Web Push links)
+#   TRUST_PROXY_HOPS   optional (default 1 = Google front end; 2 if Cloudflare proxies the API)
+#   VITE_FIREBASE_API_KEY / _PROJECT_ID / _MESSAGING_SENDER_ID / _APP_ID / _VAPID_KEY   optional (Web Push)
+# Optional secrets: SMTP_URL (smtps://user:pass@host:465 — weekly manager email), MAIL_FROM
 on:
   workflow_run:
     workflows: [CI]
@@ -57,8 +61,16 @@ jobs:
           VITE_APP_ENV: ${{ env.TARGET }}
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
       - name: Deploy Cloud Functions + Rules
         if: steps.secrets.outputs.configured == 'true'
+        env:
+          SMTP_URL: ${{ secrets.SMTP_URL }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
         run: |
           echo '${{ env.TARGET == 'prod' && secrets.FIREBASE_SERVICE_ACCOUNT_PROD || secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}' > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
@@ -71,6 +83,11 @@ jobs:
             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
             echo "BACKUP_BUCKET=${{ secrets.BACKUP_BUCKET }}"
             echo "APP_VERSION=${{ github.sha }}"
+            echo "APP_URL=${{ vars.APP_URL }}"
+            echo "TRUST_PROXY_HOPS=${{ vars.TRUST_PROXY_HOPS || '1' }}"
+            # Passed via env (not template-expanded in the script) so passwords with $ or quotes survive.
+            echo "SMTP_URL=$SMTP_URL"
+            echo "MAIL_FROM=$MAIL_FROM"
           } > functions/.env
           npx -y firebase-tools@14 deploy --only functions,firestore,storage --project "${{ env.TARGET == 'prod' && secrets.FIREBASE_PROJECT_PROD || secrets.FIREBASE_PROJECT_DEV }}" --non-interactive
           rm -f "$RUNNER_TEMP/sa.json" functions/.env

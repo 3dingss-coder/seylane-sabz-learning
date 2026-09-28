@@ -14,8 +14,8 @@ export interface CountdownChipProps {
 // Meaning via icon + text, not color alone (§16.8).
 const STYLES: Record<CountdownTone, string> = {
   normal: 'bg-background text-text-secondary border-border',
-  warning: 'bg-warning-light text-warning border-warning/30',
-  danger: 'bg-danger-light text-danger border-danger/30',
+  warning: 'bg-warning-light text-warning-fg border-warning/30',
+  danger: 'bg-danger-light text-danger-fg border-danger/30',
   overdue: 'bg-danger text-white border-danger',
 };
 

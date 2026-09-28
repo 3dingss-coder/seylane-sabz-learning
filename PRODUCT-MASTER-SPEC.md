@@ -550,7 +550,7 @@ Application
 
 | Token | Hex | کاربرد |
 |---|---|---|
-| primary | #1B8A5A | CTA اصلی، هایلایت، نوار پیشرفت |
+| primary | #177A50 | CTA اصلی، هایلایت، نوار پیشرفت — (D40: قبلاً #1B8A5A؛ برای کنتراست AA تیره‌تر شد) |
 | primary-hover | #146C45 | Hover/Active |
 | primary-light | #E7F5EE | پس‌زمینه کارت‌های موفق/برند |
 | info | #2563EB | اطلاع‌رسانی، لینک |
@@ -563,6 +563,7 @@ Application
 | border | #E2E8F0 | حاشیه |
 | background | #F8FAFC | پس‌زمینه |
 | surface | #FFFFFF | کارت/سند |
+| muted-fg / warning-fg / success-fg / danger-fg / info-fg | #64748B / #B45309 / #15803D / #B91C1C / #1D4ED8 | **فقط برای متن** (D40) — کنتراست ≥۴٫۵ روی سفید و روی پس‌زمینه‌های کم‌رنگ؛ توکن‌های پایه برای آیکون/حاشیه/پس‌زمینه/نوار می‌مانند |
 
 ### ۱۶.۳ Typography
 - **فونت:** Vazirmatn (باز، فارسی، خوانا در اندازه کوچک)
@@ -884,6 +885,8 @@ WCAG AA (کنتراست ≥4.5) • لمس ≥48px • فوکوس‌رینگ م�
 | completedAt / updatedAt | timestamp | — | | Idempotent upsert |
 - **Indexes:** (userId+packageId) • (userId+completed)
 
+**playback_budgets** — `playback_budgets/{userId}` (فقط سرور): `credit` (ثانیه) • `updatedAt` — سقف زمان‌واقعی مصرف (۲۱.۵)؛ Rules: deny کامل برای کلاینت
+
 **playback_events** — `playback_events/{eventId}`: userId • sectionId • positionSec • playedDeltaSec • ts • deviceId — **Indexes:** (userId+sectionId+ts) • **TTL: 90 روز** (کنترل حجم/هزینه)
 
 ### 20.4 انتساب، انگیزش، ارتباطات
@@ -917,7 +920,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 - **پایه:** REST over HTTPS — نسخه `/v1` — سرویس: Cloud Functions (Express/TS) | احراز هویت: `Authorization: Bearer <Firebase ID Token>` (بررسی سمت‌سرور + Custom Claims برای role)
 - **پاسخ استاندارد موفق:** `{ "data": ... }` | **خطا:** `{ "error": { "code", "message" (فارسی), "details" } }`
 - **کدهای خطا:** 400 VALIDATION • 401 UNAUTHENTICATED • 403 FORBIDDEN • 404 NOT_FOUND • 409 CONFLICT • 429 RATE_LIMIT • 500 INTERNAL
-- **Rate Limit:** عمومی ۶۰ req/min/کاربر • heartbeat ۲۰/min • چت منتور ۱۰/min • ثبت‌نام ۵/min/IP
+- **Rate Limit:** عمومی ۶۰ req/min/کاربر • heartbeat ۲۰/min • چت منتور ۱۰/min • ثبت‌نام ۵/min/IP • ورود ۱۰/min/IP — IP کاربر از `X-Forwarded-For` فقط به تعداد `TRUST_PROXY_HOPS` (پیش‌فرض ۱ = Google Front End) خوانده می‌شود؛ `trust proxy = true` ممنوع (قابل جعل و دور زدن محدودیت ورود)
 - **Pagination:** cursor-based (`?limit=` ≤۵۰ + `cursor`) | **Filtering/Sorting:** پارامترهای استاندارد (`?from&to&brand&status&sort=field:asc`)
 - **Search:** V1 (در MVP فقط جست‌وجوی ساده عنوان در پنل ادمین) | **Webhooks:** ندارد (MVP) | **Upload (D28):** `POST /admin/media/upload-url` → Signed URL آپلود Resumable مستقیم به Storage (محدودیت ۳۲MB بدنه درخواست Functions) → Trigger نهایی‌سازی: بررسی MIME واقعی (magic bytes) + حجم؛ Whitelist صوت: audio/mpeg, audio/mp4 (m4a), audio/aac, audio/wav, audio/ogg (≤۱۰۰MB) • ویدیو: video/mp4, video/quicktime, video/webm, video/x-matroska, video/3gpp, video/x-msvideo (≤۵۰۰MB) + URL یوتیوب
 - **Versioning:** مسیر `/v1`؛ تغییر شکننده = نسخه جدید
@@ -991,6 +994,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 **POST /me/sections/:id/progress (heartbeat)**
 - **Validation:** `0 ≤ positionSec ≤ durationSec`؛ `playedDeltaSec ≤ 70` (بیش از فاصله batch نشود)؛ ردشدن درخواست‌های تکراری/آینده‌نگر (Idempotency-Key)
 - **منطق:** افزایش `playedSeconds` فقط به‌اندازه `playedDeltaSec` (نه position) — **Anti-cheat Seek**؛ تکمیل وقتی percent ≥ سیاست
+- **سقف زمان‌واقعی (پیاده‌شده، PROMPT 015):** هر کاربر یک «اعتبار پخش» در `playback_budgets/{uid}` دارد که با نرخ ۱٫۵× زمان ساعت پر می‌شود (سقف ۱۸۰۰ ثانیه، اعتبار اولیه ۷۰ ثانیه) و هر heartbeat از آن کم می‌کند — ارسال موازی/سریع heartbeat برای چند قسمت نمی‌تواند بیش از زمان واقعی اعتبار بگیرد. فقط در backend حافظه‌ای با `PLAYBACK_BUDGET=off` برای E2E خاموش می‌شود.
 - **Errors:** 400 ناسازگار • 409 نسخه قدیمی • 429
 
 **POST /me/attempts/:id/submit**
@@ -1172,6 +1176,10 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | 9 | گزارش هفتگی (weekly_digest) | Scheduled — شنبه ۹ صبح | مدیر | Push+Email | High | هفتگی | «{n} نفر از تیم شما عقب‌اند» |
 | 10 | نشان (badge_earned) | کسب نشان | بازاریاب | In-App | Low | بلافاصله | «نشان {title} را گرفتی!» |
 | 11 | نودج منتور | قوانین R1–R6 | بازاریاب | In-App | Normal | Throttle روزانه | (بخش ۲۳.۶) |
+| 12 | خوش‌آمد (welcome) | ثبت‌نام موفق | بازاریاب جدید | In-App | Low | یک‌بار | «خوش آمدی {name}! …» |
+| 13 | قبولی آزمون (quiz_passed) | اولین قبولی هر آزمون | بازاریاب | In-App | Normal | یک‌بار در هر آزمون | «آزمون {title} را با نمره {score} قبول شدی» |
+
+**پیاده‌سازی کانال‌ها (PROMPT 015):** Push اندروید = Capacitor/FCM (با `google-services.json`)؛ Push وب/PWA (شامل iOS 16.4+ نصب‌شده) = FCM Web Push با فعال‌سازی داوطلبانه از «پروفایل» (نیاز به `VITE_FIREBASE_*` + کلید VAPID)؛ لینک Push وب مطلق از `APP_URL` ساخته می‌شود. ایمیل گزارش هفتگی از طریق SMTP (`SMTP_URL`، `MAIL_FROM`، `APP_URL`) به مدیرانی که ایمیل دارند؛ بدون SMTP فقط In-App/Push.
 
 **قاعده‌ها:** ساعت سکوت ۲۲:۰۰–۰۷:۰۰ (موکول به صبح) • اولویت High مستثنی نیست مگر deadline <۲۴س • **Fallback:** شکست Push → In-App می‌ماند + retry صف + ثبت `notification_log` • **User Preference:** MVP ثابت؛ V1 خاموش‌سازی موارد Normal/Low • متن فارسی ساده، بدون داده حساس در Push.
 
@@ -1629,9 +1637,9 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | D35 | لایه API تنها دروازه احراز هویت است (ورود/Refresh از طریق Identity Toolkit REST سمت‌سرور)؛ شماره موبایل به ایمیل داخلی `<phone>@phone.seylane-sabz.app` نگاشت می‌شود؛ بازیابی رمز کاربر موبایلی فقط توسط ادمین | Firebase Auth فقط Email/Password (بدون SMS — خارج MVP) | Client SDK مستقیم | کلاینت بدون Firebase SDK (باندل سبک‌تر) | ۲۱.۱ / ۲۴ |
 | D36 | Access Token فقط در حافظه؛ Refresh Token در Preferences اپ اندروید (Capacitor) و در PWA در localStorage (ریسک پذیرفته‌شده برای جلوگیری از ورود مجدد هر بار) | کاربر کم‌سواد دیجیتال + PWA | sessionStorage (خروج با بستن اپ) | ریسک XSS → CSP سخت + ممنوعیت HTML خام | ۲۴ |
 | D37 | داده دسترسی از طریق Repository/DocStore: پیاده‌سازی Firestore (prod/dev) + پیاده‌سازی درون‌حافظه‌ای برای تست و اجرای محلی بدون Emulator | عدم دسترسی به Emulator/Java در محیط ساخت؛ تست‌پذیری | فقط Emulator | دو پیاده‌سازی باید هم‌رفتار بمانند → همان تست‌ها در CI روی Firestore Emulator | ۲۲ / ۲۸ |
-
 | D38 | شناسه اپ اندروید `ir.seylanesabz.learning` (قابل تغییر با `CAP_APP_ID` تا پیش از اولین انتشار در کافه‌بازار)؛ Push بومی فقط وقتی `google-services.json` موجود است فعال می‌شود (`VITE_PUSH_ENABLED`) تا اپ بدون پیکربندی Firebase کرش نکند؛ سرویس‌ورکر PWA در اپ اندروید ثبت نمی‌شود | نبود پروژه Firebase؛ جلوگیری از کرش FCM | فعال‌سازی همیشگی Push | تأیید appId پیش از انتشار لازم است | ۲۲.۱ / F8 |
 | D39 | Refresh Token در Backend محلی (حافظه) با Rotation و پنجره مهلت ۳۰ ثانیه‌ای؛ در Firebase رفتار استاندارد Secure Token | جلوگیری از خروج ناخواسته هنگام قطع درخواست Refresh با Reload صفحه | Rotation سخت | پنجره کوتاه استفاده مجدد | ۲۴ |
+| D40 | کنتراست WCAG AA بر رنگ برند مقدم است: primary از #1B8A5A به #177A50 (۵٫۳۴:۱) و توکن‌های `*-fg` فقط برای متن (muted/warning/success/danger/info) | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) — تناقض ۱۶.۲ با ۱۶ (WCAG AA ≥۴٫۵) | استثنا؛ دو رنگ جدا برای متن/پس‌زمینه | تغییر بسیار جزئی ظاهر رنگ برند | ۱۶ / ۲۸ |
 
 ## 37 Definition of Done
 

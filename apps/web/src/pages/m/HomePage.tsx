@@ -157,7 +157,7 @@ export function HomePage() {
             {d.counts.overdue > 0 && (
               <div
                 role="alert"
-                className="flex items-center gap-2 rounded-card border border-danger/30 bg-danger-light p-3 text-sm text-danger"
+                className="flex items-center gap-2 rounded-card border border-danger/30 bg-danger-light p-3 text-sm text-danger-fg"
               >
                 <BellRing className="size-5" aria-hidden />
                 مهلت {toPersianDigits(d.counts.overdue)} آموزش گذشته است. هر چه زودتر تمامش کن.

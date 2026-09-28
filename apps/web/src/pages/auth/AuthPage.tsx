@@ -127,7 +127,10 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             />
           )}
           {formError && (
-            <p role="alert" className="rounded-input bg-danger-light px-3 py-2 text-sm text-danger">
+            <p
+              role="alert"
+              className="rounded-input bg-danger-light px-3 py-2 text-sm text-danger-fg"
+            >
               {formError}
             </p>
           )}

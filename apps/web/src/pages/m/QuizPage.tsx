@@ -437,7 +437,7 @@ function QuizFlow({
         )}
       </div>
       {answered < questions.length && last && (
-        <p className="text-center text-sm text-warning">
+        <p className="text-center text-sm text-warning-fg">
           به همه سؤال‌ها پاسخ بده ({toPersianDigits(answered)} از{' '}
           {toPersianDigits(questions.length)}).
         </p>

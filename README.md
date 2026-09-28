@@ -86,10 +86,13 @@ npm run test:e2e -w apps/web   # Playwright: starts the local API + vite preview
 npm run test:emulator -w functions   # inside `firebase emulators:exec` (see ci.yml)
 ```
 
+CI (`.github/workflows/ci.yml`) also runs: Playwright on Chromium (desktop + Pixel 7) and WebKit (iPhone 13, foundation suite), axe WCAG 2.1 AA checks (`e2e/a11y.spec.ts`), and Lighthouse CI on `/login` and the signed-in Home (`apps/web/lighthouserc.cjs`: performance / accessibility / best practices ≥ 90, LCP < 3 s).
+
 ## Environments & secrets
 
-- Web config: `apps/web/.env.development.example` and `.env.production.example` (`VITE_API_BASE`, `VITE_SENTRY_DSN`, `VITE_PUSH_ENABLED`). Copy them to `.env.*.local`.
-- API: `functions/.env.example`. `ALLOWED_ORIGINS` is the strict CORS allowlist.
+- Web config: `apps/web/.env.development.example` and `.env.production.example` (`VITE_API_BASE`, `VITE_SENTRY_DSN`, `VITE_PUSH_ENABLED`, and the optional Web Push set `VITE_FIREBASE_API_KEY/PROJECT_ID/MESSAGING_SENDER_ID/APP_ID/VAPID_KEY`). Copy them to `.env.*.local`. Android CI sets `VITE_PUSH_ENABLED` + `VITE_CRASHLYTICS_ENABLED` automatically when the `GOOGLE_SERVICES_JSON_BASE64` secret exists.
+- API: `functions/.env.example`. `ALLOWED_ORIGINS` is the strict CORS allowlist. `APP_URL` = public web URL (email + Web Push links). `SMTP_URL` / `MAIL_FROM` (optional) enable the weekly manager email. `TRUST_PROXY_HOPS` (default 1) controls which `X-Forwarded-For` entry is used for per-IP rate limits — never trust the whole header.
+- Local/E2E-only switches (ignored on Firestore): `PLAYBACK_BUDGET=off` (simulate playback faster than real time), `RATE_LIMIT_SCALE=<n>` (many logins from one IP).
 - Secrets (service accounts, Cloudflare token, Gemini key) go **only** in GitHub Secrets or Secret Manager. See the header of `.github/workflows/deploy.yml` for the full list.
 - Firebase projects: copy `.firebaserc.example` to `.firebaserc` with the dev/prod project IDs.
 
@@ -111,11 +114,11 @@ npm run test:emulator -w functions   # inside `firebase emulators:exec` (see ci.
 
 ## Analytics & monitoring (spec §25, §22.3)
 
-Server-side domain events (section/package completion, quiz results, points, …) and whitelisted client events (`app_opened`, `next_item_cta_clicked`, `notification_cta_clicked`, `mentor_chat_opened`, `playback_error`, `youtube_blocked_reported`, `report_filtered`, `signup_started`, `client_error`) go to `analytics_events` (TTL). There is no Google Analytics (D22). Uncaught client errors are sent as `client_error`. Sentry is loaded only when `VITE_SENTRY_DSN` is set.
+Server-side domain events (section/package completion, quiz results, points, …) and whitelisted client events (`app_opened`, `next_item_cta_clicked`, `notification_cta_clicked`, `mentor_chat_opened`, `playback_error`, `youtube_blocked_reported`, `report_filtered`, `signup_started`, `client_error`) go to `analytics_events` (TTL). There is no Google Analytics (D22). Uncaught client errors are sent as `client_error`. Sentry is loaded only when `VITE_SENTRY_DSN` is set. On Android, Firebase Crashlytics captures native crashes and forwarded JS errors (only in APKs built with `google-services.json`).
 
 ## Design system (spec §16)
 
-The tokens live in `apps/web/src/styles/index.css` as Tailwind v4 `@theme`: `primary #1B8A5A`, semantic colors, the 12–30 type scale, line-height 1.8, radius 8/12/16, and soft shadows.
+The tokens live in `apps/web/src/styles/index.css` as Tailwind v4 `@theme`: `primary #177A50` (D40: darkened from #1B8A5A for WCAG AA) plus text-only `*-fg` tones, semantic colors, the 12–30 type scale, line-height 1.8, radius 8/12/16, and soft shadows.
 The Vazirmatn variable font is self-hosted and bundled as woff2, with a system-font fallback. The UI is fully RTL, touch targets are at least 48px, and focus rings are 2px `info`.
 Directional icons use `.rtl-mirror`. Countdowns and percentages use Latin digits (`.num-latin`); body text uses Persian digits.
 To see every component, open the gallery at `/gallery`.

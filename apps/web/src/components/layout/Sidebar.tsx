@@ -18,7 +18,7 @@ export function Sidebar({ items, title }: { items: SidebarItem[]; title: string 
       aria-label={title}
     >
       <div className="sticky top-16 p-3">
-        <p className="mb-2 px-3 text-xs font-bold text-muted">{title}</p>
+        <p className="mb-2 px-3 text-xs font-bold text-muted-fg">{title}</p>
         <nav>
           <ul className="space-y-1">
             {items.map(({ to, label, icon: Icon }) => (

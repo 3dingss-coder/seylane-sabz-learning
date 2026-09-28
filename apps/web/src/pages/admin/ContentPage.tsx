@@ -93,7 +93,7 @@ export function ContentPage() {
                       بسته
                     </p>
                     {b.logoIsFallback && (
-                      <span className="rounded-full bg-warning-light px-2 py-0.5 text-[11px] font-bold text-warning">
+                      <span className="rounded-full bg-warning-light px-2 py-0.5 text-[11px] font-bold text-warning-fg">
                         لوگوی موقت هلدینگ
                       </span>
                     )}

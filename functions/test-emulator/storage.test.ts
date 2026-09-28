@@ -10,13 +10,14 @@ import { fakeMp4 } from '../test/support/ctx';
  * `firebase emulators:exec`). V4 signed URLs need a real service account, so they are verified
  * after deploy (docs/USER-TODO.md); everything else the upload pipeline relies on is covered here.
  */
-const emulated = !!process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+// This suite only runs via the emulator config — fail loudly instead of silently skipping.
+if (!process.env.FIREBASE_STORAGE_EMULATOR_HOST)
+  throw new Error('FIREBASE_STORAGE_EMULATOR_HOST is not set — run via firebase emulators:exec');
 const projectId = process.env.GCLOUD_PROJECT ?? 'demo-seylane';
 let app: App;
 let blob: FirebaseBlobStore;
 
 beforeAll(() => {
-  if (!emulated) return;
   app = initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` }, 'storage-test');
   blob = new FirebaseBlobStore(getStorage(app).bucket());
 });
@@ -24,7 +25,7 @@ afterAll(async () => {
   if (app) await deleteApp(app);
 });
 
-describe.skipIf(!emulated)('storage adapter (emulator)', () => {
+describe('storage adapter (emulator)', () => {
   it('stores a brand logo, stats it and serves a public download-token URL', async () => {
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',

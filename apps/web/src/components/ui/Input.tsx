@@ -26,7 +26,7 @@ export function Input({ label, error, hint, icon, ltr, id, className, ...rest }:
       </label>
       <div className="relative">
         {icon && (
-          <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-muted">
+          <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-muted-fg">
             {icon}
           </span>
         )}
@@ -36,7 +36,7 @@ export function Input({ label, error, hint, icon, ltr, id, className, ...rest }:
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
           className={cn(
-            'min-h-12 w-full rounded-input border bg-surface px-3 text-base text-text placeholder:text-muted',
+            'min-h-12 w-full rounded-input border bg-surface px-3 text-base text-text placeholder:text-muted-fg',
             'transition-colors focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30',
             'disabled:cursor-not-allowed disabled:opacity-40',
             error ? 'border-danger' : 'border-border',

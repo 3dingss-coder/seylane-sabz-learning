@@ -87,14 +87,14 @@ export function MessagesPage() {
                     <Bell
                       className={cn(
                         'mt-0.5 size-5 shrink-0',
-                        it.readAt ? 'text-muted' : 'text-primary',
+                        it.readAt ? 'text-muted-fg' : 'text-primary',
                       )}
                       aria-hidden
                     />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold text-text">{it.title}</p>
                       <p className="text-sm leading-6 text-text-secondary">{it.body}</p>
-                      <p className="mt-1 text-xs text-muted">{faRelative(it.createdAt)}</p>
+                      <p className="mt-1 text-xs text-muted-fg">{faRelative(it.createdAt)}</p>
                     </div>
                     {!it.readAt && (
                       <span
@@ -149,7 +149,7 @@ export function MessagesPage() {
                         )}
                       </p>
                       <p className="whitespace-pre-line text-sm leading-6 text-text">{it.body}</p>
-                      <p className="mt-1 text-xs text-muted">{faRelative(it.createdAt)}</p>
+                      <p className="mt-1 text-xs text-muted-fg">{faRelative(it.createdAt)}</p>
                     </div>
                   </button>
                 </li>

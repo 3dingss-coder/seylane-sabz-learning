@@ -126,7 +126,9 @@ function Stat({
       to={to}
       className="flex min-h-16 flex-col items-center justify-center rounded-card border border-border p-2 hover:border-primary/40"
     >
-      <span className={warn ? 'text-2xl font-bold text-warning' : 'text-2xl font-bold text-text'}>
+      <span
+        className={warn ? 'text-2xl font-bold text-warning-fg' : 'text-2xl font-bold text-text'}
+      >
         {toPersianDigits(value)}
       </span>
       <span className="text-xs text-text-secondary">{label}</span>

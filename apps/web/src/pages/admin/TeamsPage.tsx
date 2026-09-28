@@ -52,7 +52,7 @@ export function TeamsPage() {
               {
                 key: 'm',
                 header: 'مدیر',
-                cell: (t) => t.managerName ?? <span className="text-warning">تعیین نشده</span>,
+                cell: (t) => t.managerName ?? <span className="text-warning-fg">تعیین نشده</span>,
               },
               { key: 'c', header: 'اعضا', cell: (t) => toPersianDigits(t.memberCount) },
               {

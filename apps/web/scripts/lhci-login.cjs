@@ -1,12 +1,17 @@
 /**
- * Lighthouse CI puppeteer script: signs in as a seeded demo marketer (user 05 has demo progress)
- * before `/` is audited. Runs before every URL; skips when a session already exists.
+ * Lighthouse CI puppeteer script (runs before every audited URL, storage is kept):
+ * - `/login` is audited signed-out (session cleared);
+ * - every other URL is audited as the seeded demo marketer 09120000005 (has demo progress).
  */
 module.exports = async (browser, context) => {
-  const origin = new URL(context.url).origin;
+  const target = new URL(context.url);
   const page = await browser.newPage();
   try {
-    await page.goto(`${origin}/login`, { waitUntil: 'networkidle0' });
+    await page.goto(`${target.origin}/login`, { waitUntil: 'networkidle0' });
+    if (target.pathname === '/login') {
+      await page.evaluate(() => localStorage.clear());
+      return;
+    }
     const hasSession = await page.evaluate(() => !!localStorage.getItem('ssl.refresh'));
     if (hasSession) return;
     await page.type('input[autocomplete="username"]', '09120000005');

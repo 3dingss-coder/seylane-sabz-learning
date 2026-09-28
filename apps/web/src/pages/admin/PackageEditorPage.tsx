@@ -113,7 +113,7 @@ function Editor({ d }: { d: AdminPackageDetail }) {
             {brand ? (
               `${brand.name}${product ? ` • ${product.name}` : ' • آموزش سطح برند'}`
             ) : (
-              <span className="font-bold text-warning">بدون تخصیص</span>
+              <span className="font-bold text-warning-fg">بدون تخصیص</span>
             )}
           </span>
         }
@@ -180,7 +180,9 @@ function Editor({ d }: { d: AdminPackageDetail }) {
                               {toPersianDigits(qCount)} سؤال
                             </span>
                             {s.quiz?.needsReview && (
-                              <span className="ms-1 font-bold text-warning">• نیاز به بازبینی</span>
+                              <span className="ms-1 font-bold text-warning-fg">
+                                • نیاز به بازبینی
+                              </span>
                             )}
                           </p>
                         </div>

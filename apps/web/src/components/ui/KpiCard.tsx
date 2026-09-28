@@ -13,9 +13,9 @@ export interface KpiCardProps {
 
 const TONES = {
   primary: 'bg-primary-light text-primary',
-  warning: 'bg-warning-light text-warning',
-  danger: 'bg-danger-light text-danger',
-  info: 'bg-info-light text-info',
+  warning: 'bg-warning-light text-warning-fg',
+  danger: 'bg-danger-light text-danger-fg',
+  info: 'bg-info-light text-info-fg',
 } as const;
 
 export function KpiCard({ title, value, subtitle, icon: Icon, tone = 'primary' }: KpiCardProps) {

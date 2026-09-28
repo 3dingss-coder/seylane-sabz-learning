@@ -138,7 +138,7 @@ export function MentorChat({
                   onClick={() => fb.mutate({ messageId: m.id, feedback: 'up' })}
                   className={cn(
                     'flex size-12 items-center justify-center',
-                    m.feedback === 'up' ? 'text-primary' : 'text-muted',
+                    m.feedback === 'up' ? 'text-primary' : 'text-muted-fg',
                   )}
                 >
                   <ThumbsUp className="size-4" />
@@ -150,7 +150,7 @@ export function MentorChat({
                   onClick={() => fb.mutate({ messageId: m.id, feedback: 'down' })}
                   className={cn(
                     'flex size-12 items-center justify-center',
-                    m.feedback === 'down' ? 'text-danger' : 'text-muted',
+                    m.feedback === 'down' ? 'text-danger' : 'text-muted-fg',
                   )}
                 >
                   <ThumbsDown className="size-4" />

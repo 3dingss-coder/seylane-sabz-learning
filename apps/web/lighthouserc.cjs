@@ -11,6 +11,8 @@ module.exports = {
       url: ['http://127.0.0.1:4173/login', 'http://127.0.0.1:4173/'],
       numberOfRuns: 3,
       puppeteerScript: './scripts/lhci-login.cjs',
+      // puppeteer-core has no bundled browser: use the runner's Chrome (CI exports CHROME_PATH).
+      chromePath: process.env.CHROME_PATH || '/usr/bin/google-chrome',
       puppeteerLaunchOptions: { args: ['--no-sandbox'] },
       settings: {
         // Keep the session created by the login script.

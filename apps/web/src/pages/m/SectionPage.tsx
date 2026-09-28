@@ -129,7 +129,7 @@ function Player({ d }: { d: SectionDetail }) {
             <ProgressBar value={progress.percent} label="پیشرفت قسمت" />
             <p className="text-xs text-text-secondary">
               {progress.completed ? (
-                <span className="inline-flex items-center gap-1 font-bold text-success">
+                <span className="inline-flex items-center gap-1 font-bold text-success-fg">
                   <CheckCircle2 className="size-4" aria-hidden /> آماده آزمون هستی.
                 </span>
               ) : (
@@ -387,7 +387,7 @@ function YouTubeView({
           ویدیو بارگذاری نشد. اگر یوتیوب در دسترس نیست، اتصال خود را بررسی کنید.
           <button
             type="button"
-            className="min-h-12 px-3 font-bold text-primary disabled:text-muted"
+            className="min-h-12 px-3 font-bold text-primary disabled:text-muted-fg"
             disabled={reportedYt}
             onClick={() => {
               setReportedYt(true);

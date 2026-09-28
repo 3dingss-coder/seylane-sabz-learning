@@ -22,22 +22,22 @@ export type UserStatus = 'active' | 'inactive';
 export type BadgeStatus = SectionStatus | PublishStatus | UserStatus;
 
 const MAP: Record<BadgeStatus, { label: string; icon: LucideIcon; cls: string }> = {
-  locked: { label: 'قفل', icon: Lock, cls: 'bg-background text-muted border-border' },
-  open: { label: 'باز', icon: CircleDot, cls: 'bg-info-light text-info border-info/30' },
+  locked: { label: 'قفل', icon: Lock, cls: 'bg-background text-muted-fg border-border' },
+  open: { label: 'باز', icon: CircleDot, cls: 'bg-info-light text-info-fg border-info/30' },
   in_progress: {
     label: 'در حال انجام',
     icon: PlayCircle,
-    cls: 'bg-warning-light text-warning border-warning/30',
+    cls: 'bg-warning-light text-warning-fg border-warning/30',
   },
   quiz: {
     label: 'آماده آزمون',
     icon: ClipboardCheck,
-    cls: 'bg-info-light text-info border-info/30',
+    cls: 'bg-info-light text-info-fg border-info/30',
   },
   completed: {
     label: 'تکمیل',
     icon: CheckCircle2,
-    cls: 'bg-success-light text-success border-success/30',
+    cls: 'bg-success-light text-success-fg border-success/30',
   },
   draft: {
     label: 'پیش‌نویس',
@@ -49,13 +49,13 @@ const MAP: Record<BadgeStatus, { label: string; icon: LucideIcon; cls: string }>
     icon: Send,
     cls: 'bg-primary-light text-primary border-primary/30',
   },
-  archived: { label: 'بایگانی', icon: Archive, cls: 'bg-background text-muted border-border' },
+  archived: { label: 'بایگانی', icon: Archive, cls: 'bg-background text-muted-fg border-border' },
   active: {
     label: 'فعال',
     icon: UserCheck,
-    cls: 'bg-success-light text-success border-success/30',
+    cls: 'bg-success-light text-success-fg border-success/30',
   },
-  inactive: { label: 'غیرفعال', icon: UserX, cls: 'bg-background text-muted border-border' },
+  inactive: { label: 'غیرفعال', icon: UserX, cls: 'bg-background text-muted-fg border-border' },
 };
 
 export function StatusBadge({ status, className }: { status: BadgeStatus; className?: string }) {

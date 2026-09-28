@@ -6,7 +6,8 @@
 
 @theme {
   /* §16.2 Color System */
-  --color-primary: #1b8a5a;
+  /* D40: #1B8A5A → #177A50 so white-on-primary meets WCAG AA (4.35 → 5.34:1). */
+  --color-primary: #177a50;
   --color-primary-hover: #146c45;
   --color-primary-light: #e7f5ee;
   --color-info: #2563eb;
@@ -24,6 +25,13 @@
   --color-warning-light: #fef3c7;
   --color-danger-light: #fee2e2;
   --color-info-light: #dbeafe;
+  /* D40: darker same-hue tones for TEXT only (≥4.5:1 on white and on the tinted surfaces).
+     Base tokens stay for icons, borders, fills and progress. */
+  --color-muted-fg: #64748b;
+  --color-warning-fg: #b45309;
+  --color-success-fg: #15803d;
+  --color-danger-fg: #b91c1c;
+  --color-info-fg: #1d4ed8;
 
   /* §16.3 Typography — Vazirmatn self-hosted; system fallback if font fails to load */
   --font-sans:

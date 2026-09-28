@@ -127,7 +127,9 @@ export function JalaliDateField({
           )}
         >
           <CalendarDays className="size-5 shrink-0 text-muted" aria-hidden />
-          <span className={display ? 'text-text' : 'text-muted'}>{display || 'انتخاب تاریخ'}</span>
+          <span className={display ? 'text-text' : 'text-muted-fg'}>
+            {display || 'انتخاب تاریخ'}
+          </span>
         </button>
         {value && (
           <button

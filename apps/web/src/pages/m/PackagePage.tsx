@@ -151,7 +151,7 @@ function SectionRow({ s }: { s: SectionView }) {
       <span
         className={cn(
           'flex size-11 shrink-0 items-center justify-center rounded-card',
-          locked ? 'bg-background text-muted' : 'bg-primary-light text-primary',
+          locked ? 'bg-background text-muted-fg' : 'bg-primary-light text-primary',
         )}
       >
         <Icon className="size-5" aria-hidden />
@@ -165,7 +165,7 @@ function SectionRow({ s }: { s: SectionView }) {
           {s.percent > 0 && s.state !== 'completed' && ` • ${faPercent(s.percent)} دیده شده`}
         </p>
         {locked && (
-          <p className="mt-0.5 text-xs text-muted">
+          <p className="mt-0.5 text-xs text-muted-fg">
             {s.lockReason ?? 'ابتدا قسمت قبل را کامل کنید.'}
           </p>
         )}
@@ -187,7 +187,7 @@ function SectionRow({ s }: { s: SectionView }) {
       {s.state === 'quiz' && (
         <Link
           to={`/quiz/${s.id}`}
-          className="flex min-h-12 items-center justify-center gap-2 rounded-card border border-info/30 bg-info-light text-sm font-bold text-info"
+          className="flex min-h-12 items-center justify-center gap-2 rounded-card border border-info/30 bg-info-light text-sm font-bold text-info-fg"
         >
           <ClipboardCheck className="size-4" aria-hidden /> آزمون این قسمت
         </Link>

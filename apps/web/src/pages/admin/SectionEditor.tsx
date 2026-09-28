@@ -140,7 +140,7 @@ export function SectionEditor({
         ) : (
           <div className="flex flex-col gap-2 rounded-card border border-dashed border-border p-3">
             {media ? (
-              <p className="flex items-center gap-2 text-sm text-success">
+              <p className="flex items-center gap-2 text-sm text-success-fg">
                 <CheckCircle2 className="size-4" aria-hidden /> {media.originalName} آپلود شد
                 {media.durationSec ? ` (${faDuration(media.durationSec)})` : ''}.
               </p>

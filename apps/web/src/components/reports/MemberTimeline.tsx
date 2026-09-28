@@ -33,7 +33,7 @@ export function MemberTimeline({ data, canMessage }: { data: Timeline; canMessag
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-bold">{p.title}</h3>
               {p.status === 'completed' ? (
-                <span className="text-sm font-bold text-success">
+                <span className="text-sm font-bold text-success-fg">
                   {p.onTime ? 'تکمیل به‌موقع' : 'تکمیل با تأخیر'} •{' '}
                   {p.completedAt && faDate(p.completedAt)}
                 </span>
@@ -81,7 +81,7 @@ export function MemberTimeline({ data, canMessage }: { data: Timeline; canMessag
                             تلاش {toPersianDigits(a.attemptNumber)}:{' '}
                             {a.score === null ? '—' : faPercent(a.score)}
                             {a.submittedAt && (
-                              <span className="text-muted">({faDate(a.submittedAt)})</span>
+                              <span className="text-muted-fg">({faDate(a.submittedAt)})</span>
                             )}
                           </li>
                         ))}
@@ -101,7 +101,7 @@ export function MemberTimeline({ data, canMessage }: { data: Timeline; canMessag
           messages.map((m) => (
             <Card key={m.id} className="text-sm">
               <p className="whitespace-pre-line">{m.body}</p>
-              <p className="mt-1 text-xs text-muted">
+              <p className="mt-1 text-xs text-muted-fg">
                 {m.type === 'note' ? 'یادداشت' : 'پیام'} • {faDateTime(m.createdAt)} •{' '}
                 {m.readAt ? 'خوانده شد' : 'خوانده نشده'}
               </p>

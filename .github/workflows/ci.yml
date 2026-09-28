@@ -89,7 +89,10 @@ jobs:
           npx -y wait-on@8 -t 120000 http://127.0.0.1:5001/v1/health
       - name: Lighthouse CI
         working-directory: apps/web
-        run: npx -y -p @lhci/cli@0.15 -p puppeteer-core@24 lhci autorun --config=./lighthouserc.cjs
+        run: |
+          export CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable)"
+          echo "Chrome: $CHROME_PATH ($("$CHROME_PATH" --version))"
+          npx -y -p @lhci/cli@0.15 -p puppeteer-core@24 lhci autorun --config=./lighthouserc.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:

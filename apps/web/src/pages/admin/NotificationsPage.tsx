@@ -69,7 +69,7 @@ function Templates() {
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-bold text-primary">
                       {KEY_LABEL[t.key] ?? t.key}
-                      {t.customized && <span className="ms-2 text-warning">(سفارشی)</span>}
+                      {t.customized && <span className="ms-2 text-warning-fg">(سفارشی)</span>}
                     </p>
                     <Button
                       variant="ghost"

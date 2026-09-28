@@ -78,7 +78,7 @@ export function BrandDetailPage() {
         <BrandLogo name={brand.name} logoUrl={brand.logoUrl} size="lg" className="size-28" />
         <div className="flex flex-1 flex-col gap-2">
           {brand.logoIsFallback && (
-            <p className="text-sm text-warning">
+            <p className="text-sm text-warning-fg">
               لوگوی این برند هنوز آپلود نشده و لوگوی هلدینگ نمایش داده می‌شود.
             </p>
           )}
@@ -173,7 +173,7 @@ export function BrandDetailPage() {
                       <p className="text-xs text-text-secondary" dir="ltr">
                         {p.code}
                       </p>
-                      {p.imageIsFallback && <p className="text-xs text-warning">تصویر موقت</p>}
+                      {p.imageIsFallback && <p className="text-xs text-warning-fg">تصویر موقت</p>}
                     </div>
                   </div>
                   <PackageList items={byProduct(p.id)} empty="بسته آموزشی ندارد." />
@@ -257,7 +257,7 @@ export function BrandDetailPage() {
 }
 
 function PackageList({ items, empty }: { items: AdminPackage[]; empty: string }) {
-  if (!items.length) return <p className="text-xs text-muted">{empty}</p>;
+  if (!items.length) return <p className="text-xs text-muted-fg">{empty}</p>;
   return (
     <ul className="flex flex-col gap-1">
       {items.map((p) => (

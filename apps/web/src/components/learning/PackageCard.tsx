@@ -28,7 +28,7 @@ export function PackageCard({ p }: { p: PackageSummary }) {
         <h3 className="line-clamp-2 text-sm font-bold leading-6 text-text">{p.title}</h3>
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
           {p.status === 'completed' ? (
-            <span className="inline-flex items-center gap-1 font-bold text-success">
+            <span className="inline-flex items-center gap-1 font-bold text-success-fg">
               <CheckCircle2 className="size-3.5" aria-hidden /> تکمیل شد
             </span>
           ) : (

@@ -63,7 +63,7 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
           {ROLE_LABEL[user.role]} •{' '}
           <span dir="ltr">{toPersianDigits(user.phone ?? user.email ?? '')}</span>
         </p>
-        <p className="text-xs text-muted">عضو از {faDate(user.createdAt)}</p>
+        <p className="text-xs text-muted-fg">عضو از {faDate(user.createdAt)}</p>
       </Card>
       <Card>
         <form onSubmit={saveName} className="flex flex-col gap-3">
