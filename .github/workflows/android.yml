@@ -1,0 +1,78 @@
+name: Android
+
+# Builds the Capacitor Android app. Debug APK on every PR/push; signed release APK + AAB
+# (Cafe Bazaar) when the signing secrets exist. See docs/RELEASE.md.
+on:
+  pull_request:
+    paths: ['apps/web/**', '.github/workflows/android.yml', 'package-lock.json']
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    env:
+      # The bundled app cannot use relative /v1 URLs; set this repository variable to the API origin.
+      VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+      VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+      VITE_APP_ENV: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - name: Firebase config (push notifications)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        if: env.GOOGLE_SERVICES_JSON != ''
+        run: |
+          echo "$GOOGLE_SERVICES_JSON" | base64 -d > apps/web/android/app/google-services.json
+          echo "VITE_PUSH_ENABLED=true" >> "$GITHUB_ENV"
+      - run: npm run build -w apps/web
+      - run: npx cap sync android
+        working-directory: apps/web
+      - name: Debug APK
+        working-directory: apps/web/android
+        run: ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seylane-learning-debug-apk
+          path: apps/web/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+      - name: Release signing config
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        if: env.KEYSTORE_BASE64 != ''
+        working-directory: apps/web/android
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+          printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > keystore.properties
+      - name: Signed release APK + AAB
+        if: hashFiles('apps/web/android/keystore.properties') != ''
+        working-directory: apps/web/android
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('apps/web/android/keystore.properties') != ''
+        with:
+          name: seylane-learning-release
+          path: |
+            apps/web/android/app/build/outputs/apk/release/*.apk
+            apps/web/android/app/build/outputs/bundle/release/*.aab
+          retention-days: 30

@@ -5,6 +5,7 @@ import { Button, Card, Input } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { homePathFor, useAuth } from '@/lib/auth';
 import { toLatinDigits } from '@/lib/digits';
+import { track } from '@/lib/telemetry';
 
 type Mode = 'login' | 'register' | 'forgot';
 
@@ -29,6 +30,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
 
   const switchMode = (m: Mode) => {
     setMode(m);
+    if (m === 'register') track('signup_started');
     setErrors({});
     setFormError('');
     setInfo('');

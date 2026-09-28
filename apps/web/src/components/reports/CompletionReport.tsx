@@ -5,6 +5,7 @@ import { Button, Card, EmptyState, Input, ProgressBar } from '@/components/ui';
 import { DataTable } from '@/components/admin/DataTable';
 import { Select } from '@/components/common/Field';
 import { downloadCsv, toCsv } from '@/lib/csv';
+import { track } from '@/lib/telemetry';
 import { toPersianDigits } from '@/lib/digits';
 import { faDate, faPercent, faRelative } from '@/lib/format';
 import type { CompletionRow } from '@/lib/types';
@@ -30,6 +31,7 @@ export function CompletionReport({
     if (v) next.set(k, v);
     else next.delete(k);
     if (k === 'brand') next.delete('product');
+    if (v) track('report_filtered', { filter: k });
     setSp(next, { replace: true });
   };
   const opts = useMemo(() => {

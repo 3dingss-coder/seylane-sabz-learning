@@ -1,9 +1,11 @@
-import { lazy, Suspense, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui';
 import { ApiError } from '@/lib/api';
-import { AuthProvider } from '@/lib/auth';
+import { AuthProvider, useAuth } from '@/lib/auth';
+import { isNative, registerPush } from '@/lib/native';
+import { track } from '@/lib/telemetry';
 import { MarketerLayout } from '@/layouts/MarketerLayout';
 import { FullPageSpinner, RequireAuth } from '@/layouts/RequireAuth';
 import { AuthPage } from '@/pages/auth/AuthPage';
@@ -25,6 +27,18 @@ const AdminRoutes = lazy(() => import('@/pages/admin/AdminRoutes'));
 const GalleryPage = lazy(() =>
   import('@/pages/GalleryPage').then((m) => ({ default: m.GalleryPage })),
 );
+
+/** App-open event + Android push registration once the user is signed in. */
+function NativeBridge() {
+  const { status } = useAuth();
+  const nav = useNavigate();
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    track('app_opened', { native: isNative() });
+    void registerPush((to) => nav(to));
+  }, [status, nav]);
+  return null;
+}
 
 export function AppRoutes() {
   return (
@@ -106,6 +120,7 @@ export default function App() {
       <ToastProvider>
         <BrowserRouter>
           <AuthProvider>
+            <NativeBridge />
             <AppRoutes />
           </AuthProvider>
         </BrowserRouter>

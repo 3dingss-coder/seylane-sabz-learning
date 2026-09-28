@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { faRelative } from '@/lib/format';
 import { qk, useMessages, useNotifications } from '@/lib/queries';
+import { track } from '@/lib/telemetry';
 
 /** M11 — اعلان‌ها و پیام‌های مدیر. */
 export function MessagesPage() {
@@ -73,7 +74,10 @@ export function MessagesPage() {
                     type="button"
                     onClick={() => {
                       if (!it.readAt) readOne.mutate(it.id);
-                      if (it.actionRef) nav(it.actionRef);
+                      if (it.actionRef) {
+                        track('notification_cta_clicked', { source: 'in_app', type: it.type });
+                        nav(it.actionRef);
+                      }
                     }}
                     className={cn(
                       'flex w-full items-start gap-3 rounded-card border p-3 text-start',

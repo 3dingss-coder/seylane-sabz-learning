@@ -23,6 +23,7 @@ const CLIENT_EVENTS = [
   'manager_digest_opened',
   'report_filtered',
   'youtube_blocked_reported',
+  'client_error',
 ] as const;
 
 /** Spec §21.2 — marketer module (authenticated; data scoped to the caller). */

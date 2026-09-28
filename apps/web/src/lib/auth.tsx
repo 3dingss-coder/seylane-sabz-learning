@@ -10,6 +10,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { api, refreshSession, setSessionExpiredHandler } from './api';
 import { flushBeats } from './offline-queue';
+import { unregisterPush } from './native';
 import { session } from './session';
 import type { AuthResult, Me, Role } from './types';
 
@@ -86,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         try {
           await flushBeats(); // send offline progress before the token is revoked
+          await unregisterPush();
           await api.post('/auth/logout');
         } catch {
           /* offline logout still clears the device */

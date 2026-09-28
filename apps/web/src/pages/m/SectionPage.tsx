@@ -12,6 +12,7 @@ import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { clock, faDuration, faPercent } from '@/lib/format';
 import { qk } from '@/lib/queries';
+import { track } from '@/lib/telemetry';
 import { loadYouTube, usePlaybackTracker, type YTPlayer } from '@/lib/tracker';
 import type { ProgressResult, SectionDetail, SectionMedia } from '@/lib/types';
 
@@ -107,7 +108,10 @@ function Player({ d }: { d: SectionDetail }) {
               tracker={tracker}
               onTime={setPos}
               onDuration={setDur}
-              onError={() => void media.refetch()}
+              onError={() => {
+                track('playback_error', { source: 'file' });
+                void media.refetch();
+              }}
             />
           ) : (
             <ErrorState message="فایل این قسمت هنوز آماده نیست." />
@@ -306,6 +310,7 @@ function YouTubeView({
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reportedYt, setReportedYt] = useState(false);
   const tr = useRef(tracker);
   tr.current = tracker;
   const cbs = useRef({ onTime, onDuration });
@@ -352,7 +357,10 @@ function YouTubeView({
               if (e.data === 2) void tr.current.flush('pause');
               if (e.data === 0) void tr.current.flush('ended');
             },
-            onError: () => setState('error'),
+            onError: () => {
+              setState('error');
+              track('playback_error', { source: 'youtube' });
+            },
           },
         });
       })
@@ -377,6 +385,17 @@ function YouTubeView({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface p-4 text-center text-sm text-text">
           <WifiOff className="size-8 text-muted" aria-hidden />
           ویدیو بارگذاری نشد. اگر یوتیوب در دسترس نیست، اتصال خود را بررسی کنید.
+          <button
+            type="button"
+            className="min-h-12 px-3 font-bold text-primary disabled:text-muted"
+            disabled={reportedYt}
+            onClick={() => {
+              setReportedYt(true);
+              track('youtube_blocked_reported', { videoId });
+            }}
+          >
+            {reportedYt ? 'گزارش شد؛ ممنون' : 'گزارش مشکل به ادمین'}
+          </button>
         </div>
       )}
     </div>

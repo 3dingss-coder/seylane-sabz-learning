@@ -6,6 +6,9 @@
 const REFRESH_KEY = 'ssl.refresh';
 
 let accessToken: string | null = null;
+/** On Android the refresh token lives in Capacitor Preferences (D36); mirrored here in memory. */
+let nativeRefresh: string | null = null;
+let native = false;
 let accessExpiresAt = 0;
 
 export const session = {
@@ -17,6 +20,7 @@ export const session = {
     accessExpiresAt = Date.now() + expiresInSec * 1000;
   },
   get refresh(): string | null {
+    if (native) return nativeRefresh;
     try {
       return localStorage.getItem(REFRESH_KEY);
     } catch {
@@ -24,6 +28,13 @@ export const session = {
     }
   },
   setRefresh(token: string | null) {
+    if (native) {
+      nativeRefresh = token;
+      void import('@capacitor/preferences').then(({ Preferences }) =>
+        token ? Preferences.set({ key: REFRESH_KEY, value: token }) : Preferences.remove({ key: REFRESH_KEY }),
+      );
+      return;
+    }
     try {
       if (token) localStorage.setItem(REFRESH_KEY, token);
       else localStorage.removeItem(REFRESH_KEY);
@@ -37,3 +48,12 @@ export const session = {
     this.setRefresh(null);
   },
 };
+
+/** Must run before the first render on native builds so `session.refresh` is available synchronously. */
+export async function initNativeSession(): Promise<void> {
+  const { Capacitor } = await import('@capacitor/core');
+  if (!Capacitor.isNativePlatform()) return;
+  native = true;
+  const { Preferences } = await import('@capacitor/preferences');
+  nativeRefresh = (await Preferences.get({ key: REFRESH_KEY })).value;
+}

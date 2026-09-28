@@ -16,6 +16,8 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        // Registered manually in main.tsx so the Android (Capacitor) build skips the service worker.
+        injectRegister: false,
         includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
         manifest: {
           name: 'سیلانه‌سبز لرنینگ',

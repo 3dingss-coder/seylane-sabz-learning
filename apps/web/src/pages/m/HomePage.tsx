@@ -19,6 +19,7 @@ import { faDuration, faNumber } from '@/lib/format';
 import { qk, useHome } from '@/lib/queries';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { track } from '@/lib/telemetry';
 import type { Nudge } from '@/lib/types';
 
 const ACTION_LABEL = { start: 'شروع', resume: 'ادامه', quiz: 'شروع آزمون' } as const;
@@ -102,13 +103,14 @@ export function HomePage() {
                   block
                   className="mt-4"
                   icon={<PlayCircle className="size-5" aria-hidden />}
-                  onClick={() =>
+                  onClick={() => {
+                    track('next_item_cta_clicked', { action: d.nextItem?.action ?? '' });
                     nav(
                       d.nextItem?.action === 'quiz'
                         ? `/quiz/${d.nextItem.sectionId}`
                         : `/sections/${d.nextItem?.sectionId}`,
-                    )
-                  }
+                    );
+                  }}
                 >
                   {ACTION_LABEL[d.nextItem.action]}
                 </Button>
