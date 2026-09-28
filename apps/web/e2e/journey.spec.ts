@@ -14,10 +14,16 @@ const MANAGER = '09120000003';
 const MARKETER = '09120000004';
 const FRESH_MARKETER = '09120000007';
 
+// API tokens are cached per user: login is rate-limited to 10/min per IP (spec §21).
+const tokens = new Map<string, string>();
 async function token(request: APIRequestContext, identifier: string) {
+  const cached = tokens.get(identifier);
+  if (cached) return cached;
   const r = await request.post(`${API}/auth/login`, { data: { identifier, password: PASS } });
-  expect(r.ok()).toBeTruthy();
-  return ((await r.json()) as { data: { idToken: string } }).data.idToken;
+  expect(r.ok(), await r.text()).toBeTruthy();
+  const t = ((await r.json()) as { data: { idToken: string } }).data.idToken;
+  tokens.set(identifier, t);
+  return t;
 }
 
 async function login(page: Page, identifier: string) {
@@ -80,7 +86,7 @@ test('marketer: home → section → (played) → quiz pass → next section unl
       headers: { ...auth, 'Idempotency-Key': `e2e-${sectionId}-${i}` },
       data: { positionSec: pos, playedDeltaSec: 60, ts: new Date().toISOString() },
     });
-    expect(r.ok()).toBeTruthy();
+    expect(r.ok(), `heartbeat ${i}: ${r.status()} ${await r.text()}`).toBeTruthy();
     completed = ((await r.json()) as { data: { completed: boolean } }).data.completed;
   }
   expect(completed).toBe(true);
@@ -136,7 +142,7 @@ test('fresh marketer sees later sections locked and cannot start their quiz', as
   await expect(page.getByTestId('package-card').first()).toBeVisible();
   // Multi-part package (فورمی): part 2+ stays locked until part 1 is done.
   await page.goto('/packages/seed-pkg-formi');
-  await expect(page.getByText('ابتدا قسمت قبل را کامل کنید.').first()).toBeVisible({
+  await expect(page.getByText(/ابتدا قسمت قبل را کامل کنید/).first()).toBeVisible({
     timeout: 15_000,
   });
 
