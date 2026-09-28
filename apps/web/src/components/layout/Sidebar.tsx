@@ -25,6 +25,7 @@ export function Sidebar({ items, title }: { items: SidebarItem[]; title: string 
               <li key={to}>
                 <NavLink
                   to={to}
+                  end={to.split('/').length <= 2}
                   className={({ isActive }) =>
                     cn(
                       'flex min-h-12 items-center justify-between rounded-card px-3 text-sm transition-colors',

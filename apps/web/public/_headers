@@ -1,7 +1,7 @@
 # Cloudflare Pages security headers (spec §24). connect-src/frame-src are widened
 # for Firebase + YouTube IFrame API (PROMPT 009).
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://i.ytimg.com; media-src 'self' blob: https://firebasestorage.googleapis.com; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://*.firebaseio.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://firebasestorage.googleapis.com https://storage.googleapis.com https://i.ytimg.com; media-src 'self' blob: https://firebasestorage.googleapis.com https://storage.googleapis.com; font-src 'self'; connect-src 'self' https://*.googleapis.com https://*.cloudfunctions.net https://*.run.app https://*.firebaseio.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff

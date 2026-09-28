@@ -37,7 +37,11 @@ export function getCountdown(
   else if (totalMs <= warningHours[0] * HOUR) tone = 'warning';
 
   const short =
-    tone === 'overdue' ? '00:00' : days > 0 ? `${days}d ${pad(hours)}h` : `${pad(hours)}:${pad(minutes)}`;
+    tone === 'overdue'
+      ? '00:00'
+      : days > 0
+        ? `${days}d ${pad(hours)}h`
+        : `${pad(hours)}:${pad(minutes)}`;
 
   let spoken: string;
   if (tone === 'overdue') spoken = 'مهلت تمام شده است';

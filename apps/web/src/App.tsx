@@ -1,25 +1,115 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@/components/ui';
-import { GalleryPage } from '@/pages/GalleryPage';
+import { ApiError } from '@/lib/api';
+import { AuthProvider } from '@/lib/auth';
+import { MarketerLayout } from '@/layouts/MarketerLayout';
+import { FullPageSpinner, RequireAuth } from '@/layouts/RequireAuth';
+import { AuthPage } from '@/pages/auth/AuthPage';
+import { OnboardingPage } from '@/pages/auth/OnboardingPage';
+import { CardsPage } from '@/pages/m/CardsPage';
+import { HomePage } from '@/pages/m/HomePage';
+import { LearnPage } from '@/pages/m/LearnPage';
+import { MentorPage } from '@/pages/m/MentorPage';
+import { MessagesPage } from '@/pages/m/MessagesPage';
+import { PackagePage } from '@/pages/m/PackagePage';
+import { ProfilePage } from '@/pages/m/ProfilePage';
+import { QuizPage } from '@/pages/m/QuizPage';
+import { SectionPage } from '@/pages/m/SectionPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
-// Routes grow per PROMPT (002 auth, 008 marketer home, 013 manager, 004+ admin).
+// Panels are code-split: marketers (mobile, weak networks) never download admin code.
+const ManagerRoutes = lazy(() => import('@/pages/manager/ManagerRoutes'));
+const AdminRoutes = lazy(() => import('@/pages/admin/AdminRoutes'));
+const GalleryPage = lazy(() =>
+  import('@/pages/GalleryPage').then((m) => ({ default: m.GalleryPage })),
+);
+
 export function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/" element={<GalleryPage />} />
-      <Route path="/gallery" element={<GalleryPage />} />
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+    <Suspense fallback={<FullPageSpinner />}>
+      <Routes>
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/register" element={<AuthPage initial="register" />} />
+        <Route path="/forgot-password" element={<AuthPage initial="forgot" />} />
+        <Route path="/gallery" element={<GalleryPage />} />
+        <Route
+          path="/onboarding"
+          element={
+            <RequireAuth roles={['marketer']}>
+              <OnboardingPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          element={
+            <RequireAuth roles={['marketer']}>
+              <MarketerLayout />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<HomePage />} />
+          <Route path="learn" element={<LearnPage />} />
+          <Route path="packages/:id" element={<PackagePage />} />
+          <Route path="sections/:id" element={<SectionPage />} />
+          <Route path="quiz/:sectionId" element={<QuizPage />} />
+          <Route path="messages" element={<MessagesPage />} />
+          <Route path="cards" element={<CardsPage />} />
+          <Route path="mentor" element={<MentorPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+        </Route>
+        <Route
+          path="/manager/*"
+          element={
+            <RequireAuth roles={['manager']}>
+              <ManagerRoutes />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/*"
+          element={
+            <RequireAuth roles={['admin', 'superadmin']}>
+              <AdminRoutes />
+            </RequireAuth>
+          }
+        />
+        <Route path="/home" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Suspense>
   );
 }
 
+function makeClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 30_000,
+        gcTime: 24 * 3600_000,
+        refetchOnWindowFocus: true,
+        retry: (count, e) =>
+          !(
+            e instanceof ApiError &&
+            ['FORBIDDEN', 'NOT_FOUND', 'VALIDATION', 'UNAUTHENTICATED'].includes(e.code)
+          ) && count < 2,
+      },
+    },
+  });
+}
+
 export default function App() {
+  const [client] = useState(makeClient);
   return (
-    <ToastProvider>
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </ToastProvider>
+    <QueryClientProvider client={client}>
+      <ToastProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </BrowserRouter>
+      </ToastProvider>
+    </QueryClientProvider>
   );
 }

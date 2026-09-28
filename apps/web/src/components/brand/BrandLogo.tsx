@@ -3,6 +3,7 @@
 // (Firebase Storage in prod, /catalog mirror locally). If the image fails, falls back to the
 // brand name as text — never a fake/placeholder image.
 import { useState } from 'react';
+import { fileUrl } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
 export interface BrandLogoProps {
@@ -30,7 +31,7 @@ export function BrandLogo({ name, logoUrl, size = 'md', className }: BrandLogoPr
         </span>
       ) : (
         <img
-          src={logoUrl}
+          src={fileUrl(logoUrl)}
           alt={`لوگوی ${name}`}
           loading="lazy"
           onError={() => setFailed(true)}

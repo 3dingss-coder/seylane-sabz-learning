@@ -3,6 +3,7 @@
 //   colors mapped to semantic tokens, icon + text (not color alone, §16.8).
 import {
   CheckCircle2,
+  ClipboardCheck,
   CircleDot,
   FileEdit,
   Archive,
@@ -15,7 +16,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
-export type SectionStatus = 'locked' | 'open' | 'in_progress' | 'completed';
+export type SectionStatus = 'locked' | 'open' | 'in_progress' | 'quiz' | 'completed';
 export type PublishStatus = 'draft' | 'published' | 'archived';
 export type UserStatus = 'active' | 'inactive';
 export type BadgeStatus = SectionStatus | PublishStatus | UserStatus;
@@ -27,6 +28,11 @@ const MAP: Record<BadgeStatus, { label: string; icon: LucideIcon; cls: string }>
     label: 'در حال انجام',
     icon: PlayCircle,
     cls: 'bg-warning-light text-warning border-warning/30',
+  },
+  quiz: {
+    label: 'آماده آزمون',
+    icon: ClipboardCheck,
+    cls: 'bg-info-light text-info border-info/30',
   },
   completed: {
     label: 'تکمیل',
