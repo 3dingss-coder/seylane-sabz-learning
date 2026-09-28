@@ -82,8 +82,13 @@ function basenameFromUrl(url) {
  * @returns {{ brands: object[], products: object[], unmatched: { brands: object[], products: object[] }, unusedLogos: string[], unusedImages: string[] }}
  */
 export function loadCatalog() {
-  const logoFiles = new Set(fs.readdirSync(LOGOS_DIR));
-  const imageFiles = fs.readdirSync(PRODUCT_IMAGES_DIR);
+  // Binary artwork is distributed separately from the source checkout so GitHub-based
+  // code importers (including AI Studio) don't have to clone hundreds of megabytes.
+  // An asset-free checkout remains fully usable: catalog rows are kept, only local image
+  // matching is omitted. Production images are served from Firebase Storage.
+  const safeReadDir = (dir) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []);
+  const logoFiles = new Set(safeReadDir(LOGOS_DIR));
+  const imageFiles = safeReadDir(PRODUCT_IMAGES_DIR);
   const imageSet = new Set(imageFiles);
 
   const brands = readCsv('brands.csv').map((r) => {

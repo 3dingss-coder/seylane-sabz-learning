@@ -25,7 +25,13 @@ test-results/
 playwright-report/
 # Python export output
 exports/
-apps/web/public/icons/
+# Keep only the small PWA brand assets in source; the full original asset bundle is archived.
+apps/web/public/icons/*
+!apps/web/public/icons/icon-192.png
+!apps/web/public/icons/icon-512.png
+!apps/web/public/icons/logo-full.png
+!apps/web/public/icons/logo-mark.png
+.asset-backup/
 apps/web/dev-dist/
 
 # Local API data (memory backend persistence + blobs)

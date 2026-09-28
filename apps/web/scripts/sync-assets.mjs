@@ -61,7 +61,11 @@ for (const [src, dest] of [
   ['logo-full.png', 'logo-full.png'],
   ['logo-mark-transparent.png', 'logo-mark.png'],
 ]) {
-  if (copyIfChanged(path.join(iconSrc, src), path.join(ICONS_OUT, dest))) copied++;
+  const source = path.join(iconSrc, src);
+  const target = path.join(ICONS_OUT, dest);
+  // The source UI kit is an optional, separately archived binary bundle. Keep the
+  // small PWA icon copies already checked into public/ when that bundle is absent.
+  if (fs.existsSync(source) && copyIfChanged(source, target)) copied++;
 }
 
 console.info(

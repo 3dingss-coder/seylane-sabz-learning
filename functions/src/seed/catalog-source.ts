@@ -98,8 +98,11 @@ export interface HiddenProduct {
 
 export function loadCatalog(p: CatalogPaths) {
   const read = (n: string) => parseCsv(fs.readFileSync(path.join(p.catalogDir, n), 'utf8'));
-  const logoFiles = new Set(fs.readdirSync(p.logosDir));
-  const imageFiles = fs.readdirSync(p.imagesDir);
+  // Asset binaries are distributed separately to keep source imports lightweight. Catalog
+  // records still seed without local files; production images come from Firebase Storage.
+  const safeReadDir = (dir: string) => (fs.existsSync(dir) ? fs.readdirSync(dir) : []);
+  const logoFiles = new Set(safeReadDir(p.logosDir));
+  const imageFiles = safeReadDir(p.imagesDir);
   const imageSet = new Set(imageFiles);
   const matchImage = (code: string, url: string) => {
     const f = basenameFromUrl(url);

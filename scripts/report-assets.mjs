@@ -2,7 +2,16 @@
 // usage: node scripts/report-assets.mjs
 import fs from 'node:fs';
 import path from 'node:path';
-import { REPO_ROOT, loadCatalog } from './lib/catalog-source.mjs';
+import { ASSETS_DIR, REPO_ROOT, loadCatalog } from './lib/catalog-source.mjs';
+
+// In the lightweight source checkout, these binary directories live in the separate asset
+// archive. Never overwrite the checked-in mapping with empty matches when the archive is absent.
+if (!fs.existsSync(ASSETS_DIR)) {
+  console.warn(
+    '[report-assets] source images are archived; restore them before regenerating the mapping.',
+  );
+  process.exit(0);
+}
 
 const c = loadCatalog();
 const brandName = new Map(c.brands.map((b) => [b.id, b.name]));

@@ -38,8 +38,7 @@ docs/                   Resource map, asset mapping, implementation status
 .github/workflows/      ci.yml (format, lint, typecheck, unit, emulator, E2E), deploy.yml (Firebase + Cloudflare Pages), android.yml (APK/AAB)
 ```
 
-Client-provided folders stay at the repo root exactly as delivered. They are read-only inputs:
-`لیست برندها و محصولات سیلانه سبز/`, `لوگو برندها و تصاویر محصولات/`, `کامپوننت های کمکی برای تکمیل UI UX اپلیکیشن/`, plus the sample training media (`*.mp4`, `*.m4a`).
+The lightweight Git checkout keeps the catalog CSV/XLSX at the repo root. The original product imagery, helper UI kit, and sample training audio/video are preserved in a separate local archive so GitHub import tools do not need to fetch hundreds of megabytes. See [`docs/ASSET-ARCHIVE.md`](./docs/ASSET-ARCHIVE.md) for the archive location and restore steps. If the archive is not present (for example in CI or AI Studio), the app still builds and uses Firebase Storage for production catalog imagery.
 
 ## Requirements
 
@@ -116,7 +115,7 @@ CI (`.github/workflows/ci.yml`) also runs: Playwright on Chromium (desktop + Pix
 ## Catalog data, images & seeding
 
 - Catalog: `brands.csv` (12 brands) and `products.csv` (238 active products). Names are used exactly as delivered.
-- Asset matching is deterministic, with no fuzzy guessing. Results: 12/12 logos and 238/238 product images. See [`docs/ASSET-MAPPING.md`](./docs/ASSET-MAPPING.md).
+- Asset matching is deterministic, with no fuzzy guessing. The original 12 logos and 238 product images are preserved in the local asset archive (see [`docs/ASSET-ARCHIVE.md`](./docs/ASSET-ARCHIVE.md)); the checked-in mapping is [`docs/ASSET-MAPPING.md`](./docs/ASSET-MAPPING.md). Without restoring the archive, local sync skips image files while the production app uses Firebase Storage.
 - Storage layout used by the seed script (PROMPT 003): `brands/{brandId}/logo.*` and `products/{productId}/main.*`. The same paths are mirrored locally under `/catalog/...`.
 - Sample training media → brand/product mapping, plus open questions: [`docs/RESOURCE-MAP.md`](./docs/RESOURCE-MAP.md) §3.
 - Seed: `npm run seed -w functions -- [--memory] [--demo] [--force] [--report docs/SEED-REPORT.md]`. It is idempotent and targets memory, the emulator or a real project (see the header of `scripts/seed-catalog.ts` and `docs/RELEASE.md`). Result: [`docs/SEED-REPORT.md`](./docs/SEED-REPORT.md).

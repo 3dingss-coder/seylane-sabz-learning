@@ -1,6 +1,6 @@
 {
   "$comment": "Client decisions not present in the original export (spec §36 D27, D30–D34). Consumed by scripts/seed-catalog.ts. Names are copied verbatim from hidden-products.csv / client answers.",
-  "holdingLogo": "کامپوننت های کمکی برای تکمیل UI UX اپلیکیشن/اپ مشتری/لوگو و آیکون/logo-full.png",
+  "holdingLogo": "apps/web/public/icons/logo-full.png",
   "reactivatedBrands": [
     {
       "id": "brand-sb-formi",

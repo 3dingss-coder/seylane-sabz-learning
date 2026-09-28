@@ -9,13 +9,18 @@ import { createCtx, passQuiz, watchSection, type TestCtx } from './support/ctx';
 const repoRoot = path.resolve(__dirname, '..', '..');
 let ctx: TestCtx;
 let report: SeedReport;
+const hasSourceAssets =
+  fs.existsSync(path.join(repoRoot, 'لوگو برندها و تصاویر محصولات', 'لوگو برندها')) &&
+  fs.existsSync(path.join(repoRoot, 'لوگو برندها و تصاویر محصولات', 'تصاویر محصولات')) &&
+  fs.existsSync(path.join(repoRoot, 'آموزش کامل محصول فورمی.mp4'));
 
 beforeAll(async () => {
+  if (!hasSourceAssets) return;
   ctx = await createCtx();
   report = await runSeed(ctx.deps, { repoRoot, demo: true, linkLocalFiles: true });
 }, 120_000);
 
-describe('real catalog seed (PROMPT 003/004)', () => {
+describe.skipIf(!hasSourceAssets)('real catalog seed (PROMPT 003/004)', () => {
   it('seeds 12 catalog + 4 reactivated brands and every product verbatim', async () => {
     const cat = loadCatalog(catalogPaths(repoRoot));
     expect(report.brands).toBe(16);

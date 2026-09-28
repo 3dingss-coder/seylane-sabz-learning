@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runDailyReminders, runDeadlineSweep, runWeeklyDigest } from '../src/services/jobs';
@@ -9,10 +10,16 @@ import { createCtx, type TestCtx } from './support/ctx';
 /** Scheduled jobs + admin/manager reporting over the real seed (also feeds check:indexes). */
 let ctx: TestCtx;
 const tokens: Record<string, string> = {};
+const repoRoot = path.resolve(__dirname, '..', '..');
+const hasSourceAssets =
+  fs.existsSync(path.join(repoRoot, 'لوگو برندها و تصاویر محصولات', 'لوگو برندها')) &&
+  fs.existsSync(path.join(repoRoot, 'لوگو برندها و تصاویر محصولات', 'تصاویر محصولات')) &&
+  fs.existsSync(path.join(repoRoot, 'آموزش کامل محصول فورمی.mp4'));
 beforeAll(async () => {
+  if (!hasSourceAssets) return;
   ctx = await createCtx();
   await runSeed(ctx.deps, {
-    repoRoot: path.resolve(__dirname, '..', '..'),
+    repoRoot,
     demo: true,
     linkLocalFiles: true,
   });
@@ -32,7 +39,7 @@ async function loginAll() {
   ctx.limiter.reset();
 }
 
-describe('scheduled jobs', () => {
+describe.skipIf(!hasSourceAssets)('scheduled jobs', () => {
   it('run without errors on seeded data', async () => {
     await runDeadlineSweep(ctx.deps);
     ctx.advance(4 * 86400_000);
@@ -59,7 +66,7 @@ describe('scheduled jobs', () => {
   });
 });
 
-describe('reports & admin lists', () => {
+describe.skipIf(!hasSourceAssets)('reports & admin lists', () => {
   beforeAll(loginAll); // tokens after the clock jumps of the jobs suite
   const ok = async (token: string | undefined, url: string) => {
     ctx.limiter.reset();
