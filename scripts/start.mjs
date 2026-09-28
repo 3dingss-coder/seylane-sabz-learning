@@ -10,7 +10,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const bin = (name) => join(root, 'node_modules', '.bin', process.platform === 'win32' ? `${name}.cmd` : name);
+const bin = (name) =>
+  join(root, 'node_modules', '.bin', process.platform === 'win32' ? `${name}.cmd` : name);
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 const required = ['tsx', 'vite'];
@@ -31,7 +32,11 @@ let lastStart = 0;
 
 function run() {
   lastStart = Date.now();
-  child = spawn(bin('tsx'), ['scripts/dev-server.ts'], { cwd: root, stdio: 'inherit', env: process.env });
+  child = spawn(bin('tsx'), ['scripts/dev-server.ts'], {
+    cwd: root,
+    stdio: 'inherit',
+    env: process.env,
+  });
   child.on('exit', (code, signal) => {
     if (stopping) return process.exit(code ?? 0);
     // reset the crash counter if it ran fine for a while
