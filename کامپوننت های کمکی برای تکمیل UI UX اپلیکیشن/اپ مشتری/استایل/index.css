@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #f6fafe;
+    color: #171c1f;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: #065f46;
+    color: #ffffff;
+  }
+
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid #059669;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 1;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Slim, brand-tinted scrollbar for areas where scroll affordance should
+   still read as considered rather than the raw OS default. */
+.brand-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 108, 74, 0.28) transparent;
+}
+.brand-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.brand-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 108, 74, 0.28);
+  border-radius: 999px;
+}
+.brand-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 108, 74, 0.45);
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Shimmer sweep used for skeleton/loading placeholders — reads as
+   "actively fetching" rather than a dead gray block. */
+@keyframes shimmer-sweep {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    #eef2f1 25%,
+    #f7faf9 37%,
+    #eef2f1 63%
+  );
+  background-size: 800px 100%;
+  animation: shimmer-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.animate-float-soft {
+  animation: float-soft 3.2s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes cart-bump {
+  0% { transform: scale(1) rotate(0); }
+  30% { transform: scale(1.25) rotate(-8deg); }
+  55% { transform: scale(0.94) rotate(6deg); }
+  75% { transform: scale(1.08) rotate(-2deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.animate-cart-bump {
+  animation: cart-bump 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes cart-ping {
+  0% { opacity: 0; transform: scale(0.4); }
+  20% { opacity: 1; transform: scale(1.15); }
+  35% { transform: scale(0.95); }
+  75% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.85); }
+}
+
+.animate-cart-ping {
+  animation: cart-ping 0.7s ease-out;
+}
+
