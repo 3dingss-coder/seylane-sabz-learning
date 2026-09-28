@@ -25,6 +25,14 @@ if (!required.every((b) => existsSync(bin(b)))) {
   }
 }
 
+// `npm run start:prod` → build the web app once, then serve dist/ (legacy-browser bundle included).
+const prod = process.argv.includes('--prod');
+if (prod) {
+  console.log('[start] building the production web app …');
+  const r = spawnSync(npm, ['run', 'build', '-w', 'apps/web'], { cwd: root, stdio: 'inherit' });
+  if (r.status !== 0) process.exit(r.status ?? 1);
+}
+
 let child;
 let stopping = false;
 let restarts = 0;
@@ -35,7 +43,7 @@ function run() {
   child = spawn(bin('tsx'), ['scripts/dev-server.ts'], {
     cwd: root,
     stdio: 'inherit',
-    env: process.env,
+    env: prod ? { ...process.env, SERVE_BUILD: 'true' } : process.env,
   });
   child.on('exit', (code, signal) => {
     if (stopping) return process.exit(code ?? 0);

@@ -1,9 +1,11 @@
 /// <reference types="vitest/config" />
 import { fileURLToPath, URL } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
+import legacy from '@vitejs/plugin-legacy';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { legacyCss } from './legacy-css';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -14,6 +16,11 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      // Older browsers (iOS 12+, Android WebView/Chrome 64+, Samsung Internet 9+; targets in
+      // package.json `browserslist`): syntax down-levelled + core-js polyfills for modern chunks,
+      // and a SystemJS legacy bundle for browsers without ES-module support.
+      legacy({ modernPolyfills: true, renderLegacyChunks: true }),
+      legacyCss(),
       VitePWA({
         registerType: 'autoUpdate',
         // Registered manually in main.tsx so the Android (Capacitor) build skips the service worker.
@@ -28,7 +35,8 @@ export default defineConfig(({ mode }) => {
           start_url: '/',
           scope: '/',
           display: 'standalone',
-          orientation: 'portrait',
+          // 'any': tablets/desktops (admin panel) must be able to rotate; phones follow the device.
+          orientation: 'any',
           background_color: '#F8FAFC',
           theme_color: '#177A50',
           icons: [
@@ -38,7 +46,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           // Catalog images are large — cache at runtime instead of precaching.
-          globIgnores: ['**/catalog/**'],
+          globIgnores: ['**/catalog/**', '**/*-legacy-*.js'],
           // Web Push handler (src/lib/webPush.ts) — self-hosted, no Firebase script in the worker.
           importScripts: ['push-sw.js'],
           navigateFallbackDenylist: [/^\/v1\//],

@@ -60,6 +60,13 @@ cd functions && npx tsx src/local.ts          # http://localhost:5001/v1/health
 npm run dev
 ```
 
+**Browser support.** The production build targets iOS/Safari 12+, Chrome & Android WebView 64+,
+Samsung Internet 9+, Firefox 67+ and Edge 79+ (`browserslist` in `apps/web/package.json`):
+`@vitejs/plugin-legacy` down-levels/polyfills JS (plus a `nomodule` bundle for browsers without ES
+modules) and `apps/web/legacy-css.ts` flattens Tailwind's cascade layers and adds CSS fallbacks.
+The Vite dev server (`npm start`) needs a modern browser — to test on old phones use
+`npm run start:prod`, which builds and serves the production bundle on the same port.
+
 Local API env: `PORT` (5001), `RESEED=true` (wipe and re-seed), `LOCAL_PERSIST=false` (don't write `functions/.local-data`).
 
 Demo accounts (local/emulator only, password `demo1234`):

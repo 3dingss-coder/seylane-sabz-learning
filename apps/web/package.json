@@ -43,6 +43,7 @@
     "@types/node": "^20.19.0",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-legacy": "^7.2.1",
     "@vitejs/plugin-react": "^5.0.3",
     "axe-core": "^4.13.0",
     "eslint": "^9.36.0",
@@ -51,11 +52,30 @@
     "eslint-plugin-react-refresh": "^0.4.21",
     "globals": "^16.4.0",
     "jsdom": "^27.0.0",
+    "postcss": "^8.5.28",
+    "postcss-preset-env": "^11.5.4",
     "tailwindcss": "^4.1.13",
+    "terser": "^5.51.2",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.44.1",
     "vite": "^7.1.7",
     "vite-plugin-pwa": "^1.0.3",
     "vitest": "^3.2.4"
-  }
+  },
+  "browserslist": [
+    "chrome >= 64",
+    "and_chr >= 64",
+    "android >= 64",
+    "edge >= 79",
+    "firefox >= 67",
+    "and_ff >= 67",
+    "safari >= 12",
+    "ios_saf >= 12",
+    "samsung >= 9",
+    "opera >= 51",
+    "op_mob >= 46",
+    "and_uc >= 12.12",
+    "and_qq >= 10.4",
+    "kaios >= 2.5"
+  ]
 }

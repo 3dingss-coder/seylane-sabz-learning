@@ -4,6 +4,8 @@
  * on the raw JSON API.
  *
  *   npm start          (PORT=5173 by default; RESEED=true to wipe and re-seed)
+ *   npm run start:prod (SERVE_BUILD=true: serves the production build in apps/web/dist — the same
+ *                       files users get, incl. the legacy-browser bundle — instead of Vite dev)
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -60,12 +62,42 @@ async function main() {
 
   const app = express();
   const server = http.createServer(app);
-  const vite = await createViteServer({
-    root: webRoot,
-    configFile: path.join(webRoot, 'vite.config.ts'),
-    server: { middlewareMode: true, hmr: { server }, allowedHosts: true },
-    appType: 'spa',
-  });
+  const serveBuild = process.env.SERVE_BUILD === 'true';
+  const dist = path.join(webRoot, 'dist');
+  if (serveBuild && !fs.existsSync(path.join(dist, 'index.html'))) {
+    throw new Error(
+      'SERVE_BUILD=true but apps/web/dist is missing — run `npm run build -w apps/web`',
+    );
+  }
+  const vite = serveBuild
+    ? null
+    : await createViteServer({
+        root: webRoot,
+        configFile: path.join(webRoot, 'vite.config.ts'),
+        server: { middlewareMode: true, hmr: { server }, allowedHosts: true },
+        appType: 'spa',
+      });
+  const web: express.Handler = vite
+    ? vite.middlewares
+    : (() => {
+        const files = express.static(dist, {
+          index: false,
+          setHeaders: (res, file) => {
+            // hashed assets never change; index.html / sw.js must always be re-checked
+            if (file.includes(`${path.sep}assets${path.sep}`))
+              res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+            else res.setHeader('Cache-Control', 'no-cache');
+          },
+        });
+        return (req, res, next) =>
+          files(req, res, () => {
+            if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+            // missing files (e.g. an old chunk after a redeploy) must 404, not return HTML
+            if (/\.[a-z0-9]+$/i.test(req.path)) return res.status(404).end();
+            res.setHeader('Cache-Control', 'no-cache');
+            res.sendFile(path.join(dist, 'index.html')); // SPA fallback
+          });
+      })();
   // /v1 → API (keeps its own security headers + JSON 404); everything else → Vite.
   app.use((req, res, next) => {
     if (req.url === '/v1' || req.url.startsWith('/v1/')) {
@@ -80,16 +112,18 @@ async function main() {
         console.info(`[api] ${req.method} ${req.url} → ${res.statusCode} (${auth || 'no-auth'})`),
       );
       api(req, res, next);
-    } else vite.middlewares(req, res, next);
+    } else web(req, res, next);
   });
 
   const port = Number(process.env.PORT ?? 5173);
   server.listen(port, '0.0.0.0', () =>
-    console.info(`[dev] web + API on http://0.0.0.0:${port}  (API health: /v1/health)`),
+    console.info(
+      `[dev] web${serveBuild ? ' (production build)' : ''} + API on http://0.0.0.0:${port}  (API health: /v1/health)`,
+    ),
   );
   const stop = () => {
     deps.store.flush();
-    void vite.close().finally(() => process.exit(0));
+    void (vite ? vite.close() : Promise.resolve()).finally(() => process.exit(0));
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
