@@ -1,0 +1,84 @@
+rules_version = '2';
+
+// Second security layer (spec §24 / D21). All reads/writes of the apps go through the
+// /v1 API (Admin SDK, bypasses these rules). These rules make direct client-SDK access
+// deny-by-default: nothing is writable from a client, and the few readable documents
+// follow RBAC §19 + team scope (`resource.teamId == manager.teamId`).
+// Quizzes/questions (answerKey), attempts snapshots, audit logs, chat transcripts and all
+// internal collections are never readable from a client.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function active() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && me().status == 'active'; }
+    function role() { return me().role; }
+    function isAdmin() { return active() && role() in ['admin', 'superadmin']; }
+    function isManagerOf(teamId) { return active() && role() == 'manager' && teamId != null && me().teamId == teamId; }
+    function isSelf(uid) { return active() && request.auth.uid == uid; }
+
+    // Default: deny everything.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isManagerOf(resource.data.teamId) || isAdmin();
+      allow write: if false;
+    }
+
+    match /teams/{teamId} {
+      allow read: if isAdmin() || isManagerOf(teamId) || (active() && me().teamId == teamId);
+      allow write: if false;
+    }
+
+    // Public catalog metadata (names/logos) for signed-in active users.
+    match /brands/{id} {
+      allow read: if active();
+      allow write: if false;
+    }
+    match /products/{id} {
+      allow read: if active();
+      allow write: if false;
+    }
+    match /settings/branding {
+      allow read: if active();
+      allow write: if false;
+    }
+
+    // Package metadata only when published (drafts are admin-only); sections via API only.
+    match /packages/{id} {
+      allow read: if isAdmin() || (active() && resource.data.status == 'published');
+      allow write: if false;
+    }
+
+    // Own learning records; managers see their team members' records.
+    match /section_progress/{id} {
+      allow read: if isSelf(resource.data.userId) || isAdmin() || isManagerOf(get(/databases/$(database)/documents/users/$(resource.data.userId)).data.teamId);
+      allow write: if false;
+    }
+    match /package_completions/{id} {
+      allow read: if isSelf(resource.data.userId) || isAdmin() || isManagerOf(resource.data.teamId);
+      allow write: if false;
+    }
+    match /points_ledger/{id} {
+      allow read: if isSelf(resource.data.userId) || isAdmin();
+      allow write: if false;
+    }
+    match /user_badges/{id} {
+      allow read: if isSelf(resource.data.userId) || isAdmin();
+      allow write: if false;
+    }
+    match /notifications/{id} {
+      allow read: if isSelf(resource.data.userId);
+      allow write: if false;
+    }
+    match /messages/{id} {
+      allow read: if isSelf(resource.data.toUserId) || isSelf(resource.data.fromUserId);
+      allow write: if false;
+    }
+    match /retake_requests/{id} {
+      allow read: if isSelf(resource.data.userId) || isAdmin() || isManagerOf(resource.data.teamId);
+      allow write: if false;
+    }
+  }
+}

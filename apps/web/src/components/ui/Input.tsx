@@ -1,0 +1,60 @@
+import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
+import { cn } from '@/lib/cn';
+
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'id'> {
+  label: string;
+  /** Error text shown under the field (§15.1 M1) and announced via aria-live. */
+  error?: string;
+  hint?: string;
+  icon?: ReactNode;
+  /** Force LTR for phone/email/password while keeping the RTL layout. */
+  ltr?: boolean;
+  id?: string;
+}
+
+export function Input({ label, error, hint, icon, ltr, id, className, ...rest }: InputProps) {
+  const autoId = useId();
+  const inputId = id ?? autoId;
+  const errorId = `${inputId}-error`;
+  const hintId = `${inputId}-hint`;
+  const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(' ');
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={inputId} className="text-sm font-medium text-text">
+        {label}
+      </label>
+      <div className="relative">
+        {icon && (
+          <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-muted-fg">
+            {icon}
+          </span>
+        )}
+        <input
+          id={inputId}
+          dir={ltr ? 'ltr' : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy || undefined}
+          className={cn(
+            'min-h-12 w-full rounded-input border bg-surface px-3 text-base text-text placeholder:text-muted-fg',
+            'transition-colors focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30',
+            'disabled:cursor-not-allowed disabled:opacity-40',
+            error ? 'border-danger' : 'border-border',
+            icon ? 'ps-10' : null,
+            ltr && 'text-left',
+            className,
+          )}
+          {...rest}
+        />
+      </div>
+      {hint && !error && (
+        <p id={hintId} className="text-xs text-text-secondary">
+          {hint}
+        </p>
+      )}
+      <p id={errorId} aria-live="polite" className="min-h-0 text-xs font-medium text-danger">
+        {error}
+      </p>
+    </div>
+  );
+}

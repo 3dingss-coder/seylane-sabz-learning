@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "dev": "<firebase-dev-project-id>",
+    "prod": "<firebase-prod-project-id>"
+  }
+}

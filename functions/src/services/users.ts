@@ -1,0 +1,501 @@
+import { randomInt } from 'node:crypto';
+import { z } from 'zod';
+import { ApiError } from '../http/errors';
+import { text } from '../http/validate';
+import { ids, normalizePhone, phoneToAuthEmail } from '../lib/ids';
+import { StoreConflictError, type Doc } from '../store/types';
+import type { Role, Team, User } from '../domain/types';
+import { audit, nowIso, SYSTEM, track, type Actor, type Deps } from './context';
+
+// ─── Validation (PROMPT 002) ────────────────────────────────────────────────
+export const passwordSchema = z
+  .string({ required_error: 'رمز عبور را وارد کنید.' })
+  .min(8, 'رمز عبور باید حداقل ۸ نویسه باشد.')
+  .max(128, 'رمز عبور خیلی طولانی است.')
+  .refine(
+    (p) => /[A-Za-z\u0600-\u06FF]/.test(p) && /\d|[۰-۹]/.test(p),
+    'رمز عبور باید حداقل یک حرف و یک عدد داشته باشد.',
+  );
+
+const identifierSchema = z
+  .string({ required_error: 'شماره موبایل یا ایمیل را وارد کنید.' })
+  .trim()
+  .min(3, 'شماره موبایل یا ایمیل را وارد کنید.')
+  .max(120);
+
+export const registerSchema = z.object({
+  name: text(2, 60, 'نام'),
+  identifier: identifierSchema,
+  password: passwordSchema,
+});
+export const loginSchema = z.object({
+  identifier: identifierSchema,
+  password: z.string().min(1, 'رمز عبور را وارد کنید.').max(128),
+});
+
+export type Identifier =
+  | { kind: 'phone'; phone: string; authEmail: string }
+  | { kind: 'email'; email: string; authEmail: string };
+
+/** Accepts mobile (Persian/Latin digits, +98) or email. */
+export function parseIdentifier(raw: string): Identifier {
+  const s = raw.trim();
+  if (s.includes('@')) {
+    const email = s.toLowerCase();
+    if (!z.string().email().safeParse(email).success)
+      throw new ApiError('VALIDATION', 'ایمیل واردشده درست نیست.');
+    return { kind: 'email', email, authEmail: email };
+  }
+  const phone = normalizePhone(s);
+  if (!phone) throw new ApiError('VALIDATION', 'شماره موبایل درست نیست. مثال: ۰۹۱۲۱۲۳۴۵۶۷');
+  return { kind: 'phone', phone, authEmail: phoneToAuthEmail(phone) };
+}
+
+export function publicUser(u: Doc<User>) {
+  return {
+    id: u.id,
+    name: u.name,
+    phone: u.phone,
+    email: u.email,
+    role: u.role,
+    teamId: u.teamId,
+    brandIds: u.brandIds,
+    status: u.status,
+    pointsBalance: u.pointsBalance,
+    onboardedAt: u.onboardedAt,
+    lastActiveAt: u.lastActiveAt,
+    createdAt: u.createdAt,
+  };
+}
+
+// ─── Register / Login ───────────────────────────────────────────────────────
+export async function register(
+  d: Deps,
+  input: z.infer<typeof registerSchema>,
+  role: Role = 'marketer',
+  extra: Partial<User> = {},
+) {
+  const idf = parseIdentifier(input.identifier);
+  const keyId = ids.uniqueKey(idf.kind, idf.kind === 'phone' ? idf.phone : idf.email);
+  const now = nowIso(d);
+  // Reserve the unique key first (handles concurrent sign-ups deterministically).
+  try {
+    await d.store.create(`unique_keys/${keyId}`, { kind: idf.kind, createdAt: now, uid: null });
+  } catch (e) {
+    if (e instanceof StoreConflictError) {
+      throw new ApiError(
+        'CONFLICT',
+        idf.kind === 'phone'
+          ? 'این شماره قبلاً ثبت شده است. وارد شوید.'
+          : 'این ایمیل قبلاً ثبت شده است. وارد شوید.',
+      );
+    }
+    throw e;
+  }
+  let uid: string;
+  try {
+    uid = await d.auth.createUser({
+      email: idf.authEmail,
+      password: input.password,
+      displayName: input.name,
+    });
+  } catch (e) {
+    await d.store.delete(`unique_keys/${keyId}`);
+    const code = (e as { code?: string }).code ?? '';
+    if (code.includes('email-already-exists') || e instanceof StoreConflictError)
+      throw new ApiError('CONFLICT', 'این حساب قبلاً ثبت شده است. وارد شوید.');
+    throw e;
+  }
+  const user: User = {
+    name: input.name,
+    phone: idf.kind === 'phone' ? idf.phone : null,
+    email: idf.kind === 'email' ? idf.email : null,
+    firebaseUid: uid,
+    role,
+    teamId: null,
+    brandIds: [],
+    status: 'active',
+    pointsBalance: 0,
+    onboardedAt: null,
+    lastActiveAt: null,
+    createdAt: now,
+    updatedAt: now,
+    ...extra,
+  };
+  await d.store.set(`users/${uid}`, user);
+  await d.store.update(`unique_keys/${keyId}`, { uid });
+  await d.auth.setClaims(uid, { role: user.role });
+  await track(d, 'signup_completed', uid, { method: idf.kind });
+  return { ...user, id: uid } as Doc<User>;
+}
+
+async function loginGuard(d: Deps, key: string) {
+  const g = await d.store.get<{ fails: number; lockedUntil: string | null }>(`login_guards/${key}`);
+  if (g?.lockedUntil && g.lockedUntil > nowIso(d)) {
+    throw new ApiError(
+      'RATE_LIMIT',
+      'به دلیل تلاش‌های ناموفق زیاد، ورود تا ۱۵ دقیقه بسته شد. بعداً دوباره تلاش کنید.',
+    );
+  }
+  return g;
+}
+
+export async function login(d: Deps, input: z.infer<typeof loginSchema>) {
+  let idf: Identifier;
+  try {
+    idf = parseIdentifier(input.identifier);
+  } catch {
+    throw new ApiError('UNAUTHENTICATED', 'رمز یا نام کاربری اشتباه است.');
+  }
+  const guardKey = ids.hash(idf.authEmail);
+  const guard = await loginGuard(d, guardKey);
+  const r = await d.auth.signIn(idf.authEmail, input.password);
+  if (!r.ok) {
+    if (r.reason === 'disabled') {
+      await track(d, 'login_failed', null, { reason: 'disabled' });
+      throw new ApiError('FORBIDDEN', 'حساب شما غیرفعال شده است. با مدیر خود تماس بگیرید.');
+    }
+    const fails = (guard?.fails ?? 0) + 1;
+    const locked = fails >= 5;
+    await d.store.set(`login_guards/${guardKey}`, {
+      fails: locked ? 0 : fails,
+      lockedUntil: locked ? new Date(d.clock().getTime() + 15 * 60_000).toISOString() : null,
+    });
+    await track(d, 'login_failed', null, { reason: r.reason });
+    if (r.reason === 'locked' || locked)
+      throw new ApiError(
+        'RATE_LIMIT',
+        'به دلیل تلاش‌های ناموفق زیاد، ورود تا ۱۵ دقیقه بسته شد. بعداً دوباره تلاش کنید.',
+      );
+    throw new ApiError('UNAUTHENTICATED', 'رمز یا نام کاربری اشتباه است.');
+  }
+  if (guard) await d.store.delete(`login_guards/${guardKey}`);
+  const user = await d.store.get<User>(`users/${r.uid}`);
+  if (!user) throw new ApiError('UNAUTHENTICATED', 'رمز یا نام کاربری اشتباه است.');
+  if (user.status !== 'active')
+    throw new ApiError('FORBIDDEN', 'حساب شما غیرفعال شده است. با مدیر خود تماس بگیرید.');
+  await d.store.update(`users/${r.uid}`, { lastActiveAt: nowIso(d) });
+  await track(d, 'login_success', r.uid, {});
+  return { user: publicUser(user), ...r.tokens };
+}
+
+export async function refresh(d: Deps, refreshToken: string) {
+  const r = await d.auth.refresh(refreshToken);
+  if (!r) throw new ApiError('UNAUTHENTICATED');
+  const user = await d.store.get<User>(`users/${r.uid}`);
+  if (!user || user.status !== 'active') throw new ApiError('UNAUTHENTICATED');
+  return { user: publicUser(user), ...r.tokens };
+}
+
+export async function logout(d: Deps, userId: string) {
+  await d.auth.revoke(userId);
+}
+
+/** Always 202 (no account enumeration). Email → reset mail; phone → admins are notified (D35). */
+export async function requestPasswordReset(d: Deps, identifier: string) {
+  let idf: Identifier;
+  try {
+    idf = parseIdentifier(identifier);
+  } catch {
+    return;
+  }
+  const users = await d.store.query<User>({
+    collection: 'users',
+    where: [idf.kind === 'phone' ? ['phone', '==', idf.phone] : ['email', '==', idf.email]],
+    limit: 1,
+  });
+  const user = users[0];
+  if (!user || user.status !== 'active') return;
+  if (idf.kind === 'email') {
+    await d.auth.sendPasswordResetEmail(idf.email);
+  } else {
+    const { notifyUsers } = await import('./notify');
+    const admins = await d.store.query<User>({
+      collection: 'users',
+      where: [
+        ['role', 'in', ['admin', 'superadmin']],
+        ['status', '==', 'active'],
+      ],
+    });
+    await notifyUsers(
+      d,
+      admins.map((a) => a.id),
+      'manual',
+      {
+        title: 'درخواست بازیابی رمز',
+        body: `${user.name} درخواست بازیابی رمز عبور دارد. از بخش کاربران رمز موقت بسازید.`,
+      },
+      {
+        actionRef: `/admin/users/${user.id}`,
+        throttleKey: `pwreset_${user.id}`,
+        throttleMs: 3600_000,
+      },
+    );
+  }
+  await track(d, 'password_reset_requested', null, { method: idf.kind });
+}
+
+// ─── Profile (Me) ───────────────────────────────────────────────────────────
+export const patchMeSchema = z.object({ name: text(2, 60, 'نام') });
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: passwordSchema,
+});
+
+export async function updateMe(d: Deps, user: Doc<User>, input: z.infer<typeof patchMeSchema>) {
+  await d.store.update(`users/${user.id}`, { name: input.name, updatedAt: nowIso(d) });
+  return publicUser({ ...user, name: input.name });
+}
+
+export async function changePassword(
+  d: Deps,
+  user: Doc<User>,
+  input: z.infer<typeof changePasswordSchema>,
+) {
+  const authEmail = user.email ?? (user.phone ? phoneToAuthEmail(user.phone) : '');
+  const r = await d.auth.signIn(authEmail, input.currentPassword);
+  if (!r.ok) throw new ApiError('VALIDATION', 'رمز فعلی اشتباه است.');
+  await d.auth.setPassword(user.id, input.newPassword);
+  await audit(d, { id: user.id, role: user.role }, 'user.password_changed', 'users', user.id);
+}
+
+export async function completeOnboarding(d: Deps, user: Doc<User>) {
+  if (user.onboardedAt) return { onboardedAt: user.onboardedAt };
+  const at = nowIso(d);
+  await d.store.update(`users/${user.id}`, { onboardedAt: at });
+  await track(d, 'onboarding_completed', user.id);
+  return { onboardedAt: at };
+}
+
+// ─── Admin: users (PROMPT 007) ──────────────────────────────────────────────
+export const adminUserQuery = z.object({
+  q: z.string().max(80).optional(),
+  role: z.enum(['marketer', 'manager', 'admin', 'superadmin']).optional(),
+  teamId: z.string().max(80).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+});
+
+export async function listUsers(d: Deps, f: z.infer<typeof adminUserQuery>) {
+  const where: Array<[string, '==', unknown]> = [];
+  if (f.role) where.push(['role', '==', f.role]);
+  if (f.teamId) where.push(['teamId', '==', f.teamId === 'none' ? null : f.teamId]);
+  if (f.status) where.push(['status', '==', f.status]);
+  let users = await d.store.query<User>({ collection: 'users', where });
+  if (f.q) {
+    const q = f.q.trim().toLowerCase();
+    const phone = normalizePhone(q);
+    users = users.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        (u.email ?? '').includes(q) ||
+        (u.phone ?? '').includes(phone ?? (q.replace(/\D/g, '') || '§')),
+    );
+  }
+  users.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
+  return users.map(publicUser);
+}
+
+export const adminPatchUserSchema = z
+  .object({
+    name: text(2, 60, 'نام').optional(),
+    role: z.enum(['marketer', 'manager', 'admin', 'superadmin']).optional(),
+    teamId: z.string().max(80).nullable().optional(),
+    status: z.enum(['active', 'inactive']).optional(),
+    brandIds: z.array(z.string().max(80)).max(50).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, 'هیچ تغییری ارسال نشده است.');
+
+const PRIVILEGED: Role[] = ['admin', 'superadmin'];
+
+export async function adminUpdateUser(
+  d: Deps,
+  actor: Actor,
+  userId: string,
+  patch: z.infer<typeof adminPatchUserSchema>,
+) {
+  const target = await d.store.get<User>(`users/${userId}`);
+  if (!target) throw new ApiError('NOT_FOUND', 'کاربر پیدا نشد.');
+  const selfEdit = actor.id === userId;
+  if (selfEdit && (patch.role !== undefined || patch.status !== undefined)) {
+    throw new ApiError('FORBIDDEN', 'نمی‌توانید نقش یا وضعیت حساب خودتان را تغییر دهید.');
+  }
+  const roleChanged = patch.role !== undefined && patch.role !== target.role;
+  if (roleChanged || (patch.status !== undefined && PRIVILEGED.includes(target.role))) {
+    // roles.manage — only superadmin may grant/revoke admin-level roles.
+    const touchesPrivileged =
+      PRIVILEGED.includes(target.role) ||
+      (patch.role !== undefined && PRIVILEGED.includes(patch.role));
+    if (touchesPrivileged && actor.role !== 'superadmin')
+      throw new ApiError('FORBIDDEN', 'فقط مدیر ارشد سیستم می‌تواند نقش‌های مدیریتی را تغییر دهد.');
+  }
+  const losingSuper =
+    target.role === 'superadmin' &&
+    ((patch.role !== undefined && patch.role !== 'superadmin') || patch.status === 'inactive');
+  if (losingSuper) {
+    const supers = await d.store.query<User>({
+      collection: 'users',
+      where: [
+        ['role', '==', 'superadmin'],
+        ['status', '==', 'active'],
+      ],
+    });
+    if (supers.filter((s) => s.id !== userId).length === 0)
+      throw new ApiError(
+        'CONFLICT',
+        'این آخرین مدیر ارشد سیستم است و نمی‌توان نقش یا وضعیت آن را تغییر داد.',
+      );
+  }
+  if (patch.teamId) {
+    const team = await d.store.get<Team>(`teams/${patch.teamId}`);
+    if (!team || team.archived) throw new ApiError('VALIDATION', 'تیم انتخاب‌شده معتبر نیست.');
+  }
+  if (patch.brandIds?.length) {
+    const brands = await d.store.getMany(patch.brandIds.map((b) => `brands/${b}`));
+    if (brands.some((b) => !b)) throw new ApiError('VALIDATION', 'برند انتخاب‌شده معتبر نیست.');
+  }
+  const warnings: string[] = [];
+  if (patch.status === 'inactive' && target.role === 'manager') {
+    const teams = await d.store.query<Team>({
+      collection: 'teams',
+      where: [['managerId', '==', userId]],
+    });
+    if (teams.length) warnings.push('این مدیر مسئول تیم است؛ یک مدیر جدید برای تیم تعیین کنید.');
+  }
+  const update: Partial<User> = { ...patch, updatedAt: nowIso(d) } as Partial<User>;
+  await d.store.update(`users/${userId}`, update as Record<string, unknown>);
+  if (roleChanged) await d.auth.setClaims(userId, { role: patch.role });
+  if (roleChanged || patch.status === 'inactive') await d.auth.revoke(userId);
+  if (patch.status !== undefined && patch.status !== target.status)
+    await d.auth.setDisabled(userId, patch.status === 'inactive');
+  const before = Object.fromEntries(
+    Object.keys(patch).map((k) => [k, (target as unknown as Record<string, unknown>)[k]]),
+  );
+  await audit(
+    d,
+    actor,
+    roleChanged ? 'user.role_changed' : 'user.updated',
+    'users',
+    userId,
+    before,
+    patch,
+  );
+  await track(d, 'admin_user_updated', actor.id, { fields: Object.keys(patch) });
+  const updated = await d.store.get<User>(`users/${userId}`);
+  return { user: updated ? publicUser(updated) : null, warnings };
+}
+
+function tempPassword(): string {
+  const letters = 'abcdefghjkmnpqrstuvwxyz';
+  let s = '';
+  for (let i = 0; i < 6; i++) s += letters[randomInt(letters.length)];
+  return `${s}${randomInt(1000, 9999)}`;
+}
+
+/** D35: phone users → temporary password shown once to the admin; email users → reset mail. */
+export async function adminResetPassword(d: Deps, actor: Actor, userId: string) {
+  const target = await d.store.get<User>(`users/${userId}`);
+  if (!target) throw new ApiError('NOT_FOUND', 'کاربر پیدا نشد.');
+  if (PRIVILEGED.includes(target.role) && actor.role !== 'superadmin')
+    throw new ApiError('FORBIDDEN');
+  await audit(d, actor, 'user.password_reset', 'users', userId);
+  await track(d, 'admin_password_reset', actor.id, { method: target.email ? 'email' : 'temp' });
+  if (target.email) {
+    await d.auth.sendPasswordResetEmail(target.email);
+    return { method: 'email' as const, temporaryPassword: null };
+  }
+  const pwd = tempPassword();
+  await d.auth.setPassword(userId, pwd);
+  await d.auth.revoke(userId);
+  return { method: 'temporary' as const, temporaryPassword: pwd };
+}
+
+// ─── Teams ─────────────────────────────────────────────────────────────────
+export const teamSchema = z.object({
+  name: text(2, 60, 'نام تیم'),
+  managerId: z.string().max(80).nullable().optional(),
+});
+
+export async function listTeams(d: Deps) {
+  const [teams, users] = await Promise.all([
+    d.store.query<Team>({ collection: 'teams' }),
+    d.store.query<User>({ collection: 'users', where: [['status', '==', 'active']] }),
+  ]);
+  return teams
+    .filter((t) => !t.archived)
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      managerId: t.managerId,
+      managerName: users.find((u) => u.id === t.managerId)?.name ?? null,
+      memberCount: users.filter((u) => u.teamId === t.id && u.role === 'marketer').length,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'fa'));
+}
+
+async function assignManager(d: Deps, teamId: string, managerId: string | null | undefined) {
+  if (!managerId) return;
+  const m = await d.store.get<User>(`users/${managerId}`);
+  if (!m || m.role !== 'manager' || m.status !== 'active')
+    throw new ApiError('VALIDATION', 'مدیر تیم باید کاربری فعال با نقش «مدیر فروش» باشد.');
+  await d.store.update(`users/${managerId}`, { teamId, updatedAt: nowIso(d) });
+}
+
+export async function createTeam(d: Deps, actor: Actor, input: z.infer<typeof teamSchema>) {
+  const id = d.store.newId();
+  const now = nowIso(d);
+  await assignManager(d, id, input.managerId);
+  const team: Team = {
+    name: input.name,
+    managerId: input.managerId ?? null,
+    archived: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await d.store.set(`teams/${id}`, team);
+  await audit(d, actor, 'team.created', 'teams', id, null, team);
+  return { id, ...team };
+}
+
+export async function updateTeam(
+  d: Deps,
+  actor: Actor,
+  teamId: string,
+  input: Partial<z.infer<typeof teamSchema>> & { archived?: boolean },
+) {
+  const team = await d.store.get<Team>(`teams/${teamId}`);
+  if (!team) throw new ApiError('NOT_FOUND', 'تیم پیدا نشد.');
+  if (input.managerId !== undefined) await assignManager(d, teamId, input.managerId);
+  const patch = { ...input, updatedAt: nowIso(d) };
+  await d.store.update(`teams/${teamId}`, patch);
+  await audit(d, actor, 'team.updated', 'teams', teamId, team, patch);
+  return { ...team, ...patch, id: teamId };
+}
+
+/** Used by seed/bootstrap: first superadmin (never via public API). */
+export async function ensureUser(
+  d: Deps,
+  p: {
+    name: string;
+    identifier: string;
+    password: string;
+    role: Role;
+    teamId?: string | null;
+    brandIds?: string[];
+  },
+) {
+  const idf = parseIdentifier(p.identifier);
+  const existing = await d.store.query<User>({
+    collection: 'users',
+    where: [idf.kind === 'phone' ? ['phone', '==', idf.phone] : ['email', '==', idf.email]],
+    limit: 1,
+  });
+  if (existing[0]) return existing[0];
+  const u = await register(
+    d,
+    { name: p.name, identifier: p.identifier, password: p.password },
+    p.role,
+    { teamId: p.teamId ?? null, brandIds: p.brandIds ?? [], onboardedAt: nowIso(d) },
+  );
+  await audit(d, SYSTEM, 'user.seeded', 'users', u.id, null, { role: p.role });
+  return u;
+}

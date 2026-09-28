@@ -1,0 +1,140 @@
+/* Design System tokens — PRODUCT-MASTER-SPEC §16 (source of truth).
+   Helper-kit styles (helper kit: «استایل/index.css» of each app) were merged here and re-mapped
+   onto these tokens: emerald/#006c4a → primary, rose → danger, amber → warning. */
+@import '@fontsource-variable/vazirmatn';
+@import 'tailwindcss';
+
+@theme {
+  /* §16.2 Color System */
+  /* D40: #1B8A5A → #177A50 so white-on-primary meets WCAG AA (4.35 → 5.34:1). */
+  --color-primary: #177a50;
+  --color-primary-hover: #146c45;
+  --color-primary-light: #e7f5ee;
+  --color-info: #2563eb;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-muted: #94a3b8;
+  --color-border: #e2e8f0;
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  /* tinted backgrounds for status surfaces (derived, same hues) */
+  --color-success-light: #dcfce7;
+  --color-warning-light: #fef3c7;
+  --color-danger-light: #fee2e2;
+  --color-info-light: #dbeafe;
+  /* D40: darker same-hue tones for TEXT only (≥4.5:1 on white and on the tinted surfaces).
+     Base tokens stay for icons, borders, fills and progress. */
+  --color-muted-fg: #64748b;
+  --color-warning-fg: #b45309;
+  --color-success-fg: #15803d;
+  --color-danger-fg: #b91c1c;
+  --color-info-fg: #1d4ed8;
+
+  /* §16.3 Typography — Vazirmatn self-hosted; system fallback if font fails to load */
+  --font-sans:
+    'Vazirmatn Variable', Vazirmatn, Tahoma, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Noto Sans Arabic', sans-serif;
+  --font-latin: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* 12/14/16/18/20/24/30 */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+
+  /* §16.4 Radius: 8 input / 12 card / 16 modal */
+  --radius-input: 8px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
+
+  /* §16.4 Shadow: sm / md / lg (soft) */
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08);
+  --shadow-lg: 0 12px 32px -8px rgb(15 23 42 / 0.16);
+
+  /* touch target (§16.8) */
+  --spacing-touch: 48px;
+
+  --breakpoint-sm: 640px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    line-height: 1.8;
+    color: var(--color-text);
+    background-color: var(--color-background);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    /* long words / URLs / file names never push the page wider than the screen */
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    /* no sideways page scroll on phones (clip keeps position: sticky working) */
+    overflow-x: clip;
+    /* landscape phones with a notch (viewport-fit=cover) */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* §16.6 Focus ring 2px info */
+  :focus-visible {
+    outline: 2px solid var(--color-info);
+    outline-offset: 2px;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  /* §16.9: directional icons (arrows/chevrons that mean "forward/back") mirror in RTL */
+  [dir='rtl'] .rtl-mirror {
+    transform: scaleX(-1);
+  }
+  /* Latin digits for countdowns/percentages (§16.3) */
+  .num-latin {
+    font-family: var(--font-latin);
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+/* iOS Safari zooms the whole page when a focused field is < 16px (layout jumps sideways).
+   `-webkit-touch-callout` is only supported on iOS, so desktop/Android sizes are untouched. */
+@supports (-webkit-touch-callout: none) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
