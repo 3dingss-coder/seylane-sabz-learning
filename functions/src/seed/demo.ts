@@ -104,6 +104,7 @@ async function seedDemoProgress(d: Deps, userId: string) {
         'seed-pkg-formi-s1',
         { positionSec: (i + 1) * 60, playedDeltaSec: 60, event: 'heartbeat' },
         `demo-seed-${userId}-${i}`,
+        { skipBudget: true }, // trusted seed data, not a client
       );
     } catch {
       return; // package not assigned/published in this environment — skip quietly

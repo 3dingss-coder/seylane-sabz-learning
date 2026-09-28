@@ -23,7 +23,8 @@ export default defineConfig({
       command: 'npx tsx src/local.ts',
       cwd: '../../functions',
       url: 'http://127.0.0.1:5001/v1/health',
-      env: { LOCAL_PERSIST: 'false', RESEED: 'true', PORT: '5001' },
+      // PLAYBACK_BUDGET=off: journeys simulate minutes of playback in seconds (memory backend only).
+      env: { LOCAL_PERSIST: 'false', RESEED: 'true', PORT: '5001', PLAYBACK_BUDGET: 'off' },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },

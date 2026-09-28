@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Download, FilterX } from 'lucide-react';
-import { Button, Card, EmptyState, Input, ProgressBar } from '@/components/ui';
+import { Button, Card, EmptyState, ProgressBar } from '@/components/ui';
 import { DataTable } from '@/components/admin/DataTable';
 import { Select } from '@/components/common/Field';
 import { downloadCsv, toCsv } from '@/lib/csv';
+import { JalaliDateField } from '@/components/common/JalaliDateField';
 import { track } from '@/lib/telemetry';
 import { toPersianDigits } from '@/lib/digits';
 import { faDate, faPercent, faRelative } from '@/lib/format';
@@ -145,20 +146,8 @@ export function CompletionReport({
           <option value="completed">تکمیل</option>
           <option value="overdue">دیرکرد</option>
         </Select>
-        <Input
-          label="مهلت از"
-          type="date"
-          ltr
-          value={f('from')}
-          onChange={(e) => set('from', e.target.value)}
-        />
-        <Input
-          label="مهلت تا"
-          type="date"
-          ltr
-          value={f('to')}
-          onChange={(e) => set('to', e.target.value)}
-        />
+        <JalaliDateField label="مهلت از" value={f('from')} onChange={(v) => set('from', v)} />
+        <JalaliDateField label="مهلت تا" value={f('to')} onChange={(v) => set('to', v)} />
       </Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-text-secondary">{toPersianDigits(filtered.length)} ردیف</p>

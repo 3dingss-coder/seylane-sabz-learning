@@ -13,6 +13,7 @@ import { faDate } from '@/lib/format';
 import type { AdminAssignment, AdminPath } from '@/lib/types';
 import { useBrands, usePackagesAdmin, useTeams, useUsers } from './adminQueries';
 import { fromLocalInput, toLocalInput } from '@/lib/dates';
+import { JalaliDateField } from '@/components/common/JalaliDateField';
 
 type Scope = 'global' | 'team' | 'user' | 'brand';
 const SCOPE_LABEL: Record<Scope, string> = {
@@ -510,12 +511,12 @@ function PathDialog({ initial, onClose }: { initial?: AdminPath; onClose: () => 
             error={errors.targetId}
           />
         </div>
-        <Input
+        <JalaliDateField
           label="تاریخ شروع (برای محاسبه مهلت مراحل)"
-          type="datetime-local"
-          ltr
+          mode="datetime"
+          defaultTime="09:00"
           value={startAt}
-          onChange={(e) => setStartAt(e.target.value)}
+          onChange={setStartAt}
           error={errors.startAt}
         />
         <div className="flex flex-col gap-2">

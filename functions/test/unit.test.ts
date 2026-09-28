@@ -274,3 +274,17 @@ describe('templates', () => {
     );
   });
 });
+
+describe('wall-clock playback budget (spendBudget)', () => {
+  it('first beat gets the initial credit, then accrues at 1.5× real time, capped', async () => {
+    const { spendBudget, BUDGET_CAP_SEC } = await import('../src/services/learning');
+    const a = spendBudget(null, 0, 60);
+    expect(a.acceptedSec).toBe(60);
+    const b = spendBudget(a.next, 0, 60); // same instant
+    expect(b.acceptedSec).toBe(10);
+    const c = spendBudget(b.next, 40_000, 60); // 40s later → 60s credit at 1.5×
+    expect(c.acceptedSec).toBe(60);
+    const d = spendBudget(c.next, 10 * 3600_000, 60); // long idle → capped bank
+    expect(d.next.bankSec).toBe(BUDGET_CAP_SEC - 60);
+  });
+});

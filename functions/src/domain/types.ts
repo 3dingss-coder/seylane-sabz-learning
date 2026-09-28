@@ -264,11 +264,13 @@ export interface UserBadge {
 }
 
 export type NotificationType =
+  | 'welcome'
   | 'new_assignment'
   | 'deadline_warning'
   | 'deadline_passed'
   | 'reminder'
   | 'quiz_failed'
+  | 'quiz_passed'
   | 'retake_request'
   | 'retake_reviewed'
   | 'manager_message'

@@ -18,6 +18,12 @@ export const DEFAULT_TEMPLATES: Record<
   NotificationType,
   { title: string; body: string; push: boolean; vars: string[] }
 > = {
+  welcome: {
+    title: 'به سیلانه‌سبز لرنینگ خوش آمدی!',
+    body: 'سلام {name}! آموزش‌هایت در صفحه خانه منتظرت هستند. از «کار بعدی» شروع کن.',
+    push: false,
+    vars: ['name'],
+  },
   new_assignment: {
     title: 'آموزش جدید: {title}',
     body: 'یک آموزش جدید برایت فعال شد. مهلت: {deadline}',
@@ -47,6 +53,12 @@ export const DEFAULT_TEMPLATES: Record<
     body: 'در آزمون «{title}» قبول نشدی. قسمت را مرور کن و دوباره تلاش کن.',
     push: false,
     vars: ['title'],
+  },
+  quiz_passed: {
+    title: 'قبول شدی 🎉',
+    body: 'آزمون «{title}» را با نمره {score}٪ قبول شدی.',
+    push: false,
+    vars: ['title', 'score'],
   },
   retake_request: {
     title: 'درخواست تلاش مجدد',

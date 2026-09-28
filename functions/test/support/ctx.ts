@@ -1,3 +1,4 @@
+import { RecordingMailer } from '../../src/mail/types';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -61,7 +62,7 @@ function withQueryLog(store: DocStore, file: string): DocStore {
 }
 
 export interface TestCtx {
-  deps: Deps & { push: RecordingPushSender };
+  deps: Deps & { push: RecordingPushSender; mail: RecordingMailer };
   app: Express;
   limiter: RateLimiter;
   now: { value: Date };
@@ -101,6 +102,7 @@ export async function createCtx(
     auth: new MemoryAuthProvider(store, 'test-secret', () => clock().getTime()),
     blob: new LocalBlobStore(blobRoot, 'test-secret', () => clock().getTime()),
     push: new RecordingPushSender(),
+    mail: new RecordingMailer(),
     llm: opts.llm === undefined ? new FakeLlm() : opts.llm,
     clock,
   };
@@ -263,6 +265,7 @@ export async function watchSection(
   for (let i = 0; pos < durationSec; i++) {
     const delta = Math.min(60, durationSec - pos);
     pos += delta;
+    ctx.advance(delta * 1000); // real time passes while listening (wall-clock budget)
     ctx.limiter.reset();
     const res = await ctx
       .api(token)

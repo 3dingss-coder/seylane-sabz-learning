@@ -8,6 +8,7 @@ import { errMsg } from '@/lib/errors';
 import type { AdminPackage } from '@/lib/types';
 import { useBrands, useProducts } from './adminQueries';
 import { fromLocalInput, toLocalInput } from '@/lib/dates';
+import { JalaliDateField } from '@/components/common/JalaliDateField';
 
 /** Create or edit package metadata. Brand may stay empty → unassigned draft (D33). */
 export function PackageFormDialog({
@@ -135,12 +136,12 @@ export function PackageFormDialog({
           </Select>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Input
+          <JalaliDateField
             label="مهلت"
-            type="datetime-local"
-            ltr
+            mode="datetime"
+            disablePast
             value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
+            onChange={setDeadline}
             error={errors.deadlineAt}
           />
           <Input

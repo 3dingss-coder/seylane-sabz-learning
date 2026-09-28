@@ -21,6 +21,9 @@ describe('auth (PROMPT 002)', () => {
     expect(login.status).toBe(200);
     const me = await ctx.api(login.body.data.idToken).get('/v1/me');
     expect(me.body.data.name).toBe('سارا');
+    // F1: welcome notification in the in-app center.
+    const inbox = await ctx.api(login.body.data.idToken).get('/v1/me/notifications');
+    expect(JSON.stringify(inbox.body.data)).toContain('خوش آمدی');
   });
 
   it('duplicate registration → 409 with clear Persian message (28.2 #12)', async () => {

@@ -5,9 +5,16 @@ import { LocalBlobStore } from './blob/local';
 import { GeminiClient } from './llm/gemini';
 import type { LlmClient } from './llm/types';
 import { RecordingPushSender } from './push/types';
+import { DisabledMailer, RecordingMailer, type Mailer } from './mail/types';
 import type { Deps } from './services/context';
 import { MemoryStore } from './store/memory';
 import { systemClock, type Clock } from './lib/time';
+
+async function mailerFrom(config: AppConfig): Promise<Mailer> {
+  if (!config.smtpUrl) return new DisabledMailer();
+  const { SmtpMailer } = await import('./mail/smtp');
+  return new SmtpMailer(config.smtpUrl, config.mailFrom);
+}
 
 function llmFrom(config: AppConfig): LlmClient | null {
   return config.geminiApiKey ? new GeminiClient(config.geminiApiKey, config.geminiModel) : null;
@@ -17,7 +24,12 @@ function llmFrom(config: AppConfig): LlmClient | null {
 export function buildMemoryDeps(
   config: AppConfig,
   opts: { persist?: boolean; blobRoot?: string; clock?: Clock; llm?: LlmClient | null } = {},
-): Deps & { store: MemoryStore; blob: LocalBlobStore; push: RecordingPushSender } {
+): Deps & {
+  store: MemoryStore;
+  blob: LocalBlobStore;
+  push: RecordingPushSender;
+  mail: RecordingMailer;
+} {
   const store = new MemoryStore(opts.persist ? path.join(config.dataDir, 'db.json') : undefined);
   const clock = opts.clock ?? systemClock;
   const blobRoot = opts.blobRoot ?? path.join(config.dataDir, 'blobs');
@@ -27,6 +39,7 @@ export function buildMemoryDeps(
     auth: new MemoryAuthProvider(store, config.localSecret, () => clock().getTime()),
     blob: new LocalBlobStore(blobRoot, config.localSecret, () => clock().getTime()),
     push: new RecordingPushSender(),
+    mail: new RecordingMailer(),
     llm: opts.llm !== undefined ? opts.llm : llmFrom(config),
     clock,
   };
@@ -53,6 +66,7 @@ export async function buildFirebaseDeps(config: AppConfig): Promise<Deps> {
     auth: new FirebaseAuthProvider(getAuth(), config.firebaseWebApiKey),
     blob: new FirebaseBlobStore(getStorage().bucket()),
     push: new FcmPushSender(getMessaging()),
+    mail: await mailerFrom(config),
     llm: llmFrom(config),
     clock: systemClock,
   };

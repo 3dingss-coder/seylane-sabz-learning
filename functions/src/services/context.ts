@@ -1,3 +1,4 @@
+import type { Mailer } from '../mail/types';
 import type { AppConfig } from '../config';
 import type { AuthProvider } from '../auth/types';
 import type { BlobStore } from '../blob/types';
@@ -16,6 +17,7 @@ export interface Deps {
   auth: AuthProvider;
   blob: BlobStore;
   push: PushSender;
+  mail: Mailer;
   llm: LlmClient | null;
   clock: Clock;
 }

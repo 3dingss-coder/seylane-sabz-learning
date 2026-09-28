@@ -39,7 +39,21 @@ describe('scheduled jobs', () => {
     const sweep = await runDeadlineSweep(ctx.deps);
     expect(sweep.passed).toBeGreaterThan(0); // ATL deadline (2 days) passed for demo marketers
     expect(await runDailyReminders(ctx.deps)).toBeDefined();
-    expect(await runWeeklyDigest(ctx.deps, true)).toBeDefined();
+    // §26 #9: the Tehran manager has an email → gets the digest by email too.
+    const [mgr] = await ctx.deps.store.query<{ phone: string }>({
+      collection: 'users',
+      where: [['phone', '==', '09120000003']],
+    });
+    await ctx.deps.store.update(`users/${mgr?.id ?? ''}`, { email: 'manager@example.com' });
+    const digest = await runWeeklyDigest(ctx.deps, true);
+    expect(digest.sent).toBeGreaterThan(0);
+    const mail = ctx.deps.mail.sent.find((m) => m.to === 'manager@example.com');
+    expect(mail?.subject).toContain('گزارش هفتگی');
+    expect(mail?.text).toContain('سارا احمدی'); // lagging member listed by name
+    // Throttled: a second run in the same week sends nothing new.
+    const before = ctx.deps.mail.sent.length;
+    await runWeeklyDigest(ctx.deps, true);
+    expect(ctx.deps.mail.sent.length).toBe(before);
     expect(await runMentorDaily(ctx.deps)).toBeGreaterThanOrEqual(0);
     expect(await flushDeferredPush(ctx.deps)).toBeGreaterThanOrEqual(0);
   });

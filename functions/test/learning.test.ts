@@ -20,6 +20,7 @@ beforeEach(async () => {
 });
 
 const hb = (sectionId: string, body: object, key?: string) => {
+  ctx.advance(60_000); // one heartbeat interval of real time
   ctx.limiter.reset();
   const t = ctx.api(m.token).post(`/v1/me/sections/${sectionId}/progress`, body);
   return key ? t.set('Idempotency-Key', key) : t;
@@ -52,6 +53,51 @@ describe('player & tracking (PROMPT 009)', () => {
     expect(r.body.data.completed).toBe(false);
     const big = await hb(fx.sections[0]?.id ?? '', { positionSec: 118, playedDeltaSec: 500 });
     expect(big.status).toBe(400);
+  });
+
+  it('wall-clock budget: a crafted burst cannot consume faster than real time', async () => {
+    const s = fx.sections[0]?.id ?? '';
+    // 20 × 60s claimed within the same instant (no real time passes).
+    for (let i = 0; i < 20; i++) {
+      ctx.limiter.reset();
+      await ctx
+        .api(m.token)
+        .post(`/v1/me/sections/${s}/progress`, { positionSec: 60, playedDeltaSec: 60 })
+        .set('Idempotency-Key', `burst-${i}`);
+    }
+    let p = await ctx.api(m.token).get(`/v1/me/sections/${s}/progress`);
+    expect(p.body.data.completed).toBe(false);
+    expect(p.body.data.percent).toBeLessThanOrEqual(59); // ≤ 70s initial credit of 120s
+    // Real time passes → honest heartbeats are credited again (up to 1.5× speed).
+    ctx.advance(60_000);
+    ctx.limiter.reset();
+    await ctx
+      .api(m.token)
+      .post(`/v1/me/sections/${s}/progress`, { positionSec: 110, playedDeltaSec: 60 })
+      .set('Idempotency-Key', 'after-wait');
+    p = await ctx.api(m.token).get(`/v1/me/sections/${s}/progress`);
+    expect(p.body.data.completed).toBe(true);
+  });
+
+  it('wall-clock budget is per user: two devices/sections share it', async () => {
+    const other = await buildFixture(ctx, { sections: 1, durationSec: 120 });
+    const a = fx.sections[0]?.id ?? '';
+    const b = other.sections[0]?.id ?? '';
+    ctx.advance(60_000);
+    for (const [sid, k] of [
+      [a, 'dev1'],
+      [b, 'dev2'],
+    ] as const) {
+      ctx.limiter.reset();
+      await ctx
+        .api(m.token)
+        .post(`/v1/me/sections/${sid}/progress`, { positionSec: 60, playedDeltaSec: 60 })
+        .set('Idempotency-Key', k);
+    }
+    const pa = (await ctx.api(m.token).get(`/v1/me/sections/${a}/progress`)).body.data.percent;
+    const pb = (await ctx.api(m.token).get(`/v1/me/sections/${b}/progress`)).body.data.percent;
+    // 70s initial credit + 60s × 1.5 accrued → at most 160s of the 240s claimed.
+    expect(((pa + pb) / 100) * 120).toBeLessThanOrEqual(160);
   });
 
   it('completion at ≥85% of real playback; resume position returned', async () => {

@@ -14,6 +14,8 @@ import type { NotificationTemplate } from '@/lib/types';
 import { useTeams, useUsers } from './adminQueries';
 
 const KEY_LABEL: Record<string, string> = {
+  welcome: 'خوش‌آمد ثبت‌نام',
+  quiz_passed: 'قبولی در آزمون',
   new_assignment: 'آموزش جدید',
   reminder: 'یادآوری عدم فعالیت',
   deadline_warning: 'هشدار مهلت',

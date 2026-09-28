@@ -1,3 +1,4 @@
+import { notifyTemplate } from '../services/notify';
 import { Router } from 'express';
 import { z } from 'zod';
 import { authenticate, h, me } from '../http/auth';
@@ -18,6 +19,8 @@ export function authRouter(d: Deps, limiter: RateLimiter): Router {
     h(async (req) => {
       const input = parse(users.registerSchema, req.body);
       const user = await users.register(d, input);
+      // F1: welcome message (in-app) for self sign-ups.
+      await notifyTemplate(d, [user.id], 'welcome', { name: user.name }, { actionRef: '/' });
       const session = await users.login(d, {
         identifier: input.identifier,
         password: input.password,

@@ -195,6 +195,37 @@ export const heartbeatSchema = z.object({
 
 export const MAX_DELTA = 70;
 export const OVERPLAY_FACTOR = 1.2;
+/** Fastest speed the player offers (1×, 1.25×, 1.5×). */
+export const MAX_PLAYBACK_RATE = 1.5;
+/** Largest burst of credit (e.g. an offline queue replayed after reconnecting). */
+export const BUDGET_CAP_SEC = 1800;
+
+export interface PlaybackBudget {
+  bankSec: number;
+  updatedAtMs: number;
+}
+
+/**
+ * Wall-clock plausibility (spec §21.5, F3 "two devices"): a user can't consume media faster
+ * than real time × MAX_PLAYBACK_RATE, summed over all sections and devices. Credit accrues
+ * with server time (capped) and each heartbeat spends it; excess delta is not credited, but
+ * the request is not rejected (network jitter never hurts honest clients). Pure.
+ */
+export function spendBudget(
+  prev: PlaybackBudget | null,
+  nowMs: number,
+  requestedSec: number,
+): { acceptedSec: number; next: PlaybackBudget } {
+  const elapsed = prev ? Math.max(0, (nowMs - prev.updatedAtMs) / 1000) : 0;
+  const bank = prev
+    ? Math.min(BUDGET_CAP_SEC, prev.bankSec + elapsed * MAX_PLAYBACK_RATE)
+    : MAX_DELTA;
+  const acceptedSec = Math.max(0, Math.min(requestedSec, bank));
+  return {
+    acceptedSec: Math.round(acceptedSec * 10) / 10,
+    next: { bankSec: Math.round((bank - acceptedSec) * 10) / 10, updatedAtMs: nowMs },
+  };
+}
 
 /** Anti-cheat core (D23): consumption only grows by playedDelta, capped at duration×1.2. Pure. */
 export function applyHeartbeat(
@@ -243,6 +274,7 @@ export async function recordProgress(
   sectionId: string,
   input: z.infer<typeof heartbeatSchema>,
   idempotencyKey: string | undefined,
+  opts: { skipBudget?: boolean } = {},
 ) {
   const { section, pkg, sv } = await sectionForUser(d, user, sectionId);
   if (sv.state === 'locked') throw new ApiError('FORBIDDEN', LOCKED);
@@ -253,7 +285,23 @@ export async function recordProgress(
   const result = await d.store.runTransaction(async (tx) => {
     const prev = await tx.get<SectionProgress>(path);
     if (key && prev?.recentKeys?.includes(key)) return { duplicate: true, prev, next: null };
-    const next = applyHeartbeat(prev, input, section.durationSec, policy.completionThreshold);
+    let playedDeltaSec = input.playedDeltaSec;
+    if (!opts.skipBudget) {
+      const budgetPath = `playback_budgets/${user.id}`;
+      const spent = spendBudget(
+        await tx.get<PlaybackBudget>(budgetPath),
+        d.clock().getTime(),
+        Math.min(MAX_DELTA, playedDeltaSec),
+      );
+      playedDeltaSec = spent.acceptedSec;
+      tx.set(budgetPath, spent.next as unknown as Record<string, unknown>);
+    }
+    const next = applyHeartbeat(
+      prev,
+      { ...input, playedDeltaSec },
+      section.durationSec,
+      policy.completionThreshold,
+    );
     const recentKeys = key
       ? [...(prev?.recentKeys ?? []), key].slice(-30)
       : (prev?.recentKeys ?? []);
@@ -620,6 +668,13 @@ export async function submitAttempt(
     packageCompleted = view.status === 'completed';
     nextAction = packageCompleted ? 'package_complete' : 'next_section';
     if (outcome.fresh) {
+      await notifyTemplate(
+        d,
+        [user.id],
+        'quiz_passed',
+        { title: section.title, score: Math.round(g.score) },
+        { actionRef: `/packages/${pkg.id}` },
+      );
       await track(d, 'quiz_passed', user.id, {
         quizId: a.quizId,
         score: g.score,

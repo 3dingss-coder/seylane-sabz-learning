@@ -169,9 +169,10 @@ export async function runWeeklyDigest(d: Deps, force = false) {
         ],
       }),
     );
-    const count = members.filter((m) => m.packages.some((pk) => isLagging(pk, d.clock()))).length;
+    const lagging = members.filter((m) => m.packages.some((pk) => isLagging(pk, d.clock())));
+    const count = lagging.length;
     const week = `${p.year}-${p.month}-${p.day}`;
-    sent += await notifyTemplate(
+    const n = await notifyTemplate(
       d,
       managers.map((m) => m.id),
       'weekly_digest',
@@ -183,8 +184,49 @@ export async function runWeeklyDigest(d: Deps, force = false) {
         throttleMs: 6 * DAY,
       },
     );
+    sent += n;
+    // §26 #9: the digest also goes by email (only channel that uses email).
+    if (n > 0 && d.mail.enabled) {
+      const text = weeklyDigestEmail(t.name, lagging, d.config.appUrl);
+      for (const mgr of managers.filter((m) => m.email)) {
+        try {
+          await d.mail.send({
+            to: mgr.email ?? '',
+            subject: `گزارش هفتگی ${t.name}: ${count} نفر عقب‌اند`,
+            text,
+          });
+        } catch (e) {
+          console.warn('[digest] email failed', (e as Error).message);
+        }
+      }
+    }
   }
   return { sent, skipped: false };
+}
+
+export function weeklyDigestEmail(
+  teamName: string,
+  lagging: Array<{ user: { name: string }; packages: Array<{ title: string; percent: number }> }>,
+  appUrl: string,
+): string {
+  const lines = [
+    `سلام،`,
+    ``,
+    `خلاصه هفتگی ${teamName}:`,
+    lagging.length
+      ? `${lagging.length} نفر از تیم شما در آموزش‌ها عقب هستند:`
+      : 'هیچ‌کس در تیم شما عقب نیست. عالی است!',
+    ...lagging.map(
+      (m) =>
+        `• ${m.user.name}: ${m.packages
+          .filter((pk) => pk.percent < 100)
+          .map((pk) => `${pk.title} (${pk.percent}٪)`)
+          .join('، ')}`,
+    ),
+    ``,
+    appUrl ? `برای پیگیری وارد پنل شوید: ${appUrl}/manager` : 'برای پیگیری وارد پنل مدیر شوید.',
+  ];
+  return lines.join('\n');
 }
 
 /** Package deadlines at risk — used by admin dashboard. */
