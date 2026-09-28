@@ -846,7 +846,9 @@ WCAG AA (کنتراست ≥4.5) • لمس ≥48px • فوکوس‌رینگ م�
 | order | number | ✔ | — | یکتا در بسته |
 | title | string | ✔ | — | |
 | mediaType | enum | ✔ | — | video/audio |
-| youtubeUrl / audioUrl | string | شرطی | — | video→YouTube، audio→Storage |
+| mediaSource | enum | ✔ | — | youtube/file (D28) — ویدیو: لینک یوتیوب **یا** فایل آپلودی؛ صوت: فقط file |
+| youtubeUrl / videoUrl / audioUrl | string | شرطی | — | video+youtube→youtubeUrl • video+file→videoUrl (Storage) • audio→audioUrl (Storage) |
+| mediaMime / mediaSizeBytes | string/number | شرطی (file) | — | MIME بررسی‌شده سمت‌سرور (D28) |
 | durationSec | number | ✔ | — | > 0 |
 | quizId | ref→quizzes | ✔ | — | |
 - **Constraints:** order یکتا؛ حذف فقط بایگانی
@@ -917,7 +919,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 - **کدهای خطا:** 400 VALIDATION • 401 UNAUTHENTICATED • 403 FORBIDDEN • 404 NOT_FOUND • 409 CONFLICT • 429 RATE_LIMIT • 500 INTERNAL
 - **Rate Limit:** عمومی ۶۰ req/min/کاربر • heartbeat ۲۰/min • چت منتور ۱۰/min • ثبت‌نام ۵/min/IP
 - **Pagination:** cursor-based (`?limit=` ≤۵۰ + `cursor`) | **Filtering/Sorting:** پارامترهای استاندارد (`?from&to&brand&status&sort=field:asc`)
-- **Search:** V1 (در MVP فقط جست‌وجوی ساده عنوان در پنل ادمین) | **Webhooks:** ندارد (MVP) | **Upload:** `POST /admin/media/upload` — multipart، Whitelist: audio/mpeg,wav (≤۵۰MB) + URL یوتیوب
+- **Search:** V1 (در MVP فقط جست‌وجوی ساده عنوان در پنل ادمین) | **Webhooks:** ندارد (MVP) | **Upload (D28):** `POST /admin/media/upload-url` → Signed URL آپلود Resumable مستقیم به Storage (محدودیت ۳۲MB بدنه درخواست Functions) → Trigger نهایی‌سازی: بررسی MIME واقعی (magic bytes) + حجم؛ Whitelist صوت: audio/mpeg, audio/mp4 (m4a), audio/aac, audio/wav, audio/ogg (≤۱۰۰MB) • ویدیو: video/mp4, video/quicktime, video/webm, video/x-matroska, video/3gpp, video/x-msvideo (≤۵۰۰MB) + URL یوتیوب
 - **Versioning:** مسیر `/v1`؛ تغییر شکننده = نسخه جدید
 
 ### 21.1 ماژول Auth
@@ -1076,7 +1078,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | **Input Validation** | Schema validation (Zod) روی همه ورودی‌ها • Whitelist فیلدها (ضد Mass Assignment) • Normalization شماره/متن فارسی و لاتین |
 | **Injection / XSS / CSRF** | Firestore: عدم ساخت Query از ورودی خام • XSS: React auto-escape + CSP + ممنوعیت dangerouslySetInnerHTML • CSRF: API با Bearer Token (نه Cookie) → ریسک پایین |
 | **Rate Limiting** | عمومی ۶۰ req/min/کاربر • heartbeat ۲۰/min • چت ۱۰/min • ثبت‌نام ۵/min/IP (بخش ۲۱) |
-| **File Upload Security** | Whitelist: audio/mpeg, wav (≤۵۰MB) • نام تصادفی/مسیر خصوصی • اسکن ساده • عدم اجرای فایل • Signed URL برای دسترسی |
+| **File Upload Security** | Whitelist صوت/ویدیو طبق D28 (بخش ۲۱ Upload؛ صوت ≤۱۰۰MB، ویدیو ≤۵۰۰MB؛ بررسی magic bytes سمت‌سرور) • نام تصادفی/مسیر خصوصی • اسکن ساده • عدم اجرای فایل • Signed URL برای دسترسی |
 | **Audit Logs** | همه تغییرات نقش/سیاست/محتوا/انتساب/رمز (بخش ۲۰ audit_logs) • TTL ۳۶۵ روز • خواندنی: admin+ |
 | **Privacy** | حداقل داده شخصی (نام/شماره/ایمیل) • **بدون PII در چت منتور به LLM** • متن چت: فقط superadmin با Audit • اطلاع‌رسانی شفاف «نظارت بر پیشرفت» (ریسک حقوقی: HR درگیر نیست — I7) |
 | **Data Retention** | playback_events: ۹۰ روز • audit: ۳۶۵ روز • chat منتور: ۱۸۰ روز • notification_log: ۱۸۰ روز • حساب غیرفعال: نگهداری (حذف طبق درخواست — آینده) |
@@ -1396,7 +1398,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 - **AUTHORIZATION:** admin+ | **VALIDATION:** عنوان/ترتیب/رسانه/مهلت (۱۸.۲)
 - **ERROR HANDLING:** فایل نامعتبر/بزرگ؛ لینک نامعتبر؛ 403 | **LOADING STATES:** آپلود درصددار | **EMPTY STATES:** «هنوز محصولی ندارید» + CTA
 - **EDGE CASES:** بایگانی بسته در حال مصرف • تغییر deadline • لینک خصوصی یوتیوب | **ANALYTICS:** admin_package_created/updated/published/archived, admin_media_uploaded
-- **SECURITY:** Whitelist MIME (audio/mpeg,wav ≤۵۰MB)؛ اسکن ساده؛ Audit تغییرات | **TESTS:** واحد Validation؛ API CRUD؛ E2E انتشار بسته
+- **SECURITY:** Whitelist MIME طبق D28 (صوت و همه فرمت‌های رایج ویدیو)؛ اسکن ساده؛ Audit تغییرات | **TESTS:** واحد Validation؛ API CRUD؛ E2E انتشار بسته
 - **ACCEPTANCE CRITERIA:** ادمین بدون توسعه‌دهنده بسته کامل منتشر کند | **DEFINITION OF DONE:** تست‌ها سبز + ۱ بسته نمونه واقعی | **DEPENDENCIES:** 003
 - **DO NOT:** حذف فیزیکی؛ انتشار ناقص؛ HTML خام در توضیحات (XSS)
 
@@ -1603,6 +1605,10 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | D24 | Batch heartbeat (۶۰s) + TTL ۹۰روزه | کنترل هزینه نوشتن | ثبت هر ثانیه | دقت کمتر vs هزینه | ۲۰/۲۹ |
 | D25 | هویت: سبز برند + Vazirmatn | نام برند/خوانایی فارسی | فونت/رنگ دیگر | — | ۱۶ |
 | D26 | بدون Vector DB در MVP (جست‌وجوی کلیدواژه‌ای) | حجم محتوا/هزینه صفر | Embeddings+Vector | مقیاس آینده → V1 | ۲۳.۳ |
+| D27 | کاتالوگ آموزش مستقل از نمایش اپ فروش: برندهای فورمی، آتل، آیس بابل (بابِل) و ویت آس با محصولات مربوطه از hidden-products.csv فعال می‌شوند | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) — فایل آموزشی نمونه دارند | عدم بارگذاری | لوگوی فورمی/آتل/بابل هنوز موجود نیست | ۲۰.۱ / Seed |
+| D28 | ویدیو: هم لینک یوتیوب و هم آپلود مستقیم هر فرمت رایج ویدیو از پنل ادمین؛ صوت: m4a/aac/ogg هم مجاز | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) | فقط یوتیوب (D17) | مصرف پهنای باند/حجم Storage (ریسک R4) • رهگیری فایل ویدیو با HTML5 Video (همان منطق playedDelta) | ۲۰.۲ / ۲۱ / ۲۴ / F3 / F12 |
+| D29 | تا ایجاد پروژه Firebase، توسعه و تست روی Firebase Emulator Suite انجام می‌شود؛ Seed/Upload همان اسکریپت با هدف Emulator | پروژه Firebase هنوز وجود ندارد (پیش‌نیاز ۱) | توقف توسعه | استقرار dev واقعی معلق تا Blaze | ۲۲ / ۳۲ |
+| D30 | فایل «آموزش کرم ترک پای WITH US» به محصول «کرم ترک پا کامان» (sb-300123101، برند کامان) تعلق دارد | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) | ویت آس | — | Seed محتوای نمونه |
 
 ## 37 Definition of Done
 

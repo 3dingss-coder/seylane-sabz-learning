@@ -3,9 +3,9 @@
 | PROMPT | Scope | Status | Notes |
 |---|---|---|---|
 | 001 | Foundation & Design System | ✅ Done | Monorepo, §16 tokens, self-hosted Vazirmatn, 12 base components + gallery, `GET /v1/health`, security headers, CI/CD workflows, env dev/prod |
-| 002 | Auth (F1) | ⛔ Blocked | Needs Firebase project (Auth) — prerequisite 1 |
-| 003 | DB + Rules + Seed + Storage upload | ⛔ Blocked | Needs Firebase project + Storage bucket; catalog/asset matching already done (12/12 logos, 238/238 images) |
-| 004 | Admin content + sample training packages | ⛔ Blocked | Needs 003 + training-file mapping decisions (docs/RESOURCE-MAP.md §3) |
+| 002 | Auth (F1) | ⏳ Next | Emulator-first (D29); sandbox needs a JDK for the Emulator Suite |
+| 003 | DB + Rules + Seed + Storage upload | ⏳ Pending | Emulator target (D29); catalog/asset matching done (12/12 logos, 238/238 images) + D27 reactivated brands |
+| 004 | Admin content + sample training packages | ⏳ Pending | 8/13 files resolved; پیکسل/آیس بال product + «دارت» still open (RESOURCE-MAP §3); video upload per D28 |
 | 005–015 | — | ⏳ Pending | In order per §32.2 |
 
 ## PROMPT 001 — Definition of Done
@@ -22,10 +22,14 @@
 - [x] 0 TS errors, 0 lint errors; 32 unit tests green (6 API + 26 web)
 - [ ] Playwright E2E executed locally: browser download is blocked in the build sandbox; runs in CI (`e2e` job)
 
-## Proposed decisions (awaiting approval → Decision Log §36)
+## Decisions recorded (§36)
 
-| # | Proposal | Why |
-|---|---|---|
-| P1 | Allow `audio/mp4` (`.m4a`) in the upload whitelist (§21/§24) besides `audio/mpeg`, `wav` | Client podcasts are `.m4a` |
-| P2 | Sample `.mp4` training videos: client uploads to YouTube (unlisted) OR spec allows Storage-hosted video | §20.2 requires `youtubeUrl` for video |
-| P3 | Work branch: the build agent's session is bound to branch `arena/01a0e829-seylane-sabz-learning` (instead of `dev`); PRs target `main` from it | tooling constraint |
+- D27 reactivate فورمی / آتل / آیس بابل / ویت آس in the learning catalog
+- D28 video = YouTube link or uploaded file (any common format); audio incl. m4a — §20.2/§21/§24 updated
+- D29 Emulator-first until the Firebase project exists
+- D30 «کرم ترک پای WITH US» → کامان «کرم ترک پا» (sb-300123101)
+
+## Open
+
+- Working branch is `arena/01a0e829-seylane-sabz-learning` (session-bound) instead of `dev`; PRs go to `main`.
+- Cloudflare account/domain access (deploy job is secrets-gated).

@@ -29,25 +29,25 @@ Local dev/PWA serves a mirror at `/catalog/brands/{brandId}/logo.*` and `/catalo
 
 ## 3. Sample training files (repo root) — mapping status
 
-| Training file | Type | Brand (catalog status) | Product (catalog status) | Proposed package / part | Status |
-|---|---|---|---|---|---|
-| `آموزش کامل ضدآفتاب پیکسل.mp4` | video 42.8MB | پیکسل ✅ active | ❓ 10 sunscreen products — which one? | «ضدآفتاب پیکسل» / part 2 | **needs decision** |
-| `معرفی کلی ضدآفتاب استیکی پیکسل.m4a` | audio 12.6MB | پیکسل ✅ active | ❓ «استیکی» — no stick sunscreen in active catalog | «ضدآفتاب پیکسل» / part 1 | **needs decision** |
-| `آموزش_فروش_آیس_بال.mp4` | video 42.1MB | آیس بال ✅ active | ❓ 3 products (ماچا / ژل آبرسان / ژل لیفتینگ) | «آیس بال» / part 2 | **needs decision** |
-| `معرفی کلی آیس بال.m4a` | audio 13.5MB | آیس بال ✅ active | ❓ as above | «آیس بال» / part 1 | **needs decision** |
-| `آموزش کامل محصول فورمی.mp4` | video 41.0MB | فورمی ⛔ brand removed | 310350101 «کیت درمانی فورمی» ⛔ hidden | «فورمی» / part 2 | **needs decision** |
-| `معرفی کلی محصول فورمی.m4a` | audio 13.5MB | فورمی ⛔ | as above | «فورمی» / part 1 | **needs decision** |
-| `کتابچه_جامع_فروش_BUBBLE.mp4` | video 42.9MB | آیس بابل / بابِل ⛔ brand removed | 370276101 «فوم شستشوی صورت» ⛔ hidden | «بابل» / part 2 | **needs decision** |
-| `معرفی کلی بابل.m4a` | audio 10.7MB | آیس بابل / بابِل ⛔ | as above | «بابل» / part 1 | **needs decision** |
-| `آموزش_ویدیویی_ATL.mp4` | video 45.1MB | آتل ⛔ brand removed | 220306101 «کرم گرم‌کننده و ضد درد کتف و گردن» ⛔ hidden | «آتل» / part 2 | **needs decision** |
-| `ای_تی_ال_پادزهر_دردهای_دیجیتال.m4a` | audio 14.6MB | آتل ⛔ | as above | «آتل» / part 1 | **needs decision** |
-| `آموزش_کرم_ترک_پای__WITH_US_.mp4` | video 42.6MB | «WITH US» ≈ ویت آس ⛔ removed — or کامان ✅ (300123101 کرم ترک پا)? | ❓ | «کرم ترک پا» / part 2 | **needs decision** |
-| `معرفی کلی ویت آس.m4a` | audio 13.9MB | ویت آس ⛔ brand removed (logo `vitas.webp` exists) | 340122101 «کرم ترک پا ۷۵ میل» ⛔ hidden | «ویت آس» / part 1 | **needs decision** |
-| `معرفی کلی‌ دارت.m4a` | audio 11.2MB | ❌ «دارت» not found in brands, products, hidden list or logos | ❌ | — | **needs decision** |
+Decisions applied: **D27** (reactivate فورمی / آتل / آیس بابل / ویت آس in the learning catalog), **D28** (video = YouTube link **or** uploaded file in any common format; m4a allowed), **D30** (WITH US → کامان).
 
-Media notes (affect PROMPT 004/009, spec-level constraints):
-- Spec §20.2: `video → youtubeUrl`, `audio → audioUrl (Storage)`. The 6 `.mp4` files are local files, not YouTube links. Options: (a) client uploads them to YouTube (unlisted) and gives links; (b) store in Storage as audio-only/video file — requires a spec change (Decision Log).
-- Spec §21/§24 upload whitelist is `audio/mpeg, wav ≤ 50MB`; the podcasts are `.m4a` (audio/mp4). Needs whitelist extension (recorded as a proposed decision) or transcoding to mp3.
+| Training file | Type | Brand | Product | Package / Part | Status |
+|---|---|---|---|---|---|
+| `آموزش کامل محصول فورمی.mp4` | video file (D28) | فورمی (D27) | sb-310350101 «کیت درمانی فورمی» | «فورمی» / part 2 | ✅ resolved |
+| `معرفی کلی محصول فورمی.m4a` | audio | فورمی (D27) | sb-310350101 | «فورمی» / part 1 | ✅ resolved |
+| `کتابچه_جامع_فروش_BUBBLE.mp4` | video file | آیس بابل (D27) | sb-370276101 «فوم شستشوی صورت آیس بابل» | «بابل» / part 2 | ✅ resolved |
+| `معرفی کلی بابل.m4a` | audio | آیس بابل (D27) | sb-370276101 | «بابل» / part 1 | ✅ resolved |
+| `آموزش_ویدیویی_ATL.mp4` | video file | آتل (D27) | sb-220306101 «کرم گرم کننده و ضد درد کتف و گردن آتل» | «آتل» / part 2 | ✅ resolved |
+| `ای_تی_ال_پادزهر_دردهای_دیجیتال.m4a` | audio | آتل (D27) | sb-220306101 | «آتل» / part 1 | ✅ resolved |
+| `معرفی کلی ویت آس.m4a` | audio | ویت آس (D27, logo `vitas.webp`) | sb-340122101 «کرم ترک پا 75 میل ویت آس» | «ویت آس» / part 1 | ✅ resolved |
+| `آموزش_کرم_ترک_پای__WITH_US_.mp4` | video file | کامان ✅ | sb-300123101 «کرم ترک پا کامان» (D30) | «کرم ترک پا کامان» / part 1 | ✅ resolved |
+| `آموزش کامل ضدآفتاب پیکسل.mp4` | video file | پیکسل ✅ | ❓ 10 sunscreen SKUs — which product? | «ضدآفتاب پیکسل» / part 2 | ⏳ needs product |
+| `معرفی کلی ضدآفتاب استیکی پیکسل.m4a` | audio | پیکسل ✅ | ❓ «استیکی» — no stick SKU in catalog | «ضدآفتاب پیکسل» / part 1 | ⏳ needs product |
+| `آموزش_فروش_آیس_بال.mp4` | video file | آیس بال ✅ | ❓ 3 SKUs (ماچا / ژل آبرسان / ژل لیفتینگ) | «آیس بال» / part 2 | ⏳ needs product |
+| `معرفی کلی آیس بال.m4a` | audio | آیس بال ✅ | ❓ as above | «آیس بال» / part 1 | ⏳ needs product |
+| `معرفی کلی‌ دارت.m4a` | audio | ❌ «دارت» not in brands / products / hidden list / logos | ❌ | — | ⏳ needs brand + product |
+
+Missing logos for reactivated brands (D27): **فورمی, آتل, آیس بابل**. The client will provide them. Until then, the UI shows the brand name as text (no placeholder image).
 
 ## 4. Helper UI kit — «کامپوننت های کمکی برای تکمیل UI UX اپلیکیشن»
 
