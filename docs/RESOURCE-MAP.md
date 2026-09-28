@@ -64,23 +64,23 @@ The kit comes from a **different product** (Silaneh Sabz Plus — B2B ordering a
 | پنل مدیر/common/StatusBadge.tsx | M5 section status, A2 publish status, A3 user status | ✅ ported → `components/ui/StatusBadge.tsx` | order/business statuses → locked/open/in_progress/completed, draft/published/archived, active/inactive; icon+text |
 | اپ مشتری/BrandsGrid.tsx | Brand tiles (M4 filter, A2 tree, gallery) | ✅ ported → `components/brand/BrandLogo.tsx` | material-symbols removed; real logo URL; text fallback (no placeholder image) |
 | اپ مشتری/لوگو و آیکون/* | App logo, PWA icons, header | ✅ used → `AppLogo`, PWA manifest icons | mirrored by `sync-assets` (not duplicated in git) |
-| اپ بازاریاب/auth/LoginView.tsx, SignupView.tsx | M1 (Auth) | ⏳ PROMPT 002 | will drop demo creds & "pending approval" (spec D18: open signup) |
-| پنل مدیر/صفحات/AuthPage.tsx | M1 desktop card | ⏳ PROMPT 002 | |
-| اپ بازاریاب/common/Header.tsx, پنل مدیر/common/Header.tsx | Marketer header (avatar), panel header | ⏳ PROMPT 008 / 004 | |
-| اپ مشتری/ProductCard.tsx, ProductRowCard.tsx, ProductModal.tsx | M4 package card (brand/product image), product page | ⏳ PROMPT 008 | price/cart removed |
-| اپ بازاریاب/catalog/CatalogView.tsx | M4 package list + tabs | ⏳ PROMPT 008 | |
-| اپ بازاریاب/notifications/NotificationSheet.tsx, اپ مشتری/NotificationsModal.tsx | M9 messages/notification center | ⏳ PROMPT 011/012 | |
-| اپ بازاریاب/profile/ProfileView.tsx | M11 profile | ⏳ PROMPT 008 | |
-| اپ بازاریاب/dashboard/StatCards.tsx | M8 cards (points/badges) | ⏳ PROMPT 012 | |
-| پنل مدیر/صفحات/DashboardPage.tsx | A1 / G1 | ⏳ PROMPT 004 / 013 | |
-| پنل مدیر/صفحات/BrandsPage.tsx, ProductsPage.tsx, modals/BrandModal.tsx, ProductModal.tsx | A2 content management | ⏳ PROMPT 004 | |
-| پنل مدیر/صفحات/MarketersPage.tsx, MarketerDetailPage.tsx, modals/MarketerModal.tsx | G3 marketer profile, A3 users | ⏳ PROMPT 007 / 013 | |
-| پنل مدیر/صفحات/AdminUsersPage.tsx, modals/ApproveAdminModal.tsx | A3 users & roles | ⏳ PROMPT 007 | |
-| پنل مدیر/صفحات/NotificationsPage.tsx | A5 notification center | ⏳ PROMPT 011 | |
-| پنل مدیر/صفحات/ReportsPage.tsx | G2 reports | ⏳ PROMPT 013 | |
-| پنل مدیر/صفحات/SettingsPage.tsx | A6 policies | ⏳ PROMPT 007 | |
-| پنل مدیر/common/RoleGuard.tsx, Breadcrumbs.tsx | RBAC route guard, admin breadcrumbs | ⏳ PROMPT 002 / 004 | |
-| اپ مشتری/PersianCalendarPicker.tsx | A2 deadline picker (Jalali display, UTC storage §16.9) | ⏳ PROMPT 004 | |
-| اپ مشتری/OfflineOverlay.tsx | M3/M6 offline banner | ⏳ PROMPT 009 | |
-| آیکون و اسپلش اندروید/اپ بازاریاب/* | Capacitor Android icons | ⏳ PROMPT 015 | splash images are the default Capacitor splash (not brand) — new splash from logo needed |
+| اپ بازاریاب/auth/LoginView.tsx, SignupView.tsx | M1 (Auth) | ✅ adapted → `pages/auth/AuthPage.tsx` | login/register/forgot in one page; phone-or-email; demo creds and "pending approval" removed (D18 open signup); Persian digits normalized |
+| پنل مدیر/صفحات/AuthPage.tsx | M1 desktop card | ✅ merged into `AuthPage.tsx` | centered card layout on desktop; single login for all roles (role-based redirect) |
+| اپ بازاریاب/common/Header.tsx, پنل مدیر/common/Header.tsx | Marketer header (avatar), panel header | ✅ adapted → `layouts/MarketerLayout.tsx`, `layouts/PanelLayout.tsx`, `components/common/PageHeader.tsx` | sales actions removed; AppLogo + unread badge; back button (rtl-mirror) |
+| اپ مشتری/ProductCard.tsx, ProductRowCard.tsx, ProductModal.tsx | M4 package card (brand/product image), product page | ✅ adapted → `components/learning/PackageCard.tsx`, `components/common/ProductImage.tsx` | price/cart removed; real product image → brand logo fallback (D34); progress bar + CountdownChip |
+| اپ بازاریاب/catalog/CatalogView.tsx | M4 package list + tabs | ✅ adapted → `pages/m/LearnPage.tsx` | tabs در حال انجام/جدید/تکمیل‌شده + brand filter; Loading/Empty/Error |
+| اپ بازاریاب/notifications/NotificationSheet.tsx, اپ مشتری/NotificationsModal.tsx | M9 messages/notification center | ✅ adapted → `pages/m/MessagesPage.tsx` | full page (not sheet) with notifications + manager messages tabs; read/read-all; actionRef deep links |
+| اپ بازاریاب/profile/ProfileView.tsx | M11 profile | ✅ adapted → `pages/m/ProfilePage.tsx` | sales stats removed; name edit, password change, logout |
+| اپ بازاریاب/dashboard/StatCards.tsx | M8 cards (points/badges) | ✅ adapted → `pages/m/CardsPage.tsx` | points ledger + earned/locked badges instead of sales stats |
+| پنل مدیر/صفحات/DashboardPage.tsx | A1 / G1 | ✅ adapted → `pages/admin/AdminDashboard.tsx`, `pages/manager/ManagerDashboard.tsx` | KpiCard grid; sales charts replaced by completion/laggard lists |
+| پنل مدیر/صفحات/BrandsPage.tsx, ProductsPage.tsx, modals/BrandModal.tsx, ProductModal.tsx | A2 content management | ✅ adapted → `pages/admin/ContentPage.tsx`, `BrandDetailPage.tsx`, `PackageFormDialog.tsx`, `components/admin/Uploader.tsx` | logo/image upload to Storage; archive; unassigned tab (D33); packages/sections per brand/product |
+| پنل مدیر/صفحات/MarketersPage.tsx, MarketerDetailPage.tsx, modals/MarketerModal.tsx | G3 marketer profile, A3 users | ✅ adapted → `pages/manager/ManagerMember.tsx`, `components/reports/MemberTimeline.tsx`, `pages/admin/UsersPage.tsx` | sales KPIs → learning timeline, attempts, messages/notes |
+| پنل مدیر/صفحات/AdminUsersPage.tsx, modals/ApproveAdminModal.tsx | A3 users & roles | ✅ adapted → `pages/admin/UsersPage.tsx`, `TeamsPage.tsx`, `components/admin/DataTable.tsx` | approval flow dropped (D18); role/team/status edit + password reset |
+| پنل مدیر/صفحات/NotificationsPage.tsx | A5 notification center | ✅ adapted → `pages/admin/NotificationsPage.tsx` | templates editor + manual send (rate-limited) |
+| پنل مدیر/صفحات/ReportsPage.tsx | G2 reports | ✅ adapted → `components/reports/CompletionReport.tsx` (manager + admin), `pages/admin/ReportsPage.tsx` | brand/product/user/date filters, CSV export, retakes, mentor aggregates |
+| پنل مدیر/صفحات/SettingsPage.tsx | A6 policies | ✅ adapted → `pages/admin/PoliciesPage.tsx` | completion threshold, attempts, warning hours, points (audited) |
+| پنل مدیر/common/RoleGuard.tsx, Breadcrumbs.tsx | RBAC route guard, admin breadcrumbs | ✅ RoleGuard → `layouts/RequireAuth.tsx`; Breadcrumbs → `PageHeader` back link | server-side RBAC remains authoritative |
+| اپ مشتری/PersianCalendarPicker.tsx | A2 deadline picker (Jalali display, UTC storage §16.9) | ⚠️ not ported → native `datetime-local` + Jalali preview (`lib/dates.ts`, `faDate`) | picker depends on the sales app's styling/state; reported, kept in place |
+| اپ مشتری/OfflineOverlay.tsx | M3/M6 offline banner | ✅ adapted → offline banner in `layouts/MarketerLayout.tsx` + `lib/offline-queue.ts` | non-blocking banner (heartbeats are queued, D7 no offline playback) |
+| آیکون و اسپلش اندروید/اپ بازاریاب/* | Capacitor Android icons | ⛔ not used (verified: default Capacitor placeholder icon + splash, package `com.silaneh.sabzplus.marketer`) | real icons/splash generated from the holding icon (`public/icons/icon-512.png`) into `apps/web/android/app/src/main/res` (all densities, adaptive + round, background #0F5338) |
 | Sales-only (cart, orders, payment, offers, customers, visitor): CartSheet, CartDrawer, NewOrderFlow, Orders*, Payment*, Offer*, WeeklyOffer, RecommendedPackage, PackageModal, Customer*, AddCustomerModal, VisitorView, CustomerSimulatorModal, ApiConfigModal, PendingLockScreen, PendingApprovalModal, SearchBar/SearchOverlay, CategoryGrid, PopularProducts, ProductSection, ProductsView, AddOrderModal, OrderDetailModal, CustomersPage, CustomerDetailPage, OrdersPage, OffersPage, category images | — | ⛔ out of MVP scope | kept in place, not ported (search = V1 per §38) |

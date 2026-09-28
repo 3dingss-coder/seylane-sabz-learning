@@ -926,8 +926,8 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | METHOD | ENDPOINT | ROLE | REQUEST / RESPONSE |
 |---|---|---|---|
 | POST | /v1/auth/register | Public | {name, phone|email, password} → {user} |
-| POST | /v1/auth/login | Public | Firebase Auth → {token} |
-| POST | /v1/auth/refresh | Auth | → {token} |
+| POST | /v1/auth/login | Public | {identifier (phone\|email), password} → {user, idToken, refreshToken, expiresIn} (D35) |
+| POST | /v1/auth/refresh | Public | {refreshToken} → {idToken, refreshToken, expiresIn} |
 | POST | /v1/auth/logout | Auth | → 204 |
 | POST | /v1/auth/password-reset | Public | {email|phone} → 202 |
 
@@ -976,6 +976,16 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | GET/PUT | /admin/policies | سیاست‌ها (Audit) |
 | GET | /admin/audit-logs | ?actor&action&from |
 
+### 21.4.1 فهرست Endpointهای پیاده‌شده (همگام با کد — PROMPT 015)
+> منبع: `functions/src/routes/*.ts`. همه زیر `/v1`؛ نقش با Middleware سمت‌سرور بررسی می‌شود.
+
+- **Auth:** `POST /auth/register` • `POST /auth/login` • `POST /auth/refresh` • `POST /auth/logout` • `POST /auth/password-reset`
+- **Me:** `GET/PATCH /me` • `POST /me/password` • `POST /me/onboarding` • `POST /me/events` (رویدادهای کلاینت، Whitelist) • `GET /me/home` • `GET /me/packages` • `GET /me/packages/:id` • `GET /me/sections/:id` • `GET /me/sections/:id/media` (URL امضاشده کوتاه‌عمر) • `GET/POST /me/sections/:id/progress` • `GET /me/quizzes/:id` • `POST /me/quizzes/:id/attempts` • `POST /me/attempts/:id/submit` • `POST /me/quizzes/:id/retake-requests` • `GET /me/points` • `GET /me/badges` • `GET /me/notifications` • `POST /me/notifications/read-all` • `POST /me/notifications/:id/read` • `GET /me/messages` • `POST /me/messages/:id/read` • `POST/DELETE /me/devices` ({token, platform: android\|web}) • `GET /me/mentor/nudges` • `GET /me/mentor/history` • `POST /me/mentor/chat` • `POST /me/mentor/feedback`
+- **Manager (Scope تیم):** `GET /manager/dashboard` • `GET /manager/reports/completion` (ردیف‌ها شامل brandId/productId؛ فیلتر برند/محصول سمت کلاینت) • `GET /manager/users/:id/progress` • `POST /manager/users/:id/messages` • `POST /manager/users/:id/notes` • `GET /manager/retake-requests` • `POST /manager/retake-requests/:id/approve|reject` (درخواست‌های Escalate‌شده — پس از ۲ تأیید — برای مدیر مسدود است: 403)
+- **Admin:** `GET /admin/dashboard` • `GET /admin/content/tree` • `GET/POST /admin/brands` • `PATCH /admin/brands/:id` • `GET/POST /admin/products` • `PATCH /admin/products/:id` • `POST /admin/media/upload-url` • `POST /admin/media/:id/finalize` • `GET/POST /admin/packages` • `GET/PATCH /admin/packages/:id` • `POST /admin/packages/:id/publish|unpublish|archive` • `POST /admin/packages/:id/sections` • `PUT /admin/packages/:id/sections/order` • `PATCH /admin/packages/:id/sections/:sid` • `GET/PATCH /admin/quizzes/:id` • `POST /admin/quizzes/:id/questions` • `PUT /admin/quizzes/:id/questions/order` • `PUT/DELETE /admin/quizzes/:id/questions/:qid` • `GET/POST /admin/paths` • `PUT/DELETE /admin/paths/:id` • `POST /admin/paths/:id/apply-deadlines` • `GET/POST /admin/assignments` • `DELETE /admin/assignments/:id` • `GET /admin/users` • `GET/PATCH /admin/users/:id` • `POST /admin/users/:id/reset-password` • `GET/POST /admin/teams` • `PATCH /admin/teams/:id` • `GET /admin/reports/completion|kpis|mentor` • `GET /admin/retake-requests` • `POST /admin/retake-requests/:id/approve|reject` • `GET /admin/mentor/transcripts/:userId` • `GET /admin/notification-templates` • `PUT /admin/notification-templates/:key` • `POST /admin/notifications/send` • `GET/PUT /admin/policies` • `GET /admin/audit-logs` • `POST /admin/jobs/:name`
+- **Files:** `GET /files/public/{brands|products|branding}/…` (تصاویر عمومی کاتالوگ در حالت محلی) • `PUT /uploads/:token` و `GET /files/signed/:token` (فقط Backend محلی؛ در Firebase مستقیم Storage Signed URL)
+- **تفاوت با جدول‌های بالا:** آپلود رسانه به‌صورت Signed URL + finalize است (نه multipart)؛ `CRUD /admin/sections` زیر `/admin/packages/:id/sections` قرار دارد.
+
 ### 21.5 سناریوهای حساس (Spec دقیق)
 
 **POST /me/sections/:id/progress (heartbeat)**
@@ -1018,6 +1028,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 ```
 - **Deployment:** GitHub Actions — PR: lint + test + build → main: deploy Functions + Hosting (dev/prod پروژه‌های جدا) | **Secrets:** GitHub Secrets/Secret Manager (هرگز در ریپو)
 - **Monitoring:** Sentry (Free) + Google Cloud Logging + Firebase Crashlytics (Wrapper) | **Uptime:** چک ساده از Cloudflare
+- **پیاده‌سازی (PROMPT 015):** خطاهای کلاینت به‌صورت رویداد `client_error` در `analytics_events` (قابل مشاهده در Cloud Logging) ثبت می‌شوند؛ Sentry فقط در صورت تنظیم `VITE_SENTRY_DSN` به‌صورت Lazy بارگذاری می‌شود؛ Crashlytics تا ایجاد پروژه Firebase و `google-services.json` در انتظار است. Android: `apps/web/android` (Capacitor 7) + Workflow `android.yml` (APK دیباگ در هر PR؛ APK/AAB امضاشده با Secretها)
 - **مقیاس‌پذیری (۵۰۰+ کاربر):** Firestore کفایت می‌کند؛ کنترل هزینه با Batch heartbeat + TTL رویدادها | **SLO:** LCP <۳s (3G)، خطای API <۱٪، در دسترسی ≥۹۹٪
 
 ### 22.4 محدودیت‌های محیط ایران
@@ -1117,6 +1128,8 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | reengaged_after_nudge | بازگشت پس از هشدار | nudgeType | **KPI Nudge** |
 | mentor_chat_opened / mentor_message_sent | منتور | packageId | AI Engagement |
 | mentor_feedback | 👍/👎 | feedback | **KPI AI Quality** |
+| playback_error / youtube_blocked_reported | خطای پخش / گزارش دسترسی یوتیوب | source, videoId | کیفیت پخش (ایران) |
+| client_error | خطای JS کنترل‌نشده | message, source | پایش خطا (جایگزین رایگان) |
 
 **مدیر**
 | Event | Trigger | Properties | Purpose |
@@ -1616,6 +1629,9 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | D35 | لایه API تنها دروازه احراز هویت است (ورود/Refresh از طریق Identity Toolkit REST سمت‌سرور)؛ شماره موبایل به ایمیل داخلی `<phone>@phone.seylane-sabz.app` نگاشت می‌شود؛ بازیابی رمز کاربر موبایلی فقط توسط ادمین | Firebase Auth فقط Email/Password (بدون SMS — خارج MVP) | Client SDK مستقیم | کلاینت بدون Firebase SDK (باندل سبک‌تر) | ۲۱.۱ / ۲۴ |
 | D36 | Access Token فقط در حافظه؛ Refresh Token در Preferences اپ اندروید (Capacitor) و در PWA در localStorage (ریسک پذیرفته‌شده برای جلوگیری از ورود مجدد هر بار) | کاربر کم‌سواد دیجیتال + PWA | sessionStorage (خروج با بستن اپ) | ریسک XSS → CSP سخت + ممنوعیت HTML خام | ۲۴ |
 | D37 | داده دسترسی از طریق Repository/DocStore: پیاده‌سازی Firestore (prod/dev) + پیاده‌سازی درون‌حافظه‌ای برای تست و اجرای محلی بدون Emulator | عدم دسترسی به Emulator/Java در محیط ساخت؛ تست‌پذیری | فقط Emulator | دو پیاده‌سازی باید هم‌رفتار بمانند → همان تست‌ها در CI روی Firestore Emulator | ۲۲ / ۲۸ |
+
+| D38 | شناسه اپ اندروید `ir.seylanesabz.learning` (قابل تغییر با `CAP_APP_ID` تا پیش از اولین انتشار در کافه‌بازار)؛ Push بومی فقط وقتی `google-services.json` موجود است فعال می‌شود (`VITE_PUSH_ENABLED`) تا اپ بدون پیکربندی Firebase کرش نکند؛ سرویس‌ورکر PWA در اپ اندروید ثبت نمی‌شود | نبود پروژه Firebase؛ جلوگیری از کرش FCM | فعال‌سازی همیشگی Push | تأیید appId پیش از انتشار لازم است | ۲۲.۱ / F8 |
+| D39 | Refresh Token در Backend محلی (حافظه) با Rotation و پنجره مهلت ۳۰ ثانیه‌ای؛ در Firebase رفتار استاندارد Secure Token | جلوگیری از خروج ناخواسته هنگام قطع درخواست Refresh با Reload صفحه | Rotation سخت | پنجره کوتاه استفاده مجدد | ۲۴ |
 
 ## 37 Definition of Done
 

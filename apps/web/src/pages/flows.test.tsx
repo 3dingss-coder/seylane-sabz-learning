@@ -88,33 +88,42 @@ describe('M1 login → M3 home', () => {
 
 describe('M7/M8 quiz', () => {
   it('starts, answers one question per page, submits answers (no key on client) and shows the result', async () => {
+    let submitted = false;
     const { calls } = mockApi({
       ...loggedIn(),
       'GET /v1/me/sections/seed-pkg-formi-s1': () => ({ data: sectionDetail }),
-      'GET /v1/me/quizzes/seed-pkg-formi-s1-quiz': () => ({ data: quiz }),
+      // After submit the server reports one more used attempt; the result must stay on screen.
+      'GET /v1/me/quizzes/seed-pkg-formi-s1-quiz': () => ({
+        data: submitted
+          ? { ...quiz, attemptInfo: { ...quiz.attemptInfo, used: quiz.attemptInfo.used + 1 } }
+          : quiz,
+      }),
       'POST /v1/me/quizzes/seed-pkg-formi-s1-quiz/attempts': () => ({
         status: 201,
         data: { attemptId: 'at1', attemptNumber: 1, resumed: false },
       }),
-      'POST /v1/me/attempts/at1/submit': () => ({
-        data: {
-          attemptId: 'at1',
-          attemptNumber: 1,
-          score: 100,
-          passed: true,
-          passScore: 70,
-          correctCount: 2,
-          total: 2,
-          remainingAttempts: 2,
-          nextAction: 'next_section',
-          packageCompleted: false,
-          pointsEarned: 20,
-          review: [
-            { questionId: 'q1', correct: true, explanation: '' },
-            { questionId: 'q2', correct: true, explanation: 'فورمی برند این کیت است.' },
-          ],
-        },
-      }),
+      'POST /v1/me/attempts/at1/submit': () => {
+        submitted = true;
+        return {
+          data: {
+            attemptId: 'at1',
+            attemptNumber: 1,
+            score: 100,
+            passed: true,
+            passScore: 70,
+            correctCount: 2,
+            total: 2,
+            remainingAttempts: 2,
+            nextAction: 'next_section',
+            packageCompleted: false,
+            pointsEarned: 20,
+            review: [
+              { questionId: 'q1', correct: true, explanation: '' },
+              { questionId: 'q2', correct: true, explanation: 'فورمی برند این کیت است.' },
+            ],
+          },
+        };
+      },
     });
     renderApp('/quiz/seed-pkg-formi-s1');
     fireEvent.click(await screen.findByTestId('quiz-start'));
@@ -128,6 +137,13 @@ describe('M7/M8 quiz', () => {
     expect(await screen.findByTestId('quiz-result')).toHaveTextContent('قبول شدی');
     expect(screen.getByText('+۲۰ امتیاز')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'قسمت بعد' })).toBeInTheDocument();
+    // Wait for the invalidation refetch, then make sure the result is still shown.
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.key === 'GET /v1/me/quizzes/seed-pkg-formi-s1-quiz').length,
+      ).toBeGreaterThan(1),
+    );
+    expect(screen.getByTestId('quiz-result')).toBeInTheDocument();
     const submit = calls.find((c) => c.key === 'POST /v1/me/attempts/at1/submit');
     expect(submit?.body).toEqual({ answers: { q1: 'a', q2: 'a' } });
   });

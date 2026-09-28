@@ -54,7 +54,9 @@ export function QuizPage() {
     <QueryState query={quiz} loading={loading}>
       {(d) => (
         <QuizFlow
-          key={d.quiz.id + d.attemptInfo.used}
+          // Keyed by quiz only: the post-submit refetch bumps attemptInfo.used and must not
+          // remount the flow (that would drop the result screen).
+          key={d.quiz.id}
           d={d}
           sectionId={sectionId}
           nextSectionId={section.data?.nextSectionId ?? null}

@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import { Bell, BookOpen, Bot, Home, Mail, Trophy, UserRound } from 'lucide-react';
+import { Bell, BookOpen, Bot, Home, Mail, Trophy, UserRound, WifiOff } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppLogo } from '@/components/brand/AppLogo';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { flushBeats } from '@/lib/offline-queue';
+import { useOnline } from '@/lib/online';
 import { useMessages, useNotifications } from '@/lib/queries';
 
 const DESKTOP_NAV = [
@@ -22,6 +23,7 @@ export function MarketerLayout() {
   const notifications = useNotifications();
   const messages = useMessages();
   const qc = useQueryClient();
+  const online = useOnline();
   const unreadMessages = messages.data?.filter((m) => !m.readAt).length ?? 0;
   const unread = (notifications.data?.unread ?? 0) + unreadMessages;
 
@@ -89,6 +91,15 @@ export function MarketerLayout() {
           </div>
         </div>
       </header>
+      {!online && (
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 bg-warning-light px-4 py-2 text-sm font-bold text-text"
+        >
+          <WifiOff className="size-4 text-warning" aria-hidden />
+          اتصال اینترنت قطع است. پیشرفت شما ذخیره می‌شود و بعد از اتصال ارسال می‌گردد.
+        </div>
+      )}
       <main className="mx-auto max-w-[960px] px-4 py-4">
         <Outlet />
       </main>
