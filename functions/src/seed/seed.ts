@@ -284,6 +284,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
   const brandsById = new Map(brandInputs.map((b) => [b.id, b]));
   const productsById = new Map(productInputs.map((p) => [p.id, p]));
   const publishedIds: string[] = [];
+  let skippedPackages = 0;
   for (const sp of sup.trainingPackages) {
     const pkgPath = `packages/${sp.id}`;
     const exists = await d.store.get<Package>(pkgPath);
@@ -308,6 +309,16 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
         });
       }
       if (exists.status === 'published') publishedIds.push(sp.id);
+      continue;
+    }
+    // Sample media may be absent (e.g. a checkout/import without the large *.mp4/*.m4a files).
+    // Skip that package instead of crashing the whole seed (and the local API with it).
+    const missing = sp.sections
+      .map((s) => s.file)
+      .filter((f) => !fs.existsSync(path.join(opts.repoRoot, f)));
+    if (missing.length) {
+      console.warn(`[seed] skipping package ${sp.id}: media not found: ${missing.join(', ')}`);
+      skippedPackages++;
       continue;
     }
     const pkg: Package = {
@@ -441,7 +452,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
       publish: sp.publish,
     });
   }
-  report.packages = sup.trainingPackages.length;
+  report.packages = sup.trainingPackages.length - skippedPackages;
 
   // 6) Global assignment of the sample packages (idempotent id)
   if (publishedIds.length) {

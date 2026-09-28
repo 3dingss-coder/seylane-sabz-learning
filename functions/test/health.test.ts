@@ -63,3 +63,22 @@ describe('error envelope', () => {
     expect(res.body.error.code).toBe('UNAUTHENTICATED');
   });
 });
+
+describe('auth header fallback (proxies that strip Authorization)', () => {
+  it('accepts X-Access-Token and prefers it over a foreign Authorization header', async () => {
+    const ctx = await createCtx();
+    const u = await ctx.user('marketer');
+    const viaAlt = await request(ctx.app).get('/v1/me').set('X-Access-Token', u.token);
+    expect(viaAlt.status).toBe(200);
+    expect(viaAlt.body.data.id).toBe(u.id);
+    const overwritten = await request(ctx.app)
+      .get('/v1/me')
+      .set('Authorization', 'Bearer proxy-injected-token')
+      .set('X-Access-Token', u.token);
+    expect(overwritten.status).toBe(200);
+    const none = await request(ctx.app).get('/v1/me');
+    expect(none.status).toBe(401);
+    const bad = await request(ctx.app).get('/v1/me').set('X-Access-Token', 'nope');
+    expect(bad.status).toBe(401);
+  });
+});

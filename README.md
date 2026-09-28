@@ -51,11 +51,21 @@ Client-provided folders stay at the repo root exactly as delivered. They are rea
 
 ```bash
 npm install
-# API with the in-memory backend, seeded with the real catalog + sample packages + demo users:
+# One command, one port — web app + API together on http://localhost:5173 (best for previews).
+# Self-healing: installs dependencies automatically if missing and restarts the server if it crashes.
+npm start
+# …or run them separately. API with the in-memory backend, seeded with the real catalog + sample packages + demo users:
 cd functions && npx tsx src/local.ts          # http://localhost:5001/v1/health
 # Web (another terminal): http://localhost:5173 (proxies /v1 to the API)
 npm run dev
 ```
+
+**Browser support.** The production build targets iOS/Safari 12+, Chrome & Android WebView 64+,
+Samsung Internet 9+, Firefox 67+ and Edge 79+ (`browserslist` in `apps/web/package.json`):
+`@vitejs/plugin-legacy` down-levels/polyfills JS (plus a `nomodule` bundle for browsers without ES
+modules) and `apps/web/legacy-css.ts` flattens Tailwind's cascade layers and adds CSS fallbacks.
+The Vite dev server (`npm start`) needs a modern browser — to test on old phones use
+`npm run start:prod`, which builds and serves the production bundle on the same port.
 
 Local API env: `PORT` (5001), `RESEED=true` (wipe and re-seed), `LOCAL_PERSIST=false` (don't write `functions/.local-data`).
 

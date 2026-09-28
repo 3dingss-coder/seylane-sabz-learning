@@ -48,7 +48,7 @@ export function createApp(deps: Deps, handles: Partial<AppHandles> = {}): Expres
         if (!origin || config.allowedOrigins.includes(origin)) cb(null, true);
         else cb(null, false);
       },
-      allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
+      allowedHeaders: ['Authorization', 'X-Access-Token', 'Content-Type', 'Idempotency-Key'],
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       maxAge: 600,
     }),

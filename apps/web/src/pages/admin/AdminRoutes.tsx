@@ -29,8 +29,8 @@ import { AdminUserDetail, UsersPage } from './UsersPage';
 
 const NAV = [
   { to: '/admin', label: 'داشبورد', icon: LayoutDashboard },
-  { to: '/admin/content', label: 'محتوا', icon: FolderTree },
-  { to: '/admin/assignments', label: 'انتساب و مسیر', icon: Share2 },
+  { to: '/admin/content', label: 'محتوای آموزشی', icon: FolderTree },
+  { to: '/admin/assignments', label: 'مسیرها و مخاطبان', icon: Share2 },
   { to: '/admin/users', label: 'کاربران', icon: Users },
   { to: '/admin/teams', label: 'تیم‌ها', icon: UsersRound },
   { to: '/admin/reports', label: 'گزارش‌ها', icon: BarChart3 },

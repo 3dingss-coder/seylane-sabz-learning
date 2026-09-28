@@ -73,6 +73,7 @@ export async function createAssignment(
   d: Deps,
   actor: Actor,
   input: z.infer<typeof assignmentSchema>,
+  opts: { pathId?: string } = {},
 ) {
   const targetId = input.type === 'global' ? null : (input.targetId ?? null);
   await validateTarget(d, input.type, targetId);
@@ -89,7 +90,12 @@ export async function createAssignment(
       ['revokedAt', '==', null],
     ],
   });
-  const same = existing.find((a) => [...a.packageIds].sort().join(',') === pkgIds.join(','));
+  // Path-managed assignments are never merged with manual ones (each path owns its own).
+  const same = existing.find(
+    (a) =>
+      (a.pathId ?? null) === (opts.pathId ?? null) &&
+      [...a.packageIds].sort().join(',') === pkgIds.join(','),
+  );
   const now = d.clock();
   const warnings: string[] = [];
   for (const p of pkgs) {
@@ -111,6 +117,7 @@ export async function createAssignment(
     createdAt: now.toISOString(),
     revokedAt: null,
     revokedBy: null,
+    pathId: opts.pathId ?? null,
   };
   await d.store.set(`assignments/${id}`, a as unknown as Record<string, unknown>);
   await audit(d, actor, 'assignment.created', 'assignments', id, null, a);
@@ -231,6 +238,41 @@ async function normalizePath(d: Deps, input: z.infer<typeof pathSchema>) {
   };
 }
 
+/**
+ * A path is the one place an admin decides «who learns what, in which order, by when».
+ * Saving it therefore also (1) assigns its packages to the path audience through a
+ * path-owned assignment and (2) applies step deadlines when a start date is set.
+ */
+async function syncPath(d: Deps, actor: Actor, id: string, path: LearningPath) {
+  const active = await d.store.query<Assignment>({
+    collection: 'assignments',
+    where: [
+      ['pathId', '==', id],
+      ['revokedAt', '==', null],
+    ],
+  });
+  const pkgIds = path.items.map((i) => i.packageId);
+  let notified = 0;
+  let warnings: string[] = [];
+  let keepId: string | null = null;
+  if (!path.archived && pkgIds.length) {
+    const r = await createAssignment(
+      d,
+      actor,
+      { type: path.scope, targetId: path.targetId, packageIds: pkgIds },
+      { pathId: id },
+    );
+    keepId = r.assignment.id;
+    notified = r.notified;
+    warnings = r.warnings;
+  }
+  for (const a of active) if (a.id !== keepId) await revokeAssignment(d, actor, a.id);
+  let deadlinesUpdated = 0;
+  if (!path.archived && path.startAt && path.items.some((i) => i.deadlineOffsetDays !== null))
+    deadlinesUpdated = (await applyPathDeadlines(d, actor, id)).updated.length;
+  return { notified, warnings, deadlinesUpdated };
+}
+
 export async function createPath(d: Deps, actor: Actor, input: z.infer<typeof pathSchema>) {
   const data = await normalizePath(d, input);
   const id = d.store.newId();
@@ -239,7 +281,7 @@ export async function createPath(d: Deps, actor: Actor, input: z.infer<typeof pa
   await d.store.set(`learning_paths/${id}`, path as unknown as Record<string, unknown>);
   await audit(d, actor, 'path.created', 'learning_paths', id, null, path);
   await track(d, 'admin_path_created', actor.id, { items: path.items.length });
-  return { id, ...path };
+  return { id, ...path, ...(await syncPath(d, actor, id, path)) };
 }
 
 export async function updatePath(
@@ -253,7 +295,8 @@ export async function updatePath(
   const data = { ...(await normalizePath(d, input)), updatedAt: nowIso(d) };
   await d.store.update(`learning_paths/${id}`, data);
   await audit(d, actor, 'path.updated', 'learning_paths', id, prev, data);
-  return { ...prev, ...data, id };
+  const next = { ...prev, ...data };
+  return { ...next, id, ...(await syncPath(d, actor, id, next)) };
 }
 
 export async function archivePath(d: Deps, actor: Actor, id: string) {
@@ -261,6 +304,7 @@ export async function archivePath(d: Deps, actor: Actor, id: string) {
   if (!prev) throw new ApiError('NOT_FOUND', 'مسیر پیدا نشد.');
   await d.store.update(`learning_paths/${id}`, { archived: true, updatedAt: nowIso(d) });
   await audit(d, actor, 'path.archived', 'learning_paths', id, prev, { archived: true });
+  await syncPath(d, actor, id, { ...prev, archived: true });
 }
 
 /**

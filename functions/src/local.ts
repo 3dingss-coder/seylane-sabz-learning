@@ -22,8 +22,10 @@ async function main() {
     );
   }
   const port = Number(process.env.PORT ?? 5001);
-  createApp(deps).listen(port, '0.0.0.0', () =>
-    console.info(`API listening on http://0.0.0.0:${port}/v1/health`),
+  // HOST=127.0.0.1 keeps the API private so preview tools only expose the web app (5173).
+  const host = process.env.HOST ?? '0.0.0.0';
+  createApp(deps).listen(port, host, () =>
+    console.info(`API listening on http://${host}:${port}/v1/health`),
   );
   const flush = () => {
     deps.store.flush();

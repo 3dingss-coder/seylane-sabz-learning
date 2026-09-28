@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -6,17 +7,20 @@ import {
   BadgeCheck,
   CheckCircle2,
   FileQuestion,
+  Rocket,
   Sparkles,
   UserCheck,
   Users,
 } from 'lucide-react';
-import { Card, KpiCard, Skeleton } from '@/components/ui';
+import { Button, Card, KpiCard, Skeleton } from '@/components/ui';
+import { PublishGuide } from '@/components/admin/PublishGuide';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
 import { toPersianDigits } from '@/lib/digits';
 import { faNumber, faPercent } from '@/lib/format';
 import type { AdminDashboard as Data } from '@/lib/types';
+import { PackageFormDialog } from './PackageFormDialog';
 
 /** A1 — داشبورد ادمین: product KPIs (§29) + content status. */
 export function AdminDashboard() {
@@ -24,9 +28,20 @@ export function AdminDashboard() {
     queryKey: ['admin', 'dashboard'],
     queryFn: ({ signal }) => api.get<Data>('/admin/dashboard', signal),
   });
+  const [newPkg, setNewPkg] = useState(false);
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="داشبورد" subtitle="وضعیت کلی آموزش و محتوا" />
+      <PageHeader
+        title="داشبورد"
+        subtitle="وضعیت کلی آموزش و محتوا"
+        actions={
+          <Button icon={<Rocket className="size-4" aria-hidden />} onClick={() => setNewPkg(true)}>
+            انتشار آموزش جدید
+          </Button>
+        }
+      />
+      <PublishGuide onNewPackage={() => setNewPkg(true)} drafts={q.data?.content.drafts ?? 0} />
+      {newPkg && <PackageFormDialog open onClose={() => setNewPkg(false)} />}
       <QueryState
         query={q}
         loading={

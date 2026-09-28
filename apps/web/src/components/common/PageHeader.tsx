@@ -15,8 +15,8 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div className="flex min-w-0 items-start gap-1">
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+      <div className="flex min-w-0 flex-[1_1_14rem] items-start gap-1">
         {back && (
           <Link
             to={back}
@@ -27,11 +27,12 @@ export function PageHeader({
           </Link>
         )}
         <div className="min-w-0 pt-2">
-          <h1 className="text-xl font-bold text-text">{title}</h1>
+          <h1 className="text-xl font-bold break-words text-text">{title}</h1>
           {subtitle && <div className="mt-1 text-sm text-text-secondary">{subtitle}</div>}
         </div>
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2 pt-1">{actions}</div>}
+      {/* On narrow phones the actions wrap below the title instead of squeezing it. */}
+      {actions && <div className="flex flex-wrap items-center gap-2 pt-1">{actions}</div>}
     </div>
   );
 }

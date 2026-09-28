@@ -295,8 +295,8 @@ export async function chat(d: Deps, user: Doc<User>, input: z.infer<typeof chatS
     return { messageId: id, reply: UNKNOWN_REPLY, sources: [], outcome: 'unknown' as const };
   }
   if (!d.llm) {
-    // Rule-based fallback: point to the most relevant section instead of generating text.
-    const reply = `${FALLBACK_REPLY} پیشنهاد: قسمت «${top[0]?.title ?? ''}» را دوباره مرور کن.`;
+    // No LLM configured: answer extractively from the approved content (no generated text).
+    const reply = fallbackReply(verdict.text, top);
     const id = await save('assistant', reply, { outcome: 'fallback', sources });
     return { messageId: id, reply, sources, outcome: 'fallback' as const };
   }
@@ -331,10 +331,45 @@ export async function chat(d: Deps, user: Doc<User>, input: z.infer<typeof chatS
     return { messageId: id, reply: out.text, sources: out.unknown ? [] : sources, outcome };
   } catch (e) {
     console.warn('mentor LLM fallback', (e as Error).message);
-    const reply = `${FALLBACK_REPLY} پیشنهاد: قسمت «${top[0]?.title ?? ''}» را دوباره مرور کن.`;
+    const reply = fallbackReply(verdict.text, top);
     const id = await save('assistant', reply, { outcome: 'fallback', sources });
     return { messageId: id, reply, sources, outcome: 'fallback' as const };
   }
+}
+
+/**
+ * Extractive answer used when no LLM is configured (or it fails): the sentences of the retrieved
+ * content that best match the question, quoted verbatim. Questions (quiz stems) are skipped so the
+ * reply never just echoes a question back. Falls back to a referral when nothing matches.
+ */
+export function extractiveAnswer(query: string, top: Chunk[], max = 2): string | null {
+  const q = tokenize(query);
+  const seen = new Set<string>();
+  const scored: Array<{ text: string; score: number; order: number }> = [];
+  let order = 0;
+  for (const c of top) {
+    for (const raw of c.text.split(/(?<=[.!؟?])\s+|\n+/)) {
+      const text = raw.replace(/\s+/g, ' ').trim();
+      order++;
+      if (text.length < 12 || /[؟?]$/.test(text) || seen.has(text)) continue;
+      seen.add(text);
+      const score = scoreChunk(q, { sourceType: 'section', sourceId: '', title: '', text });
+      if (score > 0) scored.push({ text, score, order });
+    }
+  }
+  const best = scored
+    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .slice(0, max)
+    .sort((a, b) => a.order - b.order)
+    .map((x) => (/[.!]$/.test(x.text) ? x.text : `${x.text}.`));
+  return best.length ? scrubPii(best.join(' ')) : null;
+}
+
+function fallbackReply(query: string, top: Chunk[]): string {
+  const title = top[0]?.title ?? '';
+  const extract = extractiveAnswer(query, top);
+  if (!extract) return `${FALLBACK_REPLY} پیشنهاد: قسمت «${title}» را دوباره مرور کن.`;
+  return `طبق محتوای آموزش: ${extract} برای جزئیات بیشتر قسمت «${title}» را مرور کن.`;
 }
 
 function dedupeSources(chunks: Chunk[]) {

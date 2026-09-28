@@ -101,7 +101,11 @@ export async function request<T>(
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (!opts.anonymous) {
     if (!session.access && session.refresh) await refreshSession();
-    if (session.access) headers.Authorization = `Bearer ${session.access}`;
+    if (session.access) {
+      headers.Authorization = `Bearer ${session.access}`;
+      // Same token again for proxies that strip Authorization (see functions/src/http/auth.ts).
+      headers['X-Access-Token'] = session.access;
+    }
   }
   let res: Response;
   try {

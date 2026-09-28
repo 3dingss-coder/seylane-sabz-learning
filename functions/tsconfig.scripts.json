@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "rootDir": "..", "noEmit": true },
-  "include": ["../scripts/seed-catalog.ts", "src"]
+  "include": ["../scripts/seed-catalog.ts", "../scripts/dev-server.ts", "src"]
 }

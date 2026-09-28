@@ -14,7 +14,15 @@ declare module 'express-serve-static-core' {
 export function authenticate(d: Deps): RequestHandler {
   return (req, _res, next) => {
     const header = req.headers.authorization ?? '';
-    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    // X-Access-Token carries the same token for reverse proxies (e.g. hosted preview
+    // environments) that strip or overwrite Authorization — so it wins when present.
+    const alt = req.headers['x-access-token'];
+    const token =
+      typeof alt === 'string' && alt.trim()
+        ? alt.trim()
+        : header.startsWith('Bearer ')
+          ? header.slice(7).trim()
+          : '';
     if (!token) return next(new ApiError('UNAUTHENTICATED'));
     d.auth
       .verify(token)

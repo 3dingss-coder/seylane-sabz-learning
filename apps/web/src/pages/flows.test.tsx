@@ -82,6 +82,10 @@ describe('M1 login → M3 home', () => {
   it('marketer cannot open the admin panel', async () => {
     mockApi({ ...loggedIn(), 'GET /v1/me/home': () => ({ data: home }) });
     renderApp('/admin');
+    // No admin UI — an explanation instead, with a way back to the marketer home.
+    expect(await screen.findByRole('heading', { name: 'پنل ادمین' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: /ادمین/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /بازگشت به اپ بازاریاب/ }));
     expect(await screen.findByTestId('next-item')).toBeInTheDocument();
   });
 });
@@ -214,5 +218,17 @@ describe('F14 mentor nudge on Home', () => {
     renderApp('/');
     const link = await screen.findByRole('link', { name: /دو روز است سر نزده‌ای/ });
     expect(link).toHaveAttribute('href', '/packages/seed-pkg-formi');
+  });
+});
+
+describe('panels live in the same app under /admin', () => {
+  it('a marketer opening /admin gets an explanation and can switch to an admin account', async () => {
+    mockApi({ ...loggedIn(), 'POST /v1/auth/logout': () => ({ data: null }) });
+    renderApp('/admin');
+    expect(await screen.findByRole('heading', { name: 'پنل ادمین' })).toBeInTheDocument();
+    expect(screen.getByText(/با حساب «بازاریاب» وارد شده‌اید/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ورود با حساب ادمین' }));
+    expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
+    expect(localStorage.getItem('ssl.refresh')).toBeNull();
   });
 });
