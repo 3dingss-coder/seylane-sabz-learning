@@ -51,8 +51,19 @@ async function main() {
   });
   // /v1 → API (keeps its own security headers + JSON 404); everything else → Vite.
   app.use((req, res, next) => {
-    if (req.url === '/v1' || req.url.startsWith('/v1/')) api(req, res, next);
-    else vite.middlewares(req, res, next);
+    if (req.url === '/v1' || req.url.startsWith('/v1/')) {
+      // Compact access log (helps diagnose proxies that drop auth headers). No token values.
+      const auth = [
+        req.headers.authorization ? 'authz' : '',
+        req.headers['x-access-token'] ? 'x-token' : '',
+      ]
+        .filter(Boolean)
+        .join('+');
+      res.on('finish', () =>
+        console.info(`[api] ${req.method} ${req.url} → ${res.statusCode} (${auth || 'no-auth'})`),
+      );
+      api(req, res, next);
+    } else vite.middlewares(req, res, next);
   });
 
   const port = Number(process.env.PORT ?? 5173);
