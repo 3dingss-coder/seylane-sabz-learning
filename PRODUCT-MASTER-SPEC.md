@@ -3,6 +3,7 @@
 > **وضعیت سند:** ✅ نهایی — v1.0 (تمام ۳۸ بخش کامل).
 > **آخرین به‌روزرسانی:** 2026-09-28
 > **کارفرما:** هلدینگ سیلانه‌سبز | **تیم:** ۱ نفر توسعه + AI Coding Agent | **بودجه:** صفر (سرویس‌های رایگان) | **مقیاس:** ۵۰۰+ کاربر
+> **وضعیت پیاده‌سازی (زنده):** [`docs/IMPLEMENTATION-STATUS.md`](docs/IMPLEMENTATION-STATUS.md) • نقشه منابع: [`docs/RESOURCE-MAP.md`](docs/RESOURCE-MAP.md) — PROMPT 001 ✅
 > **زیرساخت (تصمیم‌گرفته‌شده):** Firebase (سرویس‌ها) + Cloudflare (هاست) + GitHub (مخزن/CI) | **پلتفرم:** اپ اندروید + PWA برای iOS + وب‌اپ دسکتاپ
 
 ---
@@ -549,7 +550,7 @@ Application
 
 | Token | Hex | کاربرد |
 |---|---|---|
-| primary | #1B8A5A | CTA اصلی، هایلایت، نوار پیشرفت |
+| primary | #177A50 | CTA اصلی، هایلایت، نوار پیشرفت — (D40: قبلاً #1B8A5A؛ برای کنتراست AA تیره‌تر شد) |
 | primary-hover | #146C45 | Hover/Active |
 | primary-light | #E7F5EE | پس‌زمینه کارت‌های موفق/برند |
 | info | #2563EB | اطلاع‌رسانی، لینک |
@@ -562,6 +563,7 @@ Application
 | border | #E2E8F0 | حاشیه |
 | background | #F8FAFC | پس‌زمینه |
 | surface | #FFFFFF | کارت/سند |
+| muted-fg / warning-fg / success-fg / danger-fg / info-fg | #64748B / #B45309 / #15803D / #B91C1C / #1D4ED8 | **فقط برای متن** (D40) — کنتراست ≥۴٫۵ روی سفید و روی پس‌زمینه‌های کم‌رنگ؛ توکن‌های پایه برای آیکون/حاشیه/پس‌زمینه/نوار می‌مانند |
 
 ### ۱۶.۳ Typography
 - **فونت:** Vazirmatn (باز، فارسی، خوانا در اندازه کوچک)
@@ -826,10 +828,10 @@ WCAG AA (کنتراست ≥4.5) • لمس ≥48px • فوکوس‌رینگ م�
 
 ### 20.2 محتوا
 
-**packages** — `packages/{packageId}` (بسته آموزشی)
+**packages** — `packages/{packageId}` (بسته آموزشی) — طبق D32/D33: `productId` اختیاری (بسته سطح برند)، `brandId` برای انتشار الزامی (پیش‌نویس «بدون تخصیص» مجاز)
 | Field | Type | Req | Default | Note |
 |---|---|---|---|---|
-| productId / brandId | ref/string | ✔ | — | brandId Denormalized |
+| productId / brandId | ref/string | brandId ✔ (publish) / productId — | — | D32: بسته سطح برند بدون productId؛ D33: پیش‌نویس بدون brandId |
 | title / description | string | ✔ / — | — | |
 | status | enum | ✔ | draft | draft/published/archived |
 | deadlineAt | timestamp | ✔ (publish) | — | یکسان برای همه (D17) |
@@ -845,7 +847,9 @@ WCAG AA (کنتراست ≥4.5) • لمس ≥48px • فوکوس‌رینگ م�
 | order | number | ✔ | — | یکتا در بسته |
 | title | string | ✔ | — | |
 | mediaType | enum | ✔ | — | video/audio |
-| youtubeUrl / audioUrl | string | شرطی | — | video→YouTube، audio→Storage |
+| mediaSource | enum | ✔ | — | youtube/file (D28) — ویدیو: لینک یوتیوب **یا** فایل آپلودی؛ صوت: فقط file |
+| youtubeUrl / videoUrl / audioUrl | string | شرطی | — | video+youtube→youtubeUrl • video+file→videoUrl (Storage) • audio→audioUrl (Storage) |
+| mediaMime / mediaSizeBytes | string/number | شرطی (file) | — | MIME بررسی‌شده سمت‌سرور (D28) |
 | durationSec | number | ✔ | — | > 0 |
 | quizId | ref→quizzes | ✔ | — | |
 - **Constraints:** order یکتا؛ حذف فقط بایگانی
@@ -881,6 +885,8 @@ WCAG AA (کنتراست ≥4.5) • لمس ≥48px • فوکوس‌رینگ م�
 | completedAt / updatedAt | timestamp | — | | Idempotent upsert |
 - **Indexes:** (userId+packageId) • (userId+completed)
 
+**playback_budgets** — `playback_budgets/{userId}` (فقط سرور): `credit` (ثانیه) • `updatedAt` — سقف زمان‌واقعی مصرف (۲۱.۵)؛ Rules: deny کامل برای کلاینت
+
 **playback_events** — `playback_events/{eventId}`: userId • sectionId • positionSec • playedDeltaSec • ts • deviceId — **Indexes:** (userId+sectionId+ts) • **TTL: 90 روز** (کنترل حجم/هزینه)
 
 ### 20.4 انتساب، انگیزش، ارتباطات
@@ -914,17 +920,17 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 - **پایه:** REST over HTTPS — نسخه `/v1` — سرویس: Cloud Functions (Express/TS) | احراز هویت: `Authorization: Bearer <Firebase ID Token>` (بررسی سمت‌سرور + Custom Claims برای role)
 - **پاسخ استاندارد موفق:** `{ "data": ... }` | **خطا:** `{ "error": { "code", "message" (فارسی), "details" } }`
 - **کدهای خطا:** 400 VALIDATION • 401 UNAUTHENTICATED • 403 FORBIDDEN • 404 NOT_FOUND • 409 CONFLICT • 429 RATE_LIMIT • 500 INTERNAL
-- **Rate Limit:** عمومی ۶۰ req/min/کاربر • heartbeat ۲۰/min • چت منتور ۱۰/min • ثبت‌نام ۵/min/IP
+- **Rate Limit:** عمومی ۶۰ req/min/کاربر • heartbeat ۲۰/min • چت منتور ۱۰/min • ثبت‌نام ۵/min/IP • ورود ۱۰/min/IP — IP کاربر از `X-Forwarded-For` فقط به تعداد `TRUST_PROXY_HOPS` (پیش‌فرض ۱ = Google Front End) خوانده می‌شود؛ `trust proxy = true` ممنوع (قابل جعل و دور زدن محدودیت ورود)
 - **Pagination:** cursor-based (`?limit=` ≤۵۰ + `cursor`) | **Filtering/Sorting:** پارامترهای استاندارد (`?from&to&brand&status&sort=field:asc`)
-- **Search:** V1 (در MVP فقط جست‌وجوی ساده عنوان در پنل ادمین) | **Webhooks:** ندارد (MVP) | **Upload:** `POST /admin/media/upload` — multipart، Whitelist: audio/mpeg,wav (≤۵۰MB) + URL یوتیوب
+- **Search:** V1 (در MVP فقط جست‌وجوی ساده عنوان در پنل ادمین) | **Webhooks:** ندارد (MVP) | **Upload (D28):** `POST /admin/media/upload-url` → Signed URL آپلود Resumable مستقیم به Storage (محدودیت ۳۲MB بدنه درخواست Functions) → Trigger نهایی‌سازی: بررسی MIME واقعی (magic bytes) + حجم؛ Whitelist صوت: audio/mpeg, audio/mp4 (m4a), audio/aac, audio/wav, audio/ogg (≤۱۰۰MB) • ویدیو: video/mp4, video/quicktime, video/webm, video/x-matroska, video/3gpp, video/x-msvideo (≤۵۰۰MB) + URL یوتیوب
 - **Versioning:** مسیر `/v1`؛ تغییر شکننده = نسخه جدید
 
 ### 21.1 ماژول Auth
 | METHOD | ENDPOINT | ROLE | REQUEST / RESPONSE |
 |---|---|---|---|
 | POST | /v1/auth/register | Public | {name, phone|email, password} → {user} |
-| POST | /v1/auth/login | Public | Firebase Auth → {token} |
-| POST | /v1/auth/refresh | Auth | → {token} |
+| POST | /v1/auth/login | Public | {identifier (phone\|email), password} → {user, idToken, refreshToken, expiresIn} (D35) |
+| POST | /v1/auth/refresh | Public | {refreshToken} → {idToken, refreshToken, expiresIn} |
 | POST | /v1/auth/logout | Auth | → 204 |
 | POST | /v1/auth/password-reset | Public | {email|phone} → 202 |
 
@@ -973,11 +979,22 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | GET/PUT | /admin/policies | سیاست‌ها (Audit) |
 | GET | /admin/audit-logs | ?actor&action&from |
 
+### 21.4.1 فهرست Endpointهای پیاده‌شده (همگام با کد — PROMPT 015)
+> منبع: `functions/src/routes/*.ts`. همه زیر `/v1`؛ نقش با Middleware سمت‌سرور بررسی می‌شود.
+
+- **Auth:** `POST /auth/register` • `POST /auth/login` • `POST /auth/refresh` • `POST /auth/logout` • `POST /auth/password-reset`
+- **Me:** `GET/PATCH /me` • `POST /me/password` • `POST /me/onboarding` • `POST /me/events` (رویدادهای کلاینت، Whitelist) • `GET /me/home` • `GET /me/packages` • `GET /me/packages/:id` • `GET /me/sections/:id` • `GET /me/sections/:id/media` (URL امضاشده کوتاه‌عمر) • `GET/POST /me/sections/:id/progress` • `GET /me/quizzes/:id` • `POST /me/quizzes/:id/attempts` • `POST /me/attempts/:id/submit` • `POST /me/quizzes/:id/retake-requests` • `GET /me/points` • `GET /me/badges` • `GET /me/notifications` • `POST /me/notifications/read-all` • `POST /me/notifications/:id/read` • `GET /me/messages` • `POST /me/messages/:id/read` • `POST/DELETE /me/devices` ({token, platform: android\|web}) • `GET /me/mentor/nudges` • `GET /me/mentor/history` • `POST /me/mentor/chat` • `POST /me/mentor/feedback`
+- **Manager (Scope تیم):** `GET /manager/dashboard` • `GET /manager/reports/completion` (ردیف‌ها شامل brandId/productId؛ فیلتر برند/محصول سمت کلاینت) • `GET /manager/users/:id/progress` • `POST /manager/users/:id/messages` • `POST /manager/users/:id/notes` • `GET /manager/retake-requests` • `POST /manager/retake-requests/:id/approve|reject` (درخواست‌های Escalate‌شده — پس از ۲ تأیید — برای مدیر مسدود است: 403)
+- **Admin:** `GET /admin/dashboard` • `GET /admin/content/tree` • `GET/POST /admin/brands` • `PATCH /admin/brands/:id` • `GET/POST /admin/products` • `PATCH /admin/products/:id` • `POST /admin/media/upload-url` • `POST /admin/media/:id/finalize` • `GET/POST /admin/packages` • `GET/PATCH /admin/packages/:id` • `POST /admin/packages/:id/publish|unpublish|archive` • `POST /admin/packages/:id/sections` • `PUT /admin/packages/:id/sections/order` • `PATCH /admin/packages/:id/sections/:sid` • `GET/PATCH /admin/quizzes/:id` • `POST /admin/quizzes/:id/questions` • `PUT /admin/quizzes/:id/questions/order` • `PUT/DELETE /admin/quizzes/:id/questions/:qid` • `GET/POST /admin/paths` • `PUT/DELETE /admin/paths/:id` • `POST /admin/paths/:id/apply-deadlines` • `GET/POST /admin/assignments` • `DELETE /admin/assignments/:id` • `GET /admin/users` • `GET/PATCH /admin/users/:id` • `POST /admin/users/:id/reset-password` • `GET/POST /admin/teams` • `PATCH /admin/teams/:id` • `GET /admin/reports/completion|kpis|mentor` • `GET /admin/retake-requests` • `POST /admin/retake-requests/:id/approve|reject` • `GET /admin/mentor/transcripts/:userId` • `GET /admin/notification-templates` • `PUT /admin/notification-templates/:key` • `POST /admin/notifications/send` • `GET/PUT /admin/policies` • `GET /admin/audit-logs` • `POST /admin/jobs/:name`
+- **Files:** `GET /files/public/{brands|products|branding}/…` (تصاویر عمومی کاتالوگ در حالت محلی) • `PUT /uploads/:token` و `GET /files/signed/:token` (فقط Backend محلی؛ در Firebase مستقیم Storage Signed URL)
+- **تفاوت با جدول‌های بالا:** آپلود رسانه به‌صورت Signed URL + finalize است (نه multipart)؛ `CRUD /admin/sections` زیر `/admin/packages/:id/sections` قرار دارد.
+
 ### 21.5 سناریوهای حساس (Spec دقیق)
 
 **POST /me/sections/:id/progress (heartbeat)**
 - **Validation:** `0 ≤ positionSec ≤ durationSec`؛ `playedDeltaSec ≤ 70` (بیش از فاصله batch نشود)؛ ردشدن درخواست‌های تکراری/آینده‌نگر (Idempotency-Key)
 - **منطق:** افزایش `playedSeconds` فقط به‌اندازه `playedDeltaSec` (نه position) — **Anti-cheat Seek**؛ تکمیل وقتی percent ≥ سیاست
+- **سقف زمان‌واقعی (پیاده‌شده، PROMPT 015):** هر کاربر یک «اعتبار پخش» در `playback_budgets/{uid}` دارد که با نرخ ۱٫۵× زمان ساعت پر می‌شود (سقف ۱۸۰۰ ثانیه، اعتبار اولیه ۷۰ ثانیه) و هر heartbeat از آن کم می‌کند — ارسال موازی/سریع heartbeat برای چند قسمت نمی‌تواند بیش از زمان واقعی اعتبار بگیرد. فقط در backend حافظه‌ای با `PLAYBACK_BUDGET=off` برای E2E خاموش می‌شود.
 - **Errors:** 400 ناسازگار • 409 نسخه قدیمی • 429
 
 **POST /me/attempts/:id/submit**
@@ -1015,6 +1032,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 ```
 - **Deployment:** GitHub Actions — PR: lint + test + build → main: deploy Functions + Hosting (dev/prod پروژه‌های جدا) | **Secrets:** GitHub Secrets/Secret Manager (هرگز در ریپو)
 - **Monitoring:** Sentry (Free) + Google Cloud Logging + Firebase Crashlytics (Wrapper) | **Uptime:** چک ساده از Cloudflare
+- **پیاده‌سازی (PROMPT 015):** خطاهای کلاینت به‌صورت رویداد `client_error` در `analytics_events` (قابل مشاهده در Cloud Logging) ثبت می‌شوند؛ Sentry فقط در صورت تنظیم `VITE_SENTRY_DSN` به‌صورت Lazy بارگذاری می‌شود؛ Crashlytics تا ایجاد پروژه Firebase و `google-services.json` در انتظار است. Android: `apps/web/android` (Capacitor 7) + Workflow `android.yml` (APK دیباگ در هر PR؛ APK/AAB امضاشده با Secretها)
 - **مقیاس‌پذیری (۵۰۰+ کاربر):** Firestore کفایت می‌کند؛ کنترل هزینه با Batch heartbeat + TTL رویدادها | **SLO:** LCP <۳s (3G)، خطای API <۱٪، در دسترسی ≥۹۹٪
 
 ### 22.4 محدودیت‌های محیط ایران
@@ -1075,7 +1093,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | **Input Validation** | Schema validation (Zod) روی همه ورودی‌ها • Whitelist فیلدها (ضد Mass Assignment) • Normalization شماره/متن فارسی و لاتین |
 | **Injection / XSS / CSRF** | Firestore: عدم ساخت Query از ورودی خام • XSS: React auto-escape + CSP + ممنوعیت dangerouslySetInnerHTML • CSRF: API با Bearer Token (نه Cookie) → ریسک پایین |
 | **Rate Limiting** | عمومی ۶۰ req/min/کاربر • heartbeat ۲۰/min • چت ۱۰/min • ثبت‌نام ۵/min/IP (بخش ۲۱) |
-| **File Upload Security** | Whitelist: audio/mpeg, wav (≤۵۰MB) • نام تصادفی/مسیر خصوصی • اسکن ساده • عدم اجرای فایل • Signed URL برای دسترسی |
+| **File Upload Security** | Whitelist صوت/ویدیو طبق D28 (بخش ۲۱ Upload؛ صوت ≤۱۰۰MB، ویدیو ≤۵۰۰MB؛ بررسی magic bytes سمت‌سرور) • نام تصادفی/مسیر خصوصی • اسکن ساده • عدم اجرای فایل • Signed URL برای دسترسی |
 | **Audit Logs** | همه تغییرات نقش/سیاست/محتوا/انتساب/رمز (بخش ۲۰ audit_logs) • TTL ۳۶۵ روز • خواندنی: admin+ |
 | **Privacy** | حداقل داده شخصی (نام/شماره/ایمیل) • **بدون PII در چت منتور به LLM** • متن چت: فقط superadmin با Audit • اطلاع‌رسانی شفاف «نظارت بر پیشرفت» (ریسک حقوقی: HR درگیر نیست — I7) |
 | **Data Retention** | playback_events: ۹۰ روز • audit: ۳۶۵ روز • chat منتور: ۱۸۰ روز • notification_log: ۱۸۰ روز • حساب غیرفعال: نگهداری (حذف طبق درخواست — آینده) |
@@ -1114,6 +1132,8 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | reengaged_after_nudge | بازگشت پس از هشدار | nudgeType | **KPI Nudge** |
 | mentor_chat_opened / mentor_message_sent | منتور | packageId | AI Engagement |
 | mentor_feedback | 👍/👎 | feedback | **KPI AI Quality** |
+| playback_error / youtube_blocked_reported | خطای پخش / گزارش دسترسی یوتیوب | source, videoId | کیفیت پخش (ایران) |
+| client_error | خطای JS کنترل‌نشده | message, source | پایش خطا (جایگزین رایگان) |
 
 **مدیر**
 | Event | Trigger | Properties | Purpose |
@@ -1156,6 +1176,10 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | 9 | گزارش هفتگی (weekly_digest) | Scheduled — شنبه ۹ صبح | مدیر | Push+Email | High | هفتگی | «{n} نفر از تیم شما عقب‌اند» |
 | 10 | نشان (badge_earned) | کسب نشان | بازاریاب | In-App | Low | بلافاصله | «نشان {title} را گرفتی!» |
 | 11 | نودج منتور | قوانین R1–R6 | بازاریاب | In-App | Normal | Throttle روزانه | (بخش ۲۳.۶) |
+| 12 | خوش‌آمد (welcome) | ثبت‌نام موفق | بازاریاب جدید | In-App | Low | یک‌بار | «خوش آمدی {name}! …» |
+| 13 | قبولی آزمون (quiz_passed) | اولین قبولی هر آزمون | بازاریاب | In-App | Normal | یک‌بار در هر آزمون | «آزمون {title} را با نمره {score} قبول شدی» |
+
+**پیاده‌سازی کانال‌ها (PROMPT 015):** Push اندروید = Capacitor/FCM (با `google-services.json`)؛ Push وب/PWA (شامل iOS 16.4+ نصب‌شده) = FCM Web Push با فعال‌سازی داوطلبانه از «پروفایل» (نیاز به `VITE_FIREBASE_*` + کلید VAPID)؛ لینک Push وب مطلق از `APP_URL` ساخته می‌شود. ایمیل گزارش هفتگی از طریق SMTP (`SMTP_URL`، `MAIL_FROM`، `APP_URL`) به مدیرانی که ایمیل دارند؛ بدون SMTP فقط In-App/Push.
 
 **قاعده‌ها:** ساعت سکوت ۲۲:۰۰–۰۷:۰۰ (موکول به صبح) • اولویت High مستثنی نیست مگر deadline <۲۴س • **Fallback:** شکست Push → In-App می‌ماند + retry صف + ثبت `notification_log` • **User Preference:** MVP ثابت؛ V1 خاموش‌سازی موارد Normal/Low • متن فارسی ساده، بدون داده حساس در Push.
 
@@ -1395,7 +1419,7 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 - **AUTHORIZATION:** admin+ | **VALIDATION:** عنوان/ترتیب/رسانه/مهلت (۱۸.۲)
 - **ERROR HANDLING:** فایل نامعتبر/بزرگ؛ لینک نامعتبر؛ 403 | **LOADING STATES:** آپلود درصددار | **EMPTY STATES:** «هنوز محصولی ندارید» + CTA
 - **EDGE CASES:** بایگانی بسته در حال مصرف • تغییر deadline • لینک خصوصی یوتیوب | **ANALYTICS:** admin_package_created/updated/published/archived, admin_media_uploaded
-- **SECURITY:** Whitelist MIME (audio/mpeg,wav ≤۵۰MB)؛ اسکن ساده؛ Audit تغییرات | **TESTS:** واحد Validation؛ API CRUD؛ E2E انتشار بسته
+- **SECURITY:** Whitelist MIME طبق D28 (صوت و همه فرمت‌های رایج ویدیو)؛ اسکن ساده؛ Audit تغییرات | **TESTS:** واحد Validation؛ API CRUD؛ E2E انتشار بسته
 - **ACCEPTANCE CRITERIA:** ادمین بدون توسعه‌دهنده بسته کامل منتشر کند | **DEFINITION OF DONE:** تست‌ها سبز + ۱ بسته نمونه واقعی | **DEPENDENCIES:** 003
 - **DO NOT:** حذف فیزیکی؛ انتشار ناقص؛ HTML خام در توضیحات (XSS)
 
@@ -1602,6 +1626,20 @@ learning_paths 1───N packages (items)   retake_requests N───1 users/
 | D24 | Batch heartbeat (۶۰s) + TTL ۹۰روزه | کنترل هزینه نوشتن | ثبت هر ثانیه | دقت کمتر vs هزینه | ۲۰/۲۹ |
 | D25 | هویت: سبز برند + Vazirmatn | نام برند/خوانایی فارسی | فونت/رنگ دیگر | — | ۱۶ |
 | D26 | بدون Vector DB در MVP (جست‌وجوی کلیدواژه‌ای) | حجم محتوا/هزینه صفر | Embeddings+Vector | مقیاس آینده → V1 | ۲۳.۳ |
+| D27 | کاتالوگ آموزش مستقل از نمایش اپ فروش: برندهای فورمی، آتل، آیس بابل (بابِل) و ویت آس با محصولات مربوطه از hidden-products.csv فعال می‌شوند | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) — فایل آموزشی نمونه دارند | عدم بارگذاری | لوگوی فورمی/آتل/بابل هنوز موجود نیست | ۲۰.۱ / Seed |
+| D28 | ویدیو: هم لینک یوتیوب و هم آپلود مستقیم هر فرمت رایج ویدیو از پنل ادمین؛ صوت: m4a/aac/ogg هم مجاز | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) | فقط یوتیوب (D17) | مصرف پهنای باند/حجم Storage (ریسک R4) • رهگیری فایل ویدیو با HTML5 Video (همان منطق playedDelta) | ۲۰.۲ / ۲۱ / ۲۴ / F3 / F12 |
+| D29 | تا ایجاد پروژه Firebase، توسعه و تست روی Firebase Emulator Suite انجام می‌شود؛ Seed/Upload همان اسکریپت با هدف Emulator | پروژه Firebase هنوز وجود ندارد (پیش‌نیاز ۱) | توقف توسعه | استقرار dev واقعی معلق تا Blaze | ۲۲ / ۳۲ |
+| D30 | فایل «آموزش کرم ترک پای WITH US» به محصول «کرم ترک پا کامان» (sb-300123101، برند کامان) تعلق دارد | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) | ویت آس | — | Seed محتوای نمونه |
+| D31 | محصول جدید «ضدآفتاب استیکی پیکسل» زیر برند پیکسل ساخته می‌شود (در لیست مشتری نبود) و ویدیو + صوت ضدآفتاب پیکسل به آن وصل می‌شوند | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) | اتصال به یکی از ۱۰ ضدآفتاب | تصویر محصول ندارد → لوگوی برند پیکسل تا آپلود تصویر از پنل | Seed / `data/catalog-supplement.json` |
+| D32 | بسته آموزشی می‌تواند «سطح برند» باشد (بدون محصول): `packages.productId` اختیاری، `brandId` الزامی برای انتشار — مثال: آیس بال | تصمیم مشتری: «آیس بال خودش یک برند است» | اجبار محصول | گزارش سطح محصول برای این بسته‌ها خالی | ۲۰.۲ / F2 / F12 |
+| D33 | محتوای نامشخص (مثل «معرفی کلی دارت») به‌صورت بسته پیش‌نویس «بدون تخصیص» (brandId خالی) در تب مجزای پنل مدیریت محتوا قرار می‌گیرد؛ انتشار تا تعیین برند ممنوع | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) | حذف/حدس | — | ۱۵.۳ A2 / ۲۰.۲ |
+| D34 | برندهای بدون لوگو (فورمی، آتل، آیس بابل) موقتاً لوگوی هلدینگ سیلانه‌سبز می‌گیرند؛ لوگو و تصویر محصول از پنل ادمین قابل آپلود/تعویض است (Whitelist تصویر: png/jpeg/webp ≤۵MB) | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) | Placeholder | — | ۲۰.۱ / F12 |
+| D35 | لایه API تنها دروازه احراز هویت است (ورود/Refresh از طریق Identity Toolkit REST سمت‌سرور)؛ شماره موبایل به ایمیل داخلی `<phone>@phone.seylane-sabz.app` نگاشت می‌شود؛ بازیابی رمز کاربر موبایلی فقط توسط ادمین | Firebase Auth فقط Email/Password (بدون SMS — خارج MVP) | Client SDK مستقیم | کلاینت بدون Firebase SDK (باندل سبک‌تر) | ۲۱.۱ / ۲۴ |
+| D36 | Access Token فقط در حافظه؛ Refresh Token در Preferences اپ اندروید (Capacitor) و در PWA در localStorage (ریسک پذیرفته‌شده برای جلوگیری از ورود مجدد هر بار) | کاربر کم‌سواد دیجیتال + PWA | sessionStorage (خروج با بستن اپ) | ریسک XSS → CSP سخت + ممنوعیت HTML خام | ۲۴ |
+| D37 | داده دسترسی از طریق Repository/DocStore: پیاده‌سازی Firestore (prod/dev) + پیاده‌سازی درون‌حافظه‌ای برای تست و اجرای محلی بدون Emulator | عدم دسترسی به Emulator/Java در محیط ساخت؛ تست‌پذیری | فقط Emulator | دو پیاده‌سازی باید هم‌رفتار بمانند → همان تست‌ها در CI روی Firestore Emulator | ۲۲ / ۲۸ |
+| D38 | شناسه اپ اندروید `ir.seylanesabz.learning` (قابل تغییر با `CAP_APP_ID` تا پیش از اولین انتشار در کافه‌بازار)؛ Push بومی فقط وقتی `google-services.json` موجود است فعال می‌شود (`VITE_PUSH_ENABLED`) تا اپ بدون پیکربندی Firebase کرش نکند؛ سرویس‌ورکر PWA در اپ اندروید ثبت نمی‌شود | نبود پروژه Firebase؛ جلوگیری از کرش FCM | فعال‌سازی همیشگی Push | تأیید appId پیش از انتشار لازم است | ۲۲.۱ / F8 |
+| D39 | Refresh Token در Backend محلی (حافظه) با Rotation و پنجره مهلت ۳۰ ثانیه‌ای؛ در Firebase رفتار استاندارد Secure Token | جلوگیری از خروج ناخواسته هنگام قطع درخواست Refresh با Reload صفحه | Rotation سخت | پنجره کوتاه استفاده مجدد | ۲۴ |
+| D40 | کنتراست WCAG AA بر رنگ برند مقدم است: primary از #1B8A5A به #177A50 (۵٫۳۴:۱) و توکن‌های `*-fg` فقط برای متن (muted/warning/success/danger/info) | تصمیم مشتری (۲۰۲۶-۰۹-۲۸) — تناقض ۱۶.۲ با ۱۶ (WCAG AA ≥۴٫۵) | استثنا؛ دو رنگ جدا برای متن/پس‌زمینه | تغییر بسیار جزئی ظاهر رنگ برند | ۱۶ / ۲۸ |
 
 ## 37 Definition of Done
 

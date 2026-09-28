@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">سیلانه‌سبز لرنینگ</string>
+    <string name="title_activity_main">سیلانه‌سبز لرنینگ</string>
+    <string name="package_name">ir.seylanesabz.learning</string>
+    <string name="custom_url_scheme">ir.seylanesabz.learning</string>
+</resources>

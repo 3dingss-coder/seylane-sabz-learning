@@ -1,0 +1,25 @@
+{
+  "name": "seylane-sabz-learning",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Seylane Sabz Learning — corporate micro-learning / sales enablement (monorepo)",
+  "workspaces": [
+    "apps/web",
+    "functions"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "npm run dev -w apps/web",
+    "build": "npm run build -w functions && npm run build -w apps/web",
+    "lint": "npm run lint -w functions && npm run lint -w apps/web",
+    "typecheck": "npm run typecheck -w functions && npm run typecheck -w apps/web",
+    "test": "npm run test -w functions && npm run test -w apps/web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}

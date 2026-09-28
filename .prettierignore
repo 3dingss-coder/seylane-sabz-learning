@@ -1,0 +1,14 @@
+node_modules
+dist
+lib
+coverage
+package-lock.json
+PRODUCT-MASTER-SPEC.md
+*.md
+کامپوننت های کمکی برای تکمیل UI UX اپلیکیشن
+لیست برندها و محصولات سیلانه سبز
+لوگو برندها و تصاویر محصولات
+apps/web/src/components/_legacy
+apps/web/public
+functions/.local-data
+.local-data
