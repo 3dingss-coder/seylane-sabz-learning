@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test('gallery renders RTL Persian UI with real brand logos', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/gallery');
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
   await expect(page.locator('html')).toHaveAttribute('lang', 'fa');
   // 12 active brands from «لیست برندها و محصولات سیلانه سبز», each with its real logo.
@@ -14,7 +14,7 @@ test('gallery renders RTL Persian UI with real brand logos', async ({ page }) =>
 });
 
 test('Vazirmatn font is loaded (self-hosted)', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/gallery');
   await page.evaluate(() => document.fonts.ready);
   const loaded = await page.evaluate(() =>
     document.fonts.check('16px "Vazirmatn Variable"', 'سلام'),
@@ -23,7 +23,7 @@ test('Vazirmatn font is loaded (self-hosted)', async ({ page }) => {
 });
 
 test('all buttons meet the 48px touch target', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/gallery');
   const buttons = page.locator('main button:visible');
   for (const b of await buttons.all()) {
     const box = await b.boundingBox();
@@ -32,7 +32,7 @@ test('all buttons meet the 48px touch target', async ({ page }) => {
 });
 
 test('modal opens, traps focus and closes with Escape', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/gallery');
   await page.getByRole('button', { name: 'باز کردن پنجره تأیید' }).click();
   const dialog = page.getByRole('dialog', { name: 'لغو انتساب' });
   await expect(dialog).toBeVisible();
