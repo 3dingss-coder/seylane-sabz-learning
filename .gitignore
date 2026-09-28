@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+functions/lib/
+coverage/
+.vite/
+*.log
+.DS_Store
+# env / secrets — never commit
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+service-account*.json
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+# generated asset mirror (source of truth = repo asset folders)
+apps/web/public/catalog/
+# Playwright
+test-results/
+playwright-report/
+# Python export output
+exports/
+apps/web/public/icons/
+apps/web/dev-dist/

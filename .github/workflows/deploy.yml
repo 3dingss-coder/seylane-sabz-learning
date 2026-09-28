@@ -1,0 +1,72 @@
+name: Deploy
+
+# Runs only after CI passes on main (dev env) — prod deploys are manual (workflow_dispatch).
+# Requires GitHub Secrets (never commit them):
+#   FIREBASE_SERVICE_ACCOUNT_DEV / FIREBASE_SERVICE_ACCOUNT_PROD  (JSON)
+#   FIREBASE_PROJECT_DEV / FIREBASE_PROJECT_PROD
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PAGES_PROJECT
+#   VITE_FIREBASE_* (public web config per environment)
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    env:
+      TARGET: ${{ github.event.inputs.environment || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deploy secrets are configured
+        id: secrets
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}" ] || [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Deploy secrets missing — skipping deploy (see README › Deployment)."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.configured == 'true'
+        with:
+          node-version: 20
+          cache: npm
+      - if: steps.secrets.outputs.configured == 'true'
+        run: npm ci
+      - name: Build web
+        if: steps.secrets.outputs.configured == 'true'
+        run: npm run build
+        env:
+          VITE_APP_ENV: ${{ env.TARGET }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+      - name: Deploy Cloud Functions + Rules
+        if: steps.secrets.outputs.configured == 'true'
+        run: |
+          echo '${{ env.TARGET == 'prod' && secrets.FIREBASE_SERVICE_ACCOUNT_PROD || secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}' > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx -y firebase-tools@14 deploy --only functions --project "${{ env.TARGET == 'prod' && secrets.FIREBASE_PROJECT_PROD || secrets.FIREBASE_PROJECT_DEV }}" --non-interactive
+          rm -f "$RUNNER_TEMP/sa.json"
+      - name: Deploy PWA to Cloudflare Pages
+        if: steps.secrets.outputs.configured == 'true'
+        run: npx -y wrangler@4 pages deploy apps/web/dist --project-name "${{ secrets.CLOUDFLARE_PAGES_PROJECT }}" --branch "${{ env.TARGET == 'prod' && 'main' || 'dev' }}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
