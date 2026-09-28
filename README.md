@@ -51,7 +51,7 @@ Client-provided folders stay at the repo root exactly as delivered. They are rea
 
 ```bash
 npm install
-# One command — API (5001) + web (5173) together:
+# One command, one port — web app + API together on http://localhost:5173 (best for previews):
 npm start
 # …or run them separately. API with the in-memory backend, seeded with the real catalog + sample packages + demo users:
 cd functions && npx tsx src/local.ts          # http://localhost:5001/v1/health
