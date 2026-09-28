@@ -5,6 +5,7 @@
  *
  *   npm start          (PORT=5173 by default; RESEED=true to wipe and re-seed)
  */
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -18,7 +19,18 @@ import { runSeed } from '../functions/src/seed/seed';
 const repoRoot = path.resolve(__dirname, '..');
 const webRoot = path.join(repoRoot, 'apps', 'web');
 
+/** Loads functions/.env.local and functions/.env (git-ignored), e.g. GEMINI_API_KEY for the mentor. */
+function loadLocalEnv() {
+  for (const f of ['.env.local', '.env']) {
+    const file = path.join(repoRoot, 'functions', f);
+    if (!fs.existsSync(file)) continue;
+    process.loadEnvFile(file); // never overrides variables already set in the environment
+    console.info(`[dev] loaded functions/${f}`);
+  }
+}
+
 async function main() {
+  loadLocalEnv();
   // Mirror logos / product images / icons into apps/web/public (same as `npm run dev`).
   execFileSync(process.execPath, [path.join(webRoot, 'scripts', 'sync-assets.mjs')], {
     cwd: webRoot,
@@ -40,6 +52,11 @@ async function main() {
     console.info(`[dev] seed done: ${report.brands} brands, ${report.packages} packages`);
   }
   const api = createApp(deps);
+  console.info(
+    config.geminiApiKey
+      ? `[dev] mentor: Gemini (${config.geminiModel})`
+      : '[dev] mentor: no GEMINI_API_KEY — answers are quoted from training content (add the key to functions/.env.local for AI replies)',
+  );
 
   const app = express();
   const server = http.createServer(app);

@@ -4,6 +4,7 @@ import { KeyRound, Phone, UserRound } from 'lucide-react';
 import { Button, Card, Input } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { homePathFor, useAuth } from '@/lib/auth';
+import { canAccess } from '@/lib/roles';
 import { toLatinDigits } from '@/lib/digits';
 import { track } from '@/lib/telemetry';
 
@@ -25,7 +26,12 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
 
   if (status === 'authenticated' && user) {
     const from = (loc.state as { from?: string } | null)?.from;
-    return <Navigate to={from && from !== '/login' ? from : homePathFor(user.role)} replace />;
+    return (
+      <Navigate
+        to={from && from !== '/login' && canAccess(user.role, from) ? from : homePathFor(user.role)}
+        replace
+      />
+    );
   }
 
   const switchMode = (m: Mode) => {
@@ -64,9 +70,15 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
         mode === 'login'
           ? await login(id, password)
           : await register({ name: name.trim(), identifier: id, password });
-      nav(u.role === 'marketer' && !u.onboardedAt ? '/onboarding' : homePathFor(u.role), {
-        replace: true,
-      });
+      // Return to the page that sent the user here (e.g. /admin/users) when their role allows it.
+      const from = (loc.state as { from?: string } | null)?.from;
+      const target =
+        u.role === 'marketer' && !u.onboardedAt
+          ? '/onboarding'
+          : from && from !== '/login' && canAccess(u.role, from)
+            ? from
+            : homePathFor(u.role);
+      nav(target, { replace: true });
     } catch (e) {
       if (e instanceof ApiError) {
         const f = e.fields;
@@ -173,9 +185,38 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
           )}
         </div>
       </Card>
+      {import.meta.env.DEV && mode === 'login' && (
+        <Card className="mt-4 w-full max-w-sm">
+          <p className="mb-2 text-sm font-bold text-text">حساب‌های آزمایشی (فقط محیط توسعه)</p>
+          <div className="grid grid-cols-2 gap-2">
+            {DEMO_ACCOUNTS.map((a) => (
+              <button
+                key={a.phone}
+                type="button"
+                className="min-h-12 rounded-input border border-border px-2 text-sm text-text hover:border-primary/40"
+                onClick={() => {
+                  setIdentifier(a.phone);
+                  setPassword('demo1234');
+                }}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-text-secondary">رمز همه: demo1234</p>
+        </Card>
+      )}
       <Link to="/gallery" className="sr-only">
         راهنمای طراحی
       </Link>
     </div>
   );
 }
+
+/** Seeded local accounts (functions/src/seed/demo.ts). Rendered only in `vite dev`. */
+const DEMO_ACCOUNTS = [
+  { phone: '09120000001', label: 'مدیر ارشد' },
+  { phone: '09120000002', label: 'ادمین' },
+  { phone: '09120000003', label: 'مدیر تیم' },
+  { phone: '09120000004', label: 'بازاریاب' },
+];

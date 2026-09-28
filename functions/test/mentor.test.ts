@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FakeLlm } from '../src/llm/types';
+import { extractiveAnswer } from '../src/services/mentor';
 import { buildFixture, createCtx } from './support/ctx';
 
 async function setup(llm: FakeLlm | null = new FakeLlm()) {
@@ -54,7 +55,24 @@ describe('AI mentor (PROMPT 014)', () => {
     const a = await setup(failing);
     expect((await a.ask('این کرم برای چه پوستی مناسب است؟')).body.data.outcome).toBe('fallback');
     const b = await setup(null);
-    expect((await b.ask('این کرم برای چه پوستی مناسب است؟')).body.data.outcome).toBe('fallback');
+    const r = await b.ask('این کرم برای چه پوستی مناسب است؟');
+    expect(r.body.data.outcome).toBe('fallback');
+    // Without an LLM the reply quotes approved content instead of "unavailable".
+    expect(r.body.data.reply).toMatch(/^طبق محتوای آموزش: /);
+    expect(r.body.data.reply).not.toContain('در دسترس نیست');
+  });
+
+  it('extractive answer picks matching sentences and skips questions', () => {
+    const chunk = {
+      sourceType: 'section' as const,
+      sourceId: 's1',
+      title: 'معرفی',
+      text: 'این کرم برای چه پوستی مناسب است؟ این کرم برای پوست خشک و حساس مناسب است. بسته‌بندی آن آبی است.',
+    };
+    const out = extractiveAnswer('کرم برای پوست خشک', [chunk]);
+    expect(out).toContain('پوست خشک و حساس');
+    expect(out).not.toContain('؟');
+    expect(extractiveAnswer('قیمت عمده', [chunk])).toBeNull();
   });
 
   it('enforces the per-user daily limit (429 Persian)', async () => {
