@@ -44,6 +44,32 @@ export default defineConfig(({ mode }) => {
               handler: 'CacheFirst',
               options: { cacheName: 'catalog-images', expiration: { maxEntries: 400 } },
             },
+            {
+              // Brand logos / product images served publicly (local API or Firebase Storage).
+              urlPattern: ({ url }) =>
+                url.pathname.includes('/v1/files/public/') ||
+                ((url.hostname === 'firebasestorage.googleapis.com' ||
+                  url.hostname === 'storage.googleapis.com') &&
+                  /(brands|products)(%2F|\/)/.test(url.pathname)),
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'catalog-remote-images',
+                expiration: { maxEntries: 500, maxAgeSeconds: 30 * 24 * 3600 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              // Read-only learner data: show last known state offline (M3 error state), never cache writes.
+              urlPattern: ({ url, request }) =>
+                request.method === 'GET' && /\/v1\/me\/(home|packages)/.test(url.pathname),
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'api-me',
+                networkTimeoutSeconds: 6,
+                expiration: { maxEntries: 60, maxAgeSeconds: 7 * 24 * 3600 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
           ],
         },
       }),
@@ -57,7 +83,12 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true,
       proxy: { '/v1': { target: apiTarget, changeOrigin: true } },
     },
-    preview: { host: '0.0.0.0', port: 4173, allowedHosts: true },
+    preview: {
+      host: '0.0.0.0',
+      port: 4173,
+      allowedHosts: true,
+      proxy: { '/v1': { target: apiTarget, changeOrigin: true } },
+    },
     test: {
       environment: 'jsdom',
       globals: false,
