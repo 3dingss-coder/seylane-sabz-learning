@@ -325,6 +325,20 @@ export function adminRouter(d: Deps, limiter: RateLimiter): Router {
       ),
     ),
   );
+  const retakeNote = z.object({ note: z.string().trim().max(500).nullable().optional() });
+  for (const decision of ['approved', 'rejected'] as const)
+    r.post(
+      `/admin/retake-requests/:id/${decision === 'approved' ? 'approve' : 'reject'}`,
+      h(async (req) =>
+        reports.reviewRetake(
+          d,
+          me(req),
+          id(req),
+          decision,
+          parse(retakeNote, req.body).note ?? null,
+        ),
+      ),
+    );
   r.get(
     '/admin/mentor/transcripts/:userId',
     requireRole('superadmin'),

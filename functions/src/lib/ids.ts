@@ -7,7 +7,8 @@ export const ids = {
   points: (userId: string, reason: string, refId: string) => `${userId}_${reason}_${refId}`,
   userBadge: (userId: string, badgeId: string) => `${userId}_${badgeId}`,
   escalation: (userId: string, packageId: string, type: string) => `${userId}_${packageId}_${type}`,
-  uniqueKey: (kind: 'phone' | 'email', value: string) => `${kind}_${createHash('sha256').update(value.toLowerCase()).digest('hex').slice(0, 40)}`,
+  uniqueKey: (kind: 'phone' | 'email', value: string) =>
+    `${kind}_${createHash('sha256').update(value.toLowerCase()).digest('hex').slice(0, 40)}`,
   hash: (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 40),
 };
 

@@ -4,16 +4,8 @@
       "source": "functions",
       "codebase": "default",
       "runtime": "nodejs20",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "test",
-        "*.log",
-        "src"
-      ],
-      "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run build"
-      ]
+      "ignore": ["node_modules", ".git", "test", "*.log", "src"],
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"]
     }
   ],
   "emulators": {

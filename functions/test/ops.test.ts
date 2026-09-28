@@ -11,11 +11,21 @@ let ctx: TestCtx;
 const tokens: Record<string, string> = {};
 beforeAll(async () => {
   ctx = await createCtx();
-  await runSeed(ctx.deps, { repoRoot: path.resolve(__dirname, '..', '..'), demo: true, linkLocalFiles: true });
+  await runSeed(ctx.deps, {
+    repoRoot: path.resolve(__dirname, '..', '..'),
+    demo: true,
+    linkLocalFiles: true,
+  });
 }, 120_000);
 
 async function loginAll() {
-  for (const [k, phone] of Object.entries({ sa: '09120000001', admin: '09120000002', mgr: '09120000003', sara: '09120000004', ali: '09120000005' })) {
+  for (const [k, phone] of Object.entries({
+    sa: '09120000001',
+    admin: '09120000002',
+    mgr: '09120000003',
+    sara: '09120000004',
+    ali: '09120000005',
+  })) {
     const r = await ctx.api().post('/v1/auth/login', { identifier: phone, password: 'demo1234' });
     tokens[k] = r.body.data.idToken;
   }
@@ -75,10 +85,24 @@ describe('reports & admin lists', () => {
     await ok(tokens.mgr, '/v1/manager/retake-requests');
   });
   it('marketer inbox/points/mentor endpoints respond', async () => {
-    for (const url of ['/v1/me/notifications', '/v1/me/messages', '/v1/me/points', '/v1/me/badges', '/v1/me/mentor/nudges', '/v1/me/mentor/history', '/v1/me/packages?status=new']) await ok(tokens.sara, url);
+    for (const url of [
+      '/v1/me/notifications',
+      '/v1/me/messages',
+      '/v1/me/points',
+      '/v1/me/badges',
+      '/v1/me/mentor/nudges',
+      '/v1/me/mentor/history',
+      '/v1/me/packages?status=new',
+    ])
+      await ok(tokens.sara, url);
   });
   it('manual notification to a team', async () => {
-    const r = await ctx.api(tokens.admin).post('/v1/admin/notifications/send', { audience: 'team', targetId: 'team-tehran', title: 'اطلاعیه', body: 'جلسه فردا ساعت ۱۰' });
+    const r = await ctx.api(tokens.admin).post('/v1/admin/notifications/send', {
+      audience: 'team',
+      targetId: 'team-tehran',
+      title: 'اطلاعیه',
+      body: 'جلسه فردا ساعت ۱۰',
+    });
     expect(r.status).toBeLessThan(300);
   });
 });

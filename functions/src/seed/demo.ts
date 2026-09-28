@@ -1,5 +1,8 @@
 import type { Deps } from '../services/context';
+import type { User } from '../domain/types';
+import { recordProgress } from '../services/learning';
 import { ensureUser } from '../services/users';
+import type { Doc } from '../store/types';
 
 /**
  * Demo users/teams for dev + E2E only (never run on prod unless `--demo`).
@@ -79,6 +82,31 @@ export async function seedDemo(d: Deps) {
     if (u.role === 'manager' && u.team)
       await d.store.update(`teams/${u.team}`, { managerId: user.id });
     out.push({ role: u.role, name: u.name, phone: u.phone, password: DEMO_PASSWORD });
+    if (u.key === 'marketer2') await seedDemoProgress(d, user.id);
   }
   return out;
+}
+
+/**
+ * A little real progress for «علی رضایی» so the manager dashboard/report show data on a
+ * fresh seed. Goes through the same heartbeat service as the app (idempotent keys), so
+ * re-running the seed never double-counts.
+ */
+async function seedDemoProgress(d: Deps, userId: string) {
+  const user = await d.store.get<User>(`users/${userId}`);
+  if (!user) return;
+  const doc = user as Doc<User>;
+  for (let i = 0; i < 3; i++) {
+    try {
+      await recordProgress(
+        d,
+        doc,
+        'seed-pkg-formi-s1',
+        { positionSec: (i + 1) * 60, playedDeltaSec: 60, event: 'heartbeat' },
+        `demo-seed-${userId}-${i}`,
+      );
+    } catch {
+      return; // package not assigned/published in this environment — skip quietly
+    }
+  }
 }

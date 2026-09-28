@@ -9,7 +9,10 @@ export function addMs(d: Date, ms: number): Date {
 }
 
 /** Local wall-clock parts in an IANA timezone (default Asia/Tehran). */
-export function zonedParts(d: Date, timeZone: string): { year: number; month: number; day: number; hour: number; minute: number; weekday: number } {
+export function zonedParts(
+  d: Date,
+  timeZone: string,
+): { year: number; month: number; day: number; hour: number; minute: number; weekday: number } {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone,
     year: 'numeric',
@@ -44,7 +47,11 @@ function toMinutes(hhmm: string): number {
 }
 
 /** Whether `d` falls within quiet hours [start, end) in `timeZone` (window may cross midnight). */
-export function inQuietHours(d: Date, quiet: { start: string; end: string }, timeZone: string): boolean {
+export function inQuietHours(
+  d: Date,
+  quiet: { start: string; end: string },
+  timeZone: string,
+): boolean {
   const p = zonedParts(d, timeZone);
   const now = p.hour * 60 + p.minute;
   const s = toMinutes(quiet.start);
@@ -54,7 +61,11 @@ export function inQuietHours(d: Date, quiet: { start: string; end: string }, tim
 }
 
 /** Next instant (≥ d) at which quiet hours end. */
-export function quietHoursEnd(d: Date, quiet: { start: string; end: string }, timeZone: string): Date {
+export function quietHoursEnd(
+  d: Date,
+  quiet: { start: string; end: string },
+  timeZone: string,
+): Date {
   // Step minute-by-minute is simple and bounded (≤ 24h * 60 = 1440 iterations).
   let t = new Date(Math.ceil(d.getTime() / 60_000) * 60_000);
   for (let i = 0; i < 1500 && inQuietHours(t, quiet, timeZone); i++) t = addMs(t, 60_000);

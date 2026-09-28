@@ -37,12 +37,23 @@ function required(s) {
 function matches(idx, req) {
   const fields = idx.fields;
   if (fields.length !== req.eq.length + req.tail.length) return false;
-  const prefix = fields.slice(0, req.eq.length).map((f) => f.fieldPath).sort();
+  const prefix = fields
+    .slice(0, req.eq.length)
+    .map((f) => f.fieldPath)
+    .sort();
   if (JSON.stringify(prefix) !== JSON.stringify([...req.eq].sort())) return false;
   const rest = fields.slice(req.eq.length);
-  const dirOf = (f) => (f.order === 'DESCENDING' ? 'desc' : f.order === 'ASCENDING' ? 'asc' : 'array');
-  const same = rest.every((f, i) => f.fieldPath === req.tail[i].f && (req.tail[i].dir === null || dirOf(f) === req.tail[i].dir));
-  const reversed = rest.every((f, i) => f.fieldPath === req.tail[i].f && (req.tail[i].dir === null || dirOf(f) === (req.tail[i].dir === 'asc' ? 'desc' : 'asc')));
+  const dirOf = (f) =>
+    f.order === 'DESCENDING' ? 'desc' : f.order === 'ASCENDING' ? 'asc' : 'array';
+  const same = rest.every(
+    (f, i) =>
+      f.fieldPath === req.tail[i].f && (req.tail[i].dir === null || dirOf(f) === req.tail[i].dir),
+  );
+  const reversed = rest.every(
+    (f, i) =>
+      f.fieldPath === req.tail[i].f &&
+      (req.tail[i].dir === null || dirOf(f) === (req.tail[i].dir === 'asc' ? 'desc' : 'asc')),
+  );
   return same || reversed;
 }
 
@@ -51,7 +62,14 @@ for (const s of shapes.values()) {
   const req = required(s);
   if (!req) continue;
   const ok = indexes.some((i) => i.collectionGroup === s.collection && matches(i, req));
-  if (!ok) missing.push({ collection: s.collection, fields: [...req.eq.map((f) => `${f} ==`), ...req.tail.map((t) => `${t.f} ${t.dir ?? 'range'}`)] });
+  if (!ok)
+    missing.push({
+      collection: s.collection,
+      fields: [
+        ...req.eq.map((f) => `${f} ==`),
+        ...req.tail.map((t) => `${t.f} ${t.dir ?? 'range'}`),
+      ],
+    });
 }
 console.log(`query shapes: ${shapes.size}, composite-index misses: ${missing.length}`);
 for (const m of missing) console.log(`  ✗ ${m.collection}: ${m.fields.join(', ')}`);

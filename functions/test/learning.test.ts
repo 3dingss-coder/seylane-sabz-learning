@@ -161,6 +161,49 @@ describe('quiz & sequential lock (PROMPT 010)', () => {
     expect(again.body.data.pointsEarned).toBe(0); // not first-try
   });
 
+  it('27.2 escalated retake (after 2 approvals) is admin-only', async () => {
+    await ctx.deps.store.set('teams/t1', {
+      name: 'تیم',
+      managerId: null,
+      archived: false,
+      createdAt: '',
+      updatedAt: '',
+    });
+    const mk = await ctx.user('marketer', { teamId: 't1' });
+    const mgr = await ctx.user('manager', { teamId: 't1' });
+    const admin = await ctx.user('admin');
+    const s1 = fx.sections[0];
+    await watchSection(ctx, mk.token, s1?.id ?? '', 120);
+    const wrong = Object.fromEntries(Object.keys(s1?.answers ?? {}).map((k) => [k, 'a']));
+    const failUntilBlocked = async () => {
+      for (;;) {
+        ctx.limiter.reset();
+        const st = await ctx.api(mk.token).post(`/v1/me/quizzes/${s1?.quizId}/attempts`);
+        if (st.status === 409) return;
+        await ctx
+          .api(mk.token)
+          .post(`/v1/me/attempts/${st.body.data.attemptId}/submit`, { answers: wrong });
+      }
+    };
+    for (let round = 0; round < 2; round++) {
+      await failUntilBlocked();
+      const rq = await ctx.api(mk.token).post(`/v1/me/quizzes/${s1?.quizId}/retake-requests`);
+      expect(rq.body.data.escalated ?? false).toBe(false);
+      await ctx.api(mgr.token).post(`/v1/manager/retake-requests/${rq.body.data.id}/approve`, {});
+    }
+    await failUntilBlocked();
+    const third = await ctx.api(mk.token).post(`/v1/me/quizzes/${s1?.quizId}/retake-requests`);
+    expect(third.status).toBe(201);
+    const denied = await ctx
+      .api(mgr.token)
+      .post(`/v1/manager/retake-requests/${third.body.data.id}/approve`, {});
+    expect(denied.status).toBe(403);
+    const ok = await ctx
+      .api(admin.token)
+      .post(`/v1/admin/retake-requests/${third.body.data.id}/approve`, { note: 'آخرین فرصت' });
+    expect(ok.status).toBe(200);
+  });
+
   it('28.2 #6 completing the package twice never re-awards points', async () => {
     for (const s of fx.sections) {
       await watchSection(ctx, m.token, s.id, 120);

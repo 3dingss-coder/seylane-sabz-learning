@@ -49,7 +49,11 @@ function withQueryLog(store: DocStore, file: string): DocStore {
   const original = store.query.bind(store);
   store.query = (async (spec: QuerySpec) => {
     const collection = spec.collection.split('/').pop() ?? spec.collection;
-    const shape = { collection, where: (spec.where ?? []).map(([f, op]) => [f, op]), orderBy: spec.orderBy ?? [] };
+    const shape = {
+      collection,
+      where: (spec.where ?? []).map(([f, op]) => [f, op]),
+      orderBy: spec.orderBy ?? [],
+    };
     fs.appendFileSync(file, `${JSON.stringify(shape)}\n`);
     return original(spec);
   }) as DocStore['query'];

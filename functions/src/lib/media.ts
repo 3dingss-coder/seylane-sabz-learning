@@ -2,11 +2,42 @@
 
 export type MediaKind = 'video' | 'audio' | 'image';
 
-export const MEDIA_RULES: Record<MediaKind, { mimes: string[]; maxBytes: number; label: string }> = {
-  audio: { mimes: ['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/ogg'], maxBytes: 100 * 1024 * 1024, label: 'صوت' },
-  video: { mimes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska', 'video/3gpp', 'video/x-msvideo', 'video/avi'], maxBytes: 500 * 1024 * 1024, label: 'ویدیو' },
-  image: { mimes: ['image/png', 'image/jpeg', 'image/webp'], maxBytes: 5 * 1024 * 1024, label: 'تصویر' },
-};
+export const MEDIA_RULES: Record<MediaKind, { mimes: string[]; maxBytes: number; label: string }> =
+  {
+    audio: {
+      mimes: [
+        'audio/mpeg',
+        'audio/mp4',
+        'audio/x-m4a',
+        'audio/m4a',
+        'audio/aac',
+        'audio/wav',
+        'audio/x-wav',
+        'audio/wave',
+        'audio/ogg',
+      ],
+      maxBytes: 100 * 1024 * 1024,
+      label: 'صوت',
+    },
+    video: {
+      mimes: [
+        'video/mp4',
+        'video/quicktime',
+        'video/webm',
+        'video/x-matroska',
+        'video/3gpp',
+        'video/x-msvideo',
+        'video/avi',
+      ],
+      maxBytes: 500 * 1024 * 1024,
+      label: 'ویدیو',
+    },
+    image: {
+      mimes: ['image/png', 'image/jpeg', 'image/webp'],
+      maxBytes: 5 * 1024 * 1024,
+      label: 'تصویر',
+    },
+  };
 
 export const EXT: Record<string, string> = {
   'audio/mpeg': 'mp3',
@@ -42,7 +73,9 @@ export function sniff(buf: Buffer): { mime: string; kinds: MediaKind[] } | null 
     return { mime: 'video/mp4', kinds: ['video', 'audio'] };
   }
   if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
-    return ascii(0, Math.min(buf.length, 64)).includes('webm') ? { mime: 'video/webm', kinds: ['video', 'audio'] } : { mime: 'video/x-matroska', kinds: ['video'] };
+    return ascii(0, Math.min(buf.length, 64)).includes('webm')
+      ? { mime: 'video/webm', kinds: ['video', 'audio'] }
+      : { mime: 'video/x-matroska', kinds: ['video'] };
   }
   if (ascii(0, 4) === 'RIFF') {
     const sub = ascii(8, 12);
@@ -52,10 +85,13 @@ export function sniff(buf: Buffer): { mime: string; kinds: MediaKind[] } | null 
   }
   if (ascii(0, 4) === 'OggS') return { mime: 'audio/ogg', kinds: ['audio'] };
   if (ascii(0, 3) === 'ID3') return { mime: 'audio/mpeg', kinds: ['audio'] };
-  if (buf[0] === 0xff && ((buf[1] ?? 0) & 0xf6) === 0xf0) return { mime: 'audio/aac', kinds: ['audio'] };
-  if (buf[0] === 0xff && ((buf[1] ?? 0) & 0xe0) === 0xe0) return { mime: 'audio/mpeg', kinds: ['audio'] };
+  if (buf[0] === 0xff && ((buf[1] ?? 0) & 0xf6) === 0xf0)
+    return { mime: 'audio/aac', kinds: ['audio'] };
+  if (buf[0] === 0xff && ((buf[1] ?? 0) & 0xe0) === 0xe0)
+    return { mime: 'audio/mpeg', kinds: ['audio'] };
   if (buf[0] === 0x89 && ascii(1, 4) === 'PNG') return { mime: 'image/png', kinds: ['image'] };
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return { mime: 'image/jpeg', kinds: ['image'] };
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff)
+    return { mime: 'image/jpeg', kinds: ['image'] };
   return null;
 }
 

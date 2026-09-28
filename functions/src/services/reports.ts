@@ -175,7 +175,9 @@ export function completionRows(
         teamId: m.user.teamId,
         packageId: p.id,
         packageTitle: p.title,
+        brandId: p.brand?.id ?? null,
         brandName: p.brand?.name ?? null,
+        productId: p.product?.id ?? null,
         productName: p.product?.name ?? null,
         percent: p.percent,
         status: p.status,
@@ -383,6 +385,8 @@ export async function reviewRetake(
     if (!r) throw new ApiError('NOT_FOUND', 'درخواست پیدا نشد.');
     if (reviewer.role === 'manager' && (!reviewer.teamId || r.teamId !== reviewer.teamId))
       throw new ApiError('FORBIDDEN', 'این درخواست مربوط به تیم شما نیست.');
+    if (reviewer.role === 'manager' && r.escalated && r.status === 'pending')
+      throw new ApiError('FORBIDDEN', 'این درخواست به مدیر سیستم ارجاع شده است.');
     if (r.status !== 'pending') {
       if (r.status === decision) return { r, changed: false };
       throw new ApiError('CONFLICT', 'این درخواست قبلاً بررسی شده است.');

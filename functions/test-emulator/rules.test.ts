@@ -1,7 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import {
+  assertFails,
+  assertSucceeds,
+  initializeTestEnvironment,
+  type RulesTestEnvironment,
+} from '@firebase/rules-unit-testing';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+} from 'firebase/firestore';
 import { ref, getBytes, uploadBytes } from 'firebase/storage';
 import { afterAll, beforeAll, describe, it } from 'vitest';
 
@@ -18,7 +32,8 @@ beforeAll(async () => {
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (c) => {
     const db = c.firestore();
-    const u = (id: string, role: string, teamId: string | null, status = 'active') => setDoc(doc(db, `users/${id}`), { name: id, role, teamId, status });
+    const u = (id: string, role: string, teamId: string | null, status = 'active') =>
+      setDoc(doc(db, `users/${id}`), { name: id, role, teamId, status });
     await u('mA', 'manager', 'tA');
     await u('mB', 'manager', 'tB');
     await u('a1', 'marketer', 'tA');
@@ -42,7 +57,8 @@ beforeAll(async () => {
 });
 afterAll(async () => env?.cleanup());
 
-const as = (uid: string | null) => (uid ? env.authenticatedContext(uid).firestore() : env.unauthenticatedContext().firestore());
+const as = (uid: string | null) =>
+  uid ? env.authenticatedContext(uid).firestore() : env.unauthenticatedContext().firestore();
 
 describe('firestore rules', () => {
   it('deny-by-default: unauthenticated reads fail', async () => {
@@ -50,7 +66,9 @@ describe('firestore rules', () => {
     await assertFails(getDoc(doc(as(null), 'users/a1')));
   });
   it('no client writes anywhere (progress/points tampering blocked)', async () => {
-    await assertFails(setDoc(doc(as('a1'), 'section_progress/a1_s'), { userId: 'a1', percent: 100 }));
+    await assertFails(
+      setDoc(doc(as('a1'), 'section_progress/a1_s'), { userId: 'a1', percent: 100 }),
+    );
     await assertFails(updateDoc(doc(as('a1'), 'users/a1'), { role: 'admin' }));
     await assertFails(setDoc(doc(as('adm'), 'brands/new'), { name: 'x' }));
     await assertFails(setDoc(doc(as('a1'), 'points_ledger/x'), { userId: 'a1', amount: 1000 }));
@@ -69,7 +87,9 @@ describe('firestore rules', () => {
     await assertFails(getDoc(doc(as('mA'), 'users/b1')));
     await assertSucceeds(getDoc(doc(as('mA'), 'section_progress/a1_s')));
     await assertFails(getDoc(doc(as('mA'), 'section_progress/b1_s')));
-    await assertSucceeds(getDocs(query(collection(as('a1'), 'notifications'), where('userId', '==', 'a1'))));
+    await assertSucceeds(
+      getDocs(query(collection(as('a1'), 'notifications'), where('userId', '==', 'a1'))),
+    );
     await assertFails(getDocs(collection(as('a1'), 'notifications')));
   });
   it('drafts are admin-only; inactive users read nothing', async () => {
