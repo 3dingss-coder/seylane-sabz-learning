@@ -26,8 +26,8 @@ const ACTION_LABEL = { start: 'شروع', resume: 'ادامه', quiz: 'شروع 
 
 /** M3 — Home («کار بعدی»): the single most important screen. */
 export function HomePage() {
-  const home = useHome();
   const { user } = useAuth();
+  const home = useHome(user?.id);
   const nav = useNavigate();
   const loc = useLocation();
   const highlight = (loc.state as { highlightNext?: boolean } | null)?.highlightNext;

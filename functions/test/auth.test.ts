@@ -142,6 +142,20 @@ describe('auth (PROMPT 002)', () => {
     expect(statuses[5]).toBe(429);
   });
 
+  it('a spoofed X-Forwarded-For cannot bypass the per-IP limit (trust proxy = 1 hop)', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++)
+      statuses.push(
+        (
+          await ctx
+            .api()
+            .post('/v1/auth/register', { name: 'x' })
+            .set('X-Forwarded-For', `10.0.0.${i}, 203.0.113.7`)
+        ).status,
+      );
+    expect(statuses[5]).toBe(429);
+  });
+
   it('marketer can change own name only (mass-assignment safe)', async () => {
     const u = await ctx.user('marketer');
     const r = await ctx.api(u.token).patch('/v1/me', { name: 'نام جدید', role: 'admin' });

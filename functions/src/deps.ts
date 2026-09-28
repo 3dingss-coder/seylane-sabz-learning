@@ -65,7 +65,7 @@ export async function buildFirebaseDeps(config: AppConfig): Promise<Deps> {
     store: new FirestoreStore(db),
     auth: new FirebaseAuthProvider(getAuth(), config.firebaseWebApiKey),
     blob: new FirebaseBlobStore(getStorage().bucket()),
-    push: new FcmPushSender(getMessaging()),
+    push: new FcmPushSender(getMessaging(), config.appUrl),
     mail: await mailerFrom(config),
     llm: llmFrom(config),
     clock: systemClock,

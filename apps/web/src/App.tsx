@@ -5,7 +5,8 @@ import { ToastProvider } from '@/components/ui';
 import { ApiError } from '@/lib/api';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { isNative, registerPush } from '@/lib/native';
-import { track } from '@/lib/telemetry';
+import { resumeWebPush } from '@/lib/webPush';
+import { setCrashUser, track } from '@/lib/telemetry';
 import { MarketerLayout } from '@/layouts/MarketerLayout';
 import { FullPageSpinner, RequireAuth } from '@/layouts/RequireAuth';
 import { AuthPage } from '@/pages/auth/AuthPage';
@@ -28,14 +29,17 @@ const GalleryPage = lazy(() =>
   import('@/pages/GalleryPage').then((m) => ({ default: m.GalleryPage })),
 );
 
-/** App-open event + Android push registration once the user is signed in. */
+/** App-open event, push registration (Android + web) and crash-report user tag. */
 function NativeBridge() {
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const nav = useNavigate();
+  const uid = user?.id ?? null;
+  useEffect(() => setCrashUser(uid), [uid]);
   useEffect(() => {
     if (status !== 'authenticated') return;
     track('app_opened', { native: isNative() });
     void registerPush((to) => nav(to));
+    void resumeWebPush();
   }, [status, nav]);
   return null;
 }

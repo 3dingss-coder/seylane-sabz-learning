@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
+import { lastKnown } from './lastKnown';
 import type {
   HomeData,
   MessageItem,
@@ -23,8 +24,21 @@ export const qk = {
   chat: (pkg: string | null) => ['me', 'chat', pkg ?? 'all'] as const,
 };
 
-export const useHome = () =>
-  useQuery({ queryKey: qk.home, queryFn: ({ signal }) => api.get<HomeData>('/me/home', signal) });
+/** Home («کار بعدی») with a per-user last-known copy so errors/offline still show state (F9). */
+export const useHome = (uid: string | undefined) => {
+  const cached = lastKnown.get<HomeData>('home', uid);
+  return useQuery({
+    queryKey: qk.home,
+    queryFn: async ({ signal }) => {
+      const data = await api.get<HomeData>('/me/home', signal);
+      if (uid) lastKnown.save('home', uid, data);
+      return data;
+    },
+    initialData: cached?.data,
+    // Treat the local copy as stale so it is refetched immediately on mount.
+    initialDataUpdatedAt: cached ? 0 : undefined,
+  });
+};
 export const usePackages = () =>
   useQuery({
     queryKey: qk.packages(),

@@ -161,3 +161,35 @@ describe('M7/M8 quiz', () => {
     await waitFor(() => expect(screen.queryByTestId('quiz-start')).not.toBeInTheDocument());
   });
 });
+
+describe('F9 home error state — last-known state from local cache', () => {
+  it('cold start without network keeps the session and shows the cached «کار بعدی»', async () => {
+    mockApi({ ...loggedIn(), 'GET /v1/me/home': () => ({ data: home }) });
+    const first = renderApp('/');
+    expect(await screen.findByTestId('next-item')).toHaveTextContent('معرفی کلی محصول فورمی');
+    first.unmount();
+
+    // App restarted offline: every request fails at the network layer.
+    session.clear();
+    localStorage.setItem('ssl.refresh', 'r2');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      }),
+    );
+    renderApp('/');
+    expect(await screen.findByTestId('next-item')).toHaveTextContent('معرفی کلی محصول فورمی');
+    expect(await screen.findByText(/آخرین اطلاعات ذخیره‌شده/)).toBeInTheDocument();
+  });
+
+  it('never shows another user’s cached home and clears it on logout', async () => {
+    const { lastKnown } = await import('@/lib/lastKnown');
+    lastKnown.save('home', 'someone-else', home);
+    expect(lastKnown.get('home', marketer.id)).toBeNull();
+    lastKnown.save('home', marketer.id, home);
+    expect(lastKnown.get('home', marketer.id)?.data).toEqual(home);
+    lastKnown.clear();
+    expect(lastKnown.get('home', marketer.id)).toBeNull();
+  });
+});

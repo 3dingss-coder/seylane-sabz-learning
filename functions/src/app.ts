@@ -24,10 +24,11 @@ export interface AppHandles {
  */
 export function createApp(deps: Deps, handles: Partial<AppHandles> = {}): Express {
   const config: AppConfig = deps.config;
-  const limiter = handles.limiter ?? new RateLimiter(() => deps.clock().getTime());
+  const limiter =
+    handles.limiter ?? new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale);
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', true);
+  app.set('trust proxy', deps.config.trustProxyHops);
 
   // Security headers (spec §24): CSP, HSTS, X-Frame-Options, Referrer-Policy.
   app.use(

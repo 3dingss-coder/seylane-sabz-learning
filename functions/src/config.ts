@@ -22,6 +22,15 @@ export interface AppConfig {
    * (`PLAYBACK_BUDGET=off`, used by the E2E suite to simulate playback quickly) — never on Firestore.
    */
   playbackBudget: boolean;
+  /**
+   * Proxy hops in front of the API whose X-Forwarded-For entry is trusted (TRUST_PROXY_HOPS,
+   * default 1 = Google front end of Cloud Functions/Run; 2 if Cloudflare proxies the API).
+   * Never `true`: that trusts the client-supplied left-most entry and lets anyone bypass per-IP
+   * rate limits (login brute force, §24).
+   */
+  trustProxyHops: number;
+  /** Rate-limit multiplier, memory backend only (RATE_LIMIT_SCALE, used by the E2E suite). */
+  rateLimitScale: number;
   /** SMTP connection URL for the weekly manager digest email (optional). */
   smtpUrl: string;
   /** Public URL of the web app (links in emails). */
@@ -49,6 +58,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     geminiModel: env.GEMINI_MODEL ?? 'gemini-2.5-flash-lite',
     dataDir: env.LOCAL_DATA_DIR ?? '.local-data',
     playbackBudget: !(backend === 'memory' && env.PLAYBACK_BUDGET === 'off'),
+    trustProxyHops: Math.max(0, Math.min(5, Number.parseInt(env.TRUST_PROXY_HOPS ?? '1', 10) || 0)),
+    rateLimitScale:
+      backend === 'memory' ? Math.max(1, Number.parseInt(env.RATE_LIMIT_SCALE ?? '1', 10) || 1) : 1,
     smtpUrl: env.SMTP_URL ?? '',
     appUrl: (env.APP_URL ?? '').replace(/\/$/, ''),
     mailFrom: env.MAIL_FROM ?? 'سیلانه‌سبز لرنینگ <no-reply@seylane-sabz.local>',

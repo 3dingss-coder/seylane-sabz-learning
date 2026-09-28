@@ -8,10 +8,12 @@ import {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, refreshSession, setSessionExpiredHandler } from './api';
+import { ApiError, api, refreshSession, setSessionExpiredHandler } from './api';
 import { flushBeats } from './offline-queue';
 import { unregisterPush } from './native';
 import { session } from './session';
+import { lastKnown } from './lastKnown';
+
 import type { AuthResult, Me, Role } from './types';
 
 interface AuthState {
@@ -47,19 +49,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return r.user;
   }, []);
 
+  // Keep the last-known profile for offline cold starts (F9).
+  useEffect(() => {
+    if (user) lastKnown.saveMe(user);
+  }, [user]);
+
   useEffect(() => {
     setSessionExpiredHandler(() => {
       setUser(null);
       setStatus('anonymous');
       qc.clear();
+      lastKnown.clear();
     });
     if (!session.refresh) return;
     let cancelled = false;
     (async () => {
       const ok = await refreshSession();
       if (!ok) {
-        if (!cancelled) setStatus(session.refresh ? 'authenticated' : 'anonymous');
-        // Offline start with a stored session: stay "authenticated"; data comes from cache.
+        // Offline start with a stored session: stay signed in with the last-known profile;
+        // pages render their last-known data (F9). No cached profile → back to login.
+        if (cancelled) return;
+        const cached = session.refresh ? lastKnown.me<Me>() : null;
+        setUser(cached);
+        setStatus(cached ? 'authenticated' : 'anonymous');
         return;
       }
       try {
@@ -68,8 +80,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(me);
           setStatus('authenticated');
         }
-      } catch {
-        if (!cancelled) setStatus('anonymous');
+      } catch (e) {
+        if (cancelled) return;
+        const cached = e instanceof ApiError && e.status === 401 ? null : lastKnown.me<Me>();
+        setUser(cached);
+        setStatus(cached ? 'authenticated' : 'anonymous');
       }
     })();
     return () => {
@@ -96,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setStatus('anonymous');
         qc.clear();
+        lastKnown.clear();
         try {
           localStorage.removeItem('ssl.beats');
           if ('caches' in window) await caches.delete('api-me');

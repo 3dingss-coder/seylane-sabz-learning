@@ -39,6 +39,8 @@ export default defineConfig(({ mode }) => {
         workbox: {
           // Catalog images are large — cache at runtime instead of precaching.
           globIgnores: ['**/catalog/**'],
+          // Web Push handler (src/lib/webPush.ts) — self-hosted, no Firebase script in the worker.
+          importScripts: ['push-sw.js'],
           navigateFallbackDenylist: [/^\/v1\//],
           runtimeCaching: [
             {

@@ -7,9 +7,13 @@ import { ApiError } from './errors';
  */
 export class RateLimiter {
   private buckets = new Map<string, { count: number; resetAt: number }>();
-  constructor(private readonly now: () => number = () => Date.now()) {}
+  constructor(
+    private readonly now: () => number = () => Date.now(),
+    private readonly scale = 1,
+  ) {}
 
-  hit(key: string, limit: number, windowMs: number): boolean {
+  hit(key: string, baseLimit: number, windowMs: number): boolean {
+    const limit = baseLimit * this.scale;
     const t = this.now();
     if (this.buckets.size > 20_000) {
       for (const [k, b] of this.buckets) if (b.resetAt <= t) this.buckets.delete(k);

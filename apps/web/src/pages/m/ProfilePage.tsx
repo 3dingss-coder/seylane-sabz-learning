@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, Save } from 'lucide-react';
 import { Button, Card, Input, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
+import { PushOptIn } from '@/components/common/PushOptIn';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { errMsg } from '@/lib/errors';
@@ -83,6 +84,7 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
           </Button>
         </form>
       </Card>
+      <PushOptIn />
       <Card>
         <form onSubmit={changePw} className="flex flex-col gap-3">
           <h2 className="text-base font-bold">تغییر رمز</h2>

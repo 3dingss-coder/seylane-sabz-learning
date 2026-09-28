@@ -8,6 +8,7 @@ import { checkInput, checkOutput, retrieve, tokenize } from '../src/services/men
 import { evaluateScheduledRules } from '../src/services/mentor-rules';
 import { render } from '../src/services/notify';
 import { earnedBadgeIds, onTimeStreak, DEFAULT_BADGES } from '../src/services/rewards';
+import { webpushLink } from '../src/push/fcm';
 import { fakeMp4 } from './support/ctx';
 
 describe('normalisation', () => {
@@ -286,5 +287,18 @@ describe('wall-clock playback budget (spendBudget)', () => {
     expect(c.acceptedSec).toBe(60);
     const d = spendBudget(c.next, 10 * 3600_000, 60); // long idle → capped bank
     expect(d.next.bankSec).toBe(BUDGET_CAP_SEC - 60);
+  });
+});
+
+describe('webpushLink (FCM needs an absolute https link)', () => {
+  it('builds an absolute link from APP_URL and drops it when APP_URL is missing/insecure', () => {
+    expect(webpushLink('https://app.example.ir/', '/packages/p1')).toBe(
+      'https://app.example.ir/packages/p1',
+    );
+    expect(webpushLink('https://app.example.ir', 'javascript:alert(1)')).toBe(
+      'https://app.example.ir/',
+    );
+    expect(webpushLink('', '/x')).toBeUndefined();
+    expect(webpushLink('http://localhost:5173', '/x')).toBeUndefined();
   });
 });

@@ -32,3 +32,4 @@ apps/web/dev-dist/
 functions/.local-data/
 *.seed-report.tmp.md
 functions/.query-log.jsonl
+.lighthouseci/

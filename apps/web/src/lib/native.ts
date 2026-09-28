@@ -5,6 +5,10 @@ import { track } from './telemetry';
 export const isNative = () => Capacitor.isNativePlatform();
 
 let pushToken: string | null = null;
+/** Remember the registered token (Android or web) so logout can unregister it. */
+export const setPushToken = (t: string | null) => {
+  pushToken = t;
+};
 
 /**
  * Android push (FCM via Capacitor). Needs `google-services.json` in android/app — until the
@@ -24,7 +28,9 @@ export async function registerPush(navigate: (to: string) => void) {
       api.post('/me/devices', { token: t.value, platform: 'android' }).catch(() => undefined);
     });
     await PushNotifications.addListener('pushNotificationActionPerformed', (a) => {
-      const ref = (a.notification.data as { actionRef?: string } | undefined)?.actionRef;
+      // Server payload: data.link (see functions/src/services/notify.ts).
+      const d = a.notification.data as { link?: string; actionRef?: string } | undefined;
+      const ref = d?.link ?? d?.actionRef;
       track('notification_cta_clicked', { source: 'push' });
       if (ref?.startsWith('/')) navigate(ref);
     });
