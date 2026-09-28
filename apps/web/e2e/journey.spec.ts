@@ -25,6 +25,8 @@ async function login(page: Page, identifier: string) {
   await page.getByLabel('شماره موبایل یا ایمیل').fill(identifier);
   await page.getByLabel('رمز عبور').fill(PASS);
   await page.getByRole('button', { name: 'ورود' }).click();
+  // Wait until the session is established before navigating (avoids racing the login call).
+  await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
 }
 
 async function expectImagesLoaded(page: Page, selector: string, min: number) {
@@ -120,7 +122,8 @@ test('marketer: home → section → (played) → quiz pass → next section unl
   // Sequential lock: the next section of the package is now open.
   await page.goto(`/packages/${packageId}`);
   const rows = page.getByTestId('section-row');
-  await expect(rows.nth(0)).toContainText('تکمیل');
+  await expect(rows.nth(0)).toContainText('تکمیل', { timeout: 15_000 });
+  await expect(rows.nth(1)).toBeVisible();
 });
 
 test('fresh marketer sees later sections locked and cannot start their quiz', async ({
@@ -130,8 +133,12 @@ test('fresh marketer sees later sections locked and cannot start their quiz', as
   await login(page, FRESH_MARKETER);
   await page.goto('/learn');
   await page.getByRole('tab', { name: /جدید/ }).click();
-  await page.getByTestId('package-card').first().click();
-  await expect(page.getByText('ابتدا قسمت قبل را کامل کنید.').first()).toBeVisible();
+  await expect(page.getByTestId('package-card').first()).toBeVisible();
+  // Multi-part package (فورمی): part 2+ stays locked until part 1 is done.
+  await page.goto('/packages/seed-pkg-formi');
+  await expect(page.getByText('ابتدا قسمت قبل را کامل کنید.').first()).toBeVisible({
+    timeout: 15_000,
+  });
 
   const t = await token(request, FRESH_MARKETER);
   const pk = (await (

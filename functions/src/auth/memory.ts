@@ -12,6 +12,7 @@ interface Account {
   validAfter: number;
 }
 
+const REFRESH_GRACE_MS = 30_000;
 const TOKEN_TTL = 3600;
 
 function hashPassword(password: string): string {
@@ -92,11 +93,17 @@ export class MemoryAuthProvider implements AuthProvider {
 
   async refresh(refreshToken: string) {
     const key = `_auth_refresh/${sha(refreshToken)}`;
-    const rec = await this.store.get<{ uid: string }>(key);
+    const rec = await this.store.get<{ uid: string; rotatedAt?: number }>(key);
     if (!rec) return null;
+    // Rotation with a short grace window: a refresh interrupted by a page reload (response
+    // never stored by the client) must not log the user out, but old tokens die quickly.
+    if (rec.rotatedAt !== undefined && this.now() - rec.rotatedAt > REFRESH_GRACE_MS) {
+      await this.store.delete(key);
+      return null;
+    }
     const acc = await this.store.get<Account>(`_auth/${rec.uid}`);
     if (!acc || acc.disabled) return null;
-    await this.store.delete(key); // rotation
+    if (rec.rotatedAt === undefined) await this.store.update(key, { rotatedAt: this.now() });
     return { uid: rec.uid, tokens: await this.issue(rec.uid) };
   }
 

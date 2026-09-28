@@ -5,7 +5,11 @@ name: Deploy
 #   FIREBASE_SERVICE_ACCOUNT_DEV / FIREBASE_SERVICE_ACCOUNT_PROD  (JSON)
 #   FIREBASE_PROJECT_DEV / FIREBASE_PROJECT_PROD
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PAGES_PROJECT
-#   VITE_FIREBASE_* (public web config per environment)
+#   FIREBASE_WEB_API_KEY, GEMINI_API_KEY (optional; mentor falls back to rules-only), BACKUP_BUCKET (optional)
+# Repository/environment variables (public):
+#   VITE_API_BASE      e.g. https://europe-west1-<project>.cloudfunctions.net/api
+#   ALLOWED_ORIGINS    e.g. https://learn.example.com,https://localhost   (https://localhost = Android app)
+#   VITE_SENTRY_DSN    optional
 on:
   workflow_run:
     workflows: [CI]
@@ -51,19 +55,25 @@ jobs:
         run: npm run build
         env:
           VITE_APP_ENV: ${{ env.TARGET }}
-          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
       - name: Deploy Cloud Functions + Rules
         if: steps.secrets.outputs.configured == 'true'
         run: |
           echo '${{ env.TARGET == 'prod' && secrets.FIREBASE_SERVICE_ACCOUNT_PROD || secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}' > "$RUNNER_TEMP/sa.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          npx -y firebase-tools@14 deploy --only functions --project "${{ env.TARGET == 'prod' && secrets.FIREBASE_PROJECT_PROD || secrets.FIREBASE_PROJECT_DEV }}" --non-interactive
-          rm -f "$RUNNER_TEMP/sa.json"
+          # Runtime config for the functions (read by functions/src/config.ts); never committed.
+          {
+            echo "APP_ENV=${{ env.TARGET }}"
+            echo "DATA_BACKEND=firestore"
+            echo "ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }}"
+            echo "FIREBASE_WEB_API_KEY=${{ secrets.FIREBASE_WEB_API_KEY }}"
+            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
+            echo "BACKUP_BUCKET=${{ secrets.BACKUP_BUCKET }}"
+            echo "APP_VERSION=${{ github.sha }}"
+          } > functions/.env
+          npx -y firebase-tools@14 deploy --only functions,firestore,storage --project "${{ env.TARGET == 'prod' && secrets.FIREBASE_PROJECT_PROD || secrets.FIREBASE_PROJECT_DEV }}" --non-interactive
+          rm -f "$RUNNER_TEMP/sa.json" functions/.env
       - name: Deploy PWA to Cloudflare Pages
         if: steps.secrets.outputs.configured == 'true'
         run: npx -y wrangler@4 pages deploy apps/web/dist --project-name "${{ secrets.CLOUDFLARE_PAGES_PROJECT }}" --branch "${{ env.TARGET == 'prod' && 'main' || 'dev' }}"

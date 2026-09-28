@@ -102,6 +102,11 @@ describe('auth (PROMPT 002)', () => {
     ctx.advance(1000);
     const r1 = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
     expect(r1.status).toBe(200);
+    // A retry within the grace window (interrupted request) still works…
+    const retry = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
+    expect(retry.status).toBe(200);
+    // …but the rotated token is dead afterwards.
+    ctx.advance(31_000);
     const reuse = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
     expect(reuse.status).toBe(401);
     const token = r1.body.data.idToken as string;

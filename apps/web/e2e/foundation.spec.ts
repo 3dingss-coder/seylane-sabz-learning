@@ -15,11 +15,12 @@ test('gallery renders RTL Persian UI with real brand logos', async ({ page }) =>
 
 test('Vazirmatn font is loaded (self-hosted)', async ({ page }) => {
   await page.goto('/gallery');
-  await page.evaluate(() => document.fonts.ready);
-  const loaded = await page.evaluate(() =>
-    document.fonts.check('16px "Vazirmatn Variable"', 'سلام'),
+  // Explicitly load the face (lazy chunks may not have requested it yet), then confirm it is ours.
+  const faces = await page.evaluate(async () =>
+    (await document.fonts.load('16px "Vazirmatn Variable"', 'سلام')).map((f) => f.family),
   );
-  expect(loaded).toBe(true);
+  expect(faces.length).toBeGreaterThan(0);
+  expect(faces.join(',')).toContain('Vazirmatn');
 });
 
 test('all buttons meet the 48px touch target', async ({ page }) => {
@@ -44,5 +45,6 @@ test('unknown route shows Persian 404 with a way home', async ({ page }) => {
   await page.goto('/this-page-does-not-exist');
   await expect(page.getByRole('heading', { name: 'این صفحه پیدا نشد' })).toBeVisible();
   await page.getByRole('link', { name: 'بازگشت به صفحه اصلی' }).click();
-  await expect(page).toHaveURL(/\/$/);
+  // Home is protected, so an anonymous visitor lands on the login page.
+  await expect(page).toHaveURL(/\/(login)?$/);
 });
