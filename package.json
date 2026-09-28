@@ -11,7 +11,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "tsx scripts/dev-server.ts",
+    "start": "node scripts/start.mjs",
     "dev": "npm run dev -w apps/web",
     "build": "npm run build -w functions && npm run build -w apps/web",
     "lint": "npm run lint -w functions && npm run lint -w apps/web",
