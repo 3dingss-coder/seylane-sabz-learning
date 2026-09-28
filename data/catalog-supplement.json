@@ -1,0 +1,175 @@
+{
+  "$comment": "Client decisions not present in the original export (spec §36 D27, D30–D34). Consumed by scripts/seed-catalog.ts. Names are copied verbatim from hidden-products.csv / client answers.",
+  "holdingLogo": "کامپوننت های کمکی برای تکمیل UI UX اپلیکیشن/اپ مشتری/لوگو و آیکون/logo-full.png",
+  "reactivatedBrands": [
+    {
+      "id": "brand-sb-formi",
+      "name": "فورمی",
+      "nameLatin": null,
+      "logoFile": null,
+      "decision": "D27/D34"
+    },
+    {
+      "id": "brand-sb-atl",
+      "name": "آتل",
+      "nameLatin": "ATL",
+      "logoFile": null,
+      "decision": "D27/D34"
+    },
+    {
+      "id": "brand-sb-icebubble",
+      "name": "آیس بابل",
+      "nameLatin": "Bubble",
+      "logoFile": null,
+      "decision": "D27/D34"
+    },
+    {
+      "id": "brand-sb-vitas",
+      "name": "ویت آس",
+      "nameLatin": "Vitas",
+      "logoFile": "vitas.webp",
+      "decision": "D27"
+    }
+  ],
+  "reactivatedProducts": [
+    { "id": "sb-310350101", "brandId": "brand-sb-formi" },
+    { "id": "sb-220306101", "brandId": "brand-sb-atl" },
+    { "id": "sb-370276101", "brandId": "brand-sb-icebubble" },
+    { "id": "sb-340122101", "brandId": "brand-sb-vitas" }
+  ],
+  "newProducts": [
+    {
+      "id": "sb-pixel-stick-sunscreen",
+      "brandId": "brand-sb-5",
+      "name": "ضدآفتاب استیکی پیکسل",
+      "code": null,
+      "category": "مراقبت پوست و بدن",
+      "description": null,
+      "imageFile": null,
+      "decision": "D31"
+    }
+  ],
+  "trainingPackages": [
+    {
+      "id": "seed-pkg-formi",
+      "title": "آموزش کیت درمانی فورمی",
+      "brandId": "brand-sb-formi",
+      "productId": "sb-310350101",
+      "deadlineDays": 10,
+      "publish": true,
+      "sections": [
+        {
+          "file": "معرفی کلی محصول فورمی.m4a",
+          "title": "معرفی کلی محصول فورمی",
+          "mediaType": "audio"
+        },
+        {
+          "file": "آموزش کامل محصول فورمی.mp4",
+          "title": "آموزش کامل محصول فورمی",
+          "mediaType": "video"
+        }
+      ]
+    },
+    {
+      "id": "seed-pkg-bubble",
+      "title": "آموزش فوم شستشوی صورت آیس بابل",
+      "brandId": "brand-sb-icebubble",
+      "productId": "sb-370276101",
+      "deadlineDays": 14,
+      "publish": true,
+      "sections": [
+        { "file": "معرفی کلی بابل.m4a", "title": "معرفی کلی بابل", "mediaType": "audio" },
+        {
+          "file": "کتابچه_جامع_فروش_BUBBLE.mp4",
+          "title": "کتابچه جامع فروش بابل",
+          "mediaType": "video"
+        }
+      ]
+    },
+    {
+      "id": "seed-pkg-atl",
+      "title": "آموزش کرم گرم کننده و ضد درد کتف و گردن آتل",
+      "brandId": "brand-sb-atl",
+      "productId": "sb-220306101",
+      "deadlineDays": 2,
+      "publish": true,
+      "sections": [
+        {
+          "file": "ای_تی_ال_پادزهر_دردهای_دیجیتال.m4a",
+          "title": "آتل؛ پادزهر دردهای دیجیتال",
+          "mediaType": "audio"
+        },
+        { "file": "آموزش_ویدیویی_ATL.mp4", "title": "آموزش ویدیویی آتل", "mediaType": "video" }
+      ]
+    },
+    {
+      "id": "seed-pkg-vitas",
+      "title": "آموزش کرم ترک پا ویت آس",
+      "brandId": "brand-sb-vitas",
+      "productId": "sb-340122101",
+      "deadlineDays": 12,
+      "publish": true,
+      "sections": [
+        { "file": "معرفی کلی ویت آس.m4a", "title": "معرفی کلی ویت آس", "mediaType": "audio" }
+      ]
+    },
+    {
+      "id": "seed-pkg-comeon-heel",
+      "title": "آموزش کرم ترک پای کامان (WITH US)",
+      "brandId": "brand-sb-7",
+      "productId": "sb-300123101",
+      "deadlineDays": 16,
+      "publish": true,
+      "sections": [
+        {
+          "file": "آموزش_کرم_ترک_پای__WITH_US_.mp4",
+          "title": "آموزش کرم ترک پای WITH US",
+          "mediaType": "video"
+        }
+      ]
+    },
+    {
+      "id": "seed-pkg-pixel-stick",
+      "title": "آموزش ضدآفتاب استیکی پیکسل",
+      "brandId": "brand-sb-5",
+      "productId": "sb-pixel-stick-sunscreen",
+      "deadlineDays": 20,
+      "publish": true,
+      "sections": [
+        {
+          "file": "معرفی کلی ضدآفتاب استیکی پیکسل.m4a",
+          "title": "معرفی کلی ضدآفتاب استیکی پیکسل",
+          "mediaType": "audio"
+        },
+        {
+          "file": "آموزش کامل ضدآفتاب پیکسل.mp4",
+          "title": "آموزش کامل ضدآفتاب پیکسل",
+          "mediaType": "video"
+        }
+      ]
+    },
+    {
+      "id": "seed-pkg-icebal",
+      "title": "آموزش فروش برند آیس بال",
+      "brandId": "brand-sb-10",
+      "productId": null,
+      "deadlineDays": 25,
+      "publish": true,
+      "sections": [
+        { "file": "معرفی کلی آیس بال.m4a", "title": "معرفی کلی آیس بال", "mediaType": "audio" },
+        { "file": "آموزش_فروش_آیس_بال.mp4", "title": "آموزش فروش آیس بال", "mediaType": "video" }
+      ]
+    },
+    {
+      "id": "seed-pkg-dart",
+      "title": "معرفی کلی دارت",
+      "brandId": null,
+      "productId": null,
+      "deadlineDays": null,
+      "publish": false,
+      "sections": [
+        { "file": "معرفی کلی‌ دارت.m4a", "title": "معرفی کلی دارت", "mediaType": "audio" }
+      ]
+    }
+  ]
+}

@@ -27,3 +27,8 @@ playwright-report/
 exports/
 apps/web/public/icons/
 apps/web/dev-dist/
+
+# Local API data (memory backend persistence + blobs)
+functions/.local-data/
+*.seed-report.tmp.md
+functions/.query-log.jsonl

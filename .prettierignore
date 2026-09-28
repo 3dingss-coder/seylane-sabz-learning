@@ -10,3 +10,5 @@ PRODUCT-MASTER-SPEC.md
 لوگو برندها و تصاویر محصولات
 apps/web/src/components/_legacy
 apps/web/public
+functions/.local-data
+.local-data

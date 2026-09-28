@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// Catalog images (brand logos, product images, holding logo) are public-read so <img> tags
+// work without tokens. Training media under media/ is private: the API hands out short-lived
+// signed URLs (Admin SDK). Uploads use signed URLs too — no client may write directly.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+    match /brands/{brandId}/{file} {
+      allow read: if true;
+    }
+    match /products/{productId}/{file} {
+      allow read: if true;
+    }
+    match /branding/{file} {
+      allow read: if true;
+    }
+  }
+}
