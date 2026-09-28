@@ -193,3 +193,26 @@ describe('F9 home error state — last-known state from local cache', () => {
     expect(lastKnown.get('home', marketer.id)).toBeNull();
   });
 });
+
+describe('F14 mentor nudge on Home', () => {
+  it('shows the nudge message returned by the API (field `message`)', async () => {
+    mockApi({
+      ...loggedIn(),
+      'GET /v1/me/home': () => ({ data: home }),
+      'GET /v1/me/mentor/nudges': () => ({
+        data: [
+          {
+            id: 'n1',
+            ruleId: 'R1',
+            message: 'دو روز است سر نزده‌ای — فقط ۵ دقیقه تا پایان قسمت بعد مانده.',
+            actionRef: '/packages/seed-pkg-formi',
+            createdAt: '2026-09-28T08:00:00.000Z',
+          },
+        ],
+      }),
+    });
+    renderApp('/');
+    const link = await screen.findByRole('link', { name: /دو روز است سر نزده‌ای/ });
+    expect(link).toHaveAttribute('href', '/packages/seed-pkg-formi');
+  });
+});

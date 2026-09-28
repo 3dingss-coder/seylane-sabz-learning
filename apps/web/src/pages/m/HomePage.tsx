@@ -133,7 +133,7 @@ export function HomePage() {
                 className="flex items-start gap-3 rounded-card border border-info/30 bg-info-light p-3 text-sm text-text"
               >
                 <Sparkles className="mt-0.5 size-5 shrink-0 text-info" aria-hidden />
-                <span>{topNudge.text}</span>
+                <span>{topNudge.message}</span>
               </Link>
             )}
 

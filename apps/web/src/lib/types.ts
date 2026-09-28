@@ -231,7 +231,8 @@ export interface MessageItem {
 export interface Nudge {
   id: string;
   ruleId: string;
-  text: string;
+  /** Same field name as `mentor_nudges.message` (spec §20.4) returned by GET /me/mentor/nudges. */
+  message: string;
   actionRef: string | null;
   createdAt: string;
 }

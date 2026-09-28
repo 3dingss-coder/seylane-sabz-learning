@@ -23,7 +23,7 @@ export function MentorPage() {
           className="mb-2 flex items-start gap-2 rounded-card border border-info/30 bg-info-light p-3 text-sm text-text"
         >
           <Sparkles className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
-          {n.text}
+          {n.message}
         </Link>
       ))}
       <MentorChat packageId={null} className="min-h-0 flex-1" />

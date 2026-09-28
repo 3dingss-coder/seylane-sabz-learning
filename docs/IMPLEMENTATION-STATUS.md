@@ -27,7 +27,7 @@ What is still open needs accounts, keys or devices the owner has to provide. See
 | Suite | Count | Runs |
 |---|---|---|
 | Functions unit + API (Vitest + supertest, memory backend) | 97 | local + CI |
-| Web unit/integration (Vitest + Testing Library, mocked API, axe structural checks) | 52 | local + CI |
+| Web unit/integration (Vitest + Testing Library, mocked API, axe structural checks) | 53 | local + CI |
 | Emulator: security rules + the API suite on Firestore + Storage adapter (`functions/test-emulator/*`) | 6 rules + 3 storage + API suite | CI only (no JDK in the dev sandbox) |
 | E2E Playwright: foundation (5, on Chromium desktop/mobile + WebKit iPhone) + §28.2 journeys (5) + axe WCAG AA (4) | 14 specs | CI only |
 | Lighthouse CI: `/login` + signed-in Home, perf/a11y/best-practices ≥ 90, LCP < 3 s | 2 URLs × 3 runs | CI only |
@@ -68,5 +68,5 @@ D27–D40. The latest are D38 (Android appId + push gated on `google-services.js
 - Jalali date picker (`components/common/JalaliDateField.tsx`, ported from the helper kit's PersianCalendarPicker) for deadlines, assignment start and report filters.
 - Home last-known state from local cache (F9 error state), including offline cold start with the cached profile.
 - Web Push for the PWA (opt-in on Profile, self-hosted `push-sw.js`) and Firebase Crashlytics on Android — both activate only when the Firebase config is supplied.
-- Fixes found during the pass: per-IP rate limits could be bypassed with a spoofed `X-Forwarded-For` (`trust proxy` is now a hop count); FCM web links must be absolute (relative links would fail sends and prune valid tokens); Android push taps read the wrong data key; D38/D39 rows were outside the §36 table.
+- Fixes found during the pass: per-IP rate limits could be bypassed with a spoofed `X-Forwarded-For` (`trust proxy` is now a hop count); FCM web links must be absolute (relative links would fail sends and prune valid tokens); Android push taps read the wrong data key; mentor nudges rendered empty (client read `text`, API returns `message`); D38/D39 rows were outside the §36 table.
 - Quality gates added: axe (jsdom + Playwright), WebKit project, Lighthouse CI, Storage-emulator adapter test.
