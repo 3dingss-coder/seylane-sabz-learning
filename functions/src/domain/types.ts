@@ -212,6 +212,8 @@ export interface Assignment {
   createdAt: string;
   revokedAt: string | null;
   revokedBy: string | null;
+  /** Set when the assignment is managed by a learning path (kept in sync on path save/archive). */
+  pathId?: string | null;
 }
 
 export interface LearningPathItem {

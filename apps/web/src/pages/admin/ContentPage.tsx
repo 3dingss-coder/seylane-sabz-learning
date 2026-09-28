@@ -29,8 +29,8 @@ export function ContentPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="محتوا"
-        subtitle="برندها، محصولات و بسته‌های آموزشی"
+        title="محتوای آموزشی"
+        subtitle="برند ← محصول ← آموزش‌ها. برای دیدن و ساختن آموزش‌های یک محصول، برندش را باز کنید."
         actions={
           <>
             <Button
@@ -44,7 +44,7 @@ export function ContentPage() {
               icon={<FilePlus2 className="size-4" aria-hidden />}
               onClick={() => setNewPkg(true)}
             >
-              بسته جدید
+              آموزش جدید
             </Button>
           </>
         }

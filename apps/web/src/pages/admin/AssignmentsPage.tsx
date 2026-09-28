@@ -1,6 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, CalendarClock, Pencil, Plus, Trash2, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Info,
+  Pencil,
+  Plus,
+  Route as RouteIcon,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { Button, Card, EmptyState, Input, Modal, TableSkeleton, useToast } from '@/components/ui';
 import { Select, Tabs, Textarea } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -10,7 +19,7 @@ import { ApiError, api } from '@/lib/api';
 import { toPersianDigits } from '@/lib/digits';
 import { errMsg } from '@/lib/errors';
 import { faDate } from '@/lib/format';
-import type { AdminAssignment, AdminPath } from '@/lib/types';
+import type { AdminAssignment, AdminPath, AdminPathSaved } from '@/lib/types';
 import { useBrands, usePackagesAdmin, useTeams, useUsers } from './adminQueries';
 import { fromLocalInput, toLocalInput } from '@/lib/dates';
 import { JalaliDateField } from '@/components/common/JalaliDateField';
@@ -79,23 +88,78 @@ function TargetPicker({
   );
 }
 
-/** A5 — انتساب و مسیرها. */
+/** A4/18.4 — مسیرها و مخاطبان: «چه کسی، کدام آموزش، به چه ترتیب، تا کی». */
 export function AssignmentsPage() {
-  const [tab, setTab] = useState<'assignments' | 'paths'>('assignments');
+  const [tab, setTab] = useState<'assignments' | 'paths'>('paths');
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="انتساب و مسیرها" subtitle="چه کسی کدام آموزش را ببیند" />
+      <PageHeader
+        title="مسیرها و مخاطبان"
+        subtitle="چه کسانی کدام آموزش‌ها را، به چه ترتیبی و تا چه روزی ببینند"
+      />
+      <div className="grid gap-3 md:grid-cols-2">
+        <Explainer
+          icon={<RouteIcon className="size-5" aria-hidden />}
+          title="مسیر یادگیری (پیشنهادی)"
+          active={tab === 'paths'}
+          onClick={() => setTab('paths')}
+        >
+          چند آموزش را به ترتیب می‌چینی، برای هر مرحله مهلت می‌گذاری و مخاطب را انتخاب می‌کنی. با
+          ذخیره، آموزش‌ها خودکار برای مخاطبان فعال می‌شوند.
+        </Explainer>
+        <Explainer
+          icon={<Info className="size-5" aria-hidden />}
+          title="انتساب مستقیم"
+          active={tab === 'assignments'}
+          onClick={() => setTab('assignments')}
+        >
+          فقط یک یا چند آموزش را بدون ترتیب و مهلت مرحله‌ای به همه، یک تیم، یک برند یا یک نفر بده.
+        </Explainer>
+      </div>
       <Tabs
         label="بخش"
         value={tab}
         onChange={setTab}
         items={[
-          { value: 'assignments', label: 'انتساب‌ها' },
           { value: 'paths', label: 'مسیرهای یادگیری' },
+          { value: 'assignments', label: 'انتساب‌های فعال' },
         ]}
       />
       {tab === 'assignments' ? <Assignments /> : <Paths />}
     </div>
+  );
+}
+
+function Explainer({
+  icon,
+  title,
+  active,
+  onClick,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        active
+          ? 'flex flex-col gap-1 rounded-card border-2 border-primary bg-primary-light p-3 text-start'
+          : 'flex flex-col gap-1 rounded-card border border-border bg-surface p-3 text-start hover:border-primary/40'
+      }
+    >
+      <span className="flex items-center gap-2 font-bold text-text">
+        <span className="text-primary">{icon}</span>
+        {title}
+      </span>
+      <span className="text-sm leading-6 text-text-secondary">{children}</span>
+    </button>
   );
 }
 
@@ -107,6 +171,11 @@ function Assignments() {
   const pkgs = usePackagesAdmin();
   const title = useMemo(() => new Map((pkgs.data ?? []).map((p) => [p.id, p.title])), [pkgs.data]);
   const target = useTargetNames();
+  const paths = useQuery({
+    queryKey: ['admin', 'paths'],
+    queryFn: ({ signal }) => api.get<AdminPath[]>('/admin/paths', signal),
+  });
+  const pathName = new Map((paths.data ?? []).map((p) => [p.id, p.name]));
   const [create, setCreate] = useState(false);
   const [revoke, setRevoke] = useState<AdminAssignment | null>(null);
   const qc = useQueryClient();
@@ -142,6 +211,12 @@ function Assignments() {
                   <Card className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-bold">{target(a.type, a.targetId)}</p>
+                      {a.pathId && (
+                        <p className="text-xs text-text-secondary">
+                          از مسیر «{pathName.get(a.pathId) ?? '—'}» — برای تغییر، مسیر را ویرایش
+                          کنید.
+                        </p>
+                      )}
                       <ul className="mt-1 flex flex-wrap gap-1">
                         {a.packageIds.map((id) => (
                           <li key={id} className="rounded-full bg-background px-2 py-1 text-xs">
@@ -150,14 +225,16 @@ function Assignments() {
                         ))}
                       </ul>
                     </div>
-                    <Button
-                      variant="ghost"
-                      className="text-danger"
-                      icon={<X className="size-4" aria-hidden />}
-                      onClick={() => setRevoke(a)}
-                    >
-                      لغو
-                    </Button>
+                    {!a.pathId && (
+                      <Button
+                        variant="ghost"
+                        className="text-danger"
+                        icon={<X className="size-4" aria-hidden />}
+                        onClick={() => setRevoke(a)}
+                      >
+                        لغو
+                      </Button>
+                    )}
                   </Card>
                 </li>
               ))}
@@ -211,10 +288,16 @@ function PackagePicker({ value, onChange }: { value: string[]; onChange: (v: str
   );
 }
 
-function AssignmentDialog({ onClose }: { onClose: () => void }) {
-  const [type, setType] = useState<Scope>('team');
+export function AssignmentDialog({
+  onClose,
+  presetPackageIds = [],
+}: {
+  onClose: () => void;
+  presetPackageIds?: string[];
+}) {
+  const [type, setType] = useState<Scope>('global');
   const [targetId, setTargetId] = useState('');
-  const [packageIds, setPackageIds] = useState<string[]>([]);
+  const [packageIds, setPackageIds] = useState<string[]>(presetPackageIds);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const qc = useQueryClient();
   const toast = useToast();
@@ -239,7 +322,7 @@ function AssignmentDialog({ onClose }: { onClose: () => void }) {
     <Modal
       open
       onClose={onClose}
-      title="انتساب جدید"
+      title="نمایش آموزش به بازاریاب‌ها"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -257,7 +340,7 @@ function AssignmentDialog({ onClose }: { onClose: () => void }) {
     >
       <div className="flex flex-col gap-3">
         <Select
-          label="مخاطب"
+          label="چه کسانی ببینند؟"
           value={type}
           onChange={(e) => {
             setType(e.target.value as Scope);
@@ -298,15 +381,6 @@ function Paths() {
     },
     onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
   });
-  const apply = useMutation({
-    mutationFn: (id: string) => api.post<{ updated: number }>(`/admin/paths/${id}/apply-deadlines`),
-    onSuccess: (r) =>
-      toast.show({
-        type: 'success',
-        message: `مهلت ${toPersianDigits(r.updated ?? 0)} بسته به‌روز شد.`,
-      }),
-    onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
-  });
   return (
     <div className="flex flex-col gap-3">
       <div className="flex justify-end">
@@ -319,8 +393,10 @@ function Paths() {
           const live = list.filter((p) => !p.archived);
           return live.length === 0 ? (
             <EmptyState
-              title="مسیری تعریف نشده"
-              description="مسیر، ترتیب بسته‌ها و مهلت هر مرحله را تعیین می‌کند."
+              title="هنوز مسیری تعریف نشده"
+              description="مسیر تعیین می‌کند چه کسانی کدام آموزش‌ها را به چه ترتیبی ببینند. از صفحه هر محصول هم می‌توانید «مسیر آشنایی کامل» بسازید."
+              actionText="ساخت اولین مسیر"
+              onAction={() => setEdit('new')}
             />
           ) : (
             <ul className="flex flex-col gap-2">
@@ -336,15 +412,6 @@ function Paths() {
                         </p>
                       </div>
                       <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          className="px-2"
-                          icon={<CalendarClock className="size-4" aria-hidden />}
-                          loading={apply.isPending && apply.variables === p.id}
-                          onClick={() => apply.mutate(p.id)}
-                        >
-                          اعمال مهلت‌ها
-                        </Button>
                         <Button
                           variant="ghost"
                           className="px-2"
@@ -397,24 +464,36 @@ function Paths() {
         onClose={() => setDel(null)}
         onConfirm={() => del && remove.mutate(del.id)}
       >
-        {del?.name}
+        با حذف «{del?.name}»، آموزش‌هایش برای مخاطبان این مسیر غیرفعال می‌شود (پیشرفت‌ها حفظ
+        می‌شود).
       </ConfirmDialog>
     </div>
   );
 }
 
-function PathDialog({ initial, onClose }: { initial?: AdminPath; onClose: () => void }) {
+export function PathDialog({
+  initial,
+  preset,
+  onClose,
+}: {
+  initial?: AdminPath;
+  /** New path prefilled from a product/brand («مسیر آشنایی کامل»). */
+  preset?: { name: string; description?: string; packageIds: string[] };
+  onClose: () => void;
+}) {
   const pkgs = usePackagesAdmin('status=published');
-  const [name, setName] = useState(initial?.name ?? '');
-  const [description, setDescription] = useState(initial?.description ?? '');
+  const [name, setName] = useState(initial?.name ?? preset?.name ?? '');
+  const [description, setDescription] = useState(initial?.description ?? preset?.description ?? '');
   const [scope, setScope] = useState<Scope>(initial?.scope ?? 'global');
   const [targetId, setTargetId] = useState(initial?.targetId ?? '');
   const [startAt, setStartAt] = useState(toLocalInput(initial?.startAt ?? null));
   const [items, setItems] = useState<Array<{ packageId: string; deadlineOffsetDays: string }>>(
-    (initial?.items ?? []).map((i) => ({
-      packageId: i.packageId,
-      deadlineOffsetDays: i.deadlineOffsetDays === null ? '' : String(i.deadlineOffsetDays),
-    })),
+    initial
+      ? initial.items.map((i) => ({
+          packageId: i.packageId,
+          deadlineOffsetDays: i.deadlineOffsetDays === null ? '' : String(i.deadlineOffsetDays),
+        }))
+      : (preset?.packageIds ?? []).map((packageId) => ({ packageId, deadlineOffsetDays: '' })),
   );
   const [add, setAdd] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -434,10 +513,16 @@ function PathDialog({ initial, onClose }: { initial?: AdminPath; onClose: () => 
           deadlineOffsetDays: i.deadlineOffsetDays === '' ? null : Number(i.deadlineOffsetDays),
         })),
       };
-      return initial ? api.put(`/admin/paths/${initial.id}`, body) : api.post('/admin/paths', body);
+      return initial
+        ? api.put<AdminPathSaved>(`/admin/paths/${initial.id}`, body)
+        : api.post<AdminPathSaved>('/admin/paths', body);
     },
-    onSuccess: () => {
-      toast.show({ type: 'success', message: 'مسیر ذخیره شد.' });
+    onSuccess: (r) => {
+      const parts = ['مسیر ذخیره شد و آموزش‌هایش برای مخاطبان فعال است.'];
+      if (r.deadlinesUpdated)
+        parts.push(`مهلت ${toPersianDigits(r.deadlinesUpdated)} آموزش تنظیم شد.`);
+      if (r.warnings?.length) parts.push(r.warnings.join(' '));
+      toast.show({ type: r.warnings?.length ? 'warning' : 'success', message: parts.join(' ') });
       void qc.invalidateQueries({ queryKey: ['admin'] });
       onClose();
     },
@@ -491,7 +576,7 @@ function PathDialog({ initial, onClose }: { initial?: AdminPath; onClose: () => 
         />
         <div className="grid gap-3 sm:grid-cols-2">
           <Select
-            label="مخاطب"
+            label="چه کسانی این مسیر را ببینند؟"
             value={scope}
             onChange={(e) => {
               setScope(e.target.value as Scope);
@@ -521,6 +606,10 @@ function PathDialog({ initial, onClose }: { initial?: AdminPath; onClose: () => 
         />
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium">مراحل (به ترتیب)</p>
+          <p className="text-xs leading-5 text-text-secondary">
+            بازاریاب آموزش‌ها را به همین ترتیب می‌بیند. در خانه «روز» بنویسید مهلت هر مرحله چند روز
+            بعد از تاریخ شروع است (اختیاری).
+          </p>
           {items.map((it, i) => (
             <div
               key={it.packageId}

@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Archive,
+  Check,
+  Users,
   ArrowDown,
   ArrowUp,
   Eye,
@@ -25,8 +27,9 @@ import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { errMsg } from '@/lib/errors';
 import { faDateTime, faDuration } from '@/lib/format';
-import type { AdminPackageDetail, AdminSection } from '@/lib/types';
-import { ak, useBrands, useProducts } from './adminQueries';
+import type { AdminAssignment, AdminPackageDetail, AdminPath, AdminSection } from '@/lib/types';
+import { ak, useBrands, useProducts, useTeams, useUsers } from './adminQueries';
+import { AssignmentDialog } from './AssignmentsPage';
 import { PackageFormDialog } from './PackageFormDialog';
 import { SectionEditor } from './SectionEditor';
 
@@ -53,6 +56,18 @@ function Editor({ d }: { d: AdminPackageDetail }) {
   const [editMeta, setEditMeta] = useState(false);
   const [section, setSection] = useState<AdminSection | 'new' | null>(null);
   const [confirm, setConfirm] = useState<'publish' | 'unpublish' | 'archive' | null>(null);
+  const [assign, setAssign] = useState(false);
+  const assignments = useQuery({
+    queryKey: ['admin', 'assignments'],
+    queryFn: ({ signal }) => api.get<AdminAssignment[]>('/admin/assignments', signal),
+  });
+  const paths = useQuery({
+    queryKey: ['admin', 'paths'],
+    queryFn: ({ signal }) => api.get<AdminPath[]>('/admin/paths', signal),
+  });
+  const audience = (assignments.data ?? []).filter(
+    (a) => !a.revokedAt && a.packageIds.includes(p.id),
+  );
   const brand = brands.data?.find((b) => b.id === p.brandId);
   const product = products.data?.find((x) => x.id === p.productId);
   const live = d.sections.filter((s) => !s.archived);
@@ -126,6 +141,60 @@ function Editor({ d }: { d: AdminPackageDetail }) {
             ویرایش
           </Button>
         }
+      />
+      <PackageSteps
+        steps={[
+          {
+            label: 'محصول',
+            done: !!p.brandId,
+            hint: 'برند و محصول این آموزش را انتخاب کنید.',
+            action: { text: 'انتخاب برند و محصول', run: () => setEditMeta(true) },
+          },
+          {
+            label: 'قسمت‌ها',
+            done: live.length > 0,
+            hint: 'اولین قسمت را اضافه کنید: ویدیو، صوت یا لینک یوتیوب.',
+            action: { text: 'افزودن قسمت', run: () => setSection('new') },
+          },
+          {
+            label: 'آزمون‌ها',
+            done: live.length > 0 && live.every((s) => (s.quiz?.questionCount ?? 0) >= 3),
+            hint: 'برای هر قسمت حداقل ۳ سؤال بنویسید.',
+            action: (() => {
+              const s = live.find((x) => (x.quiz?.questionCount ?? 0) < 3);
+              return s
+                ? { text: `آزمون «${s.title}»`, to: `/admin/quizzes/${s.quizId}` }
+                : undefined;
+            })(),
+          },
+          {
+            label: 'مهلت',
+            done: !!p.deadlineAt,
+            hint: 'تا چه روزی باید این آموزش تمام شود؟',
+            action: { text: 'تعیین مهلت', run: () => setEditMeta(true) },
+          },
+          {
+            label: 'انتشار',
+            done: p.status === 'published',
+            hint:
+              d.publishIssues.length > 0
+                ? 'موارد زرد رنگ کنار صفحه را کامل کنید تا انتشار فعال شود.'
+                : 'همه چیز آماده است. منتشر کنید.',
+            action:
+              d.publishIssues.length > 0
+                ? undefined
+                : { text: 'انتشار', run: () => setConfirm('publish') },
+          },
+          {
+            label: 'مخاطبان',
+            done: audience.length > 0,
+            hint: 'مشخص کنید کدام بازاریاب‌ها این آموزش را ببینند.',
+            action:
+              p.status === 'published'
+                ? { text: 'انتخاب مخاطبان', run: () => setAssign(true) }
+                : undefined,
+          },
+        ]}
       />
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <section className="flex flex-col gap-2 lg:flex-1" aria-labelledby="sections-h">
@@ -297,18 +366,17 @@ function Editor({ d }: { d: AdminPackageDetail }) {
                 بایگانی بسته
               </Button>
             )}
-            {p.status === 'published' && (
-              <Link
-                to="/admin/assignments"
-                className="flex min-h-12 items-center justify-center gap-1 text-sm font-bold text-primary"
-              >
-                <Eye className="size-4" aria-hidden /> مدیریت انتساب‌ها
-              </Link>
-            )}
           </Card>
+          <AudienceCard
+            audience={audience}
+            paths={paths.data ?? []}
+            published={p.status === 'published'}
+            onAssign={() => setAssign(true)}
+          />
         </aside>
       </div>
       {editMeta && <PackageFormDialog open onClose={() => setEditMeta(false)} initial={p} />}
+      {assign && <AssignmentDialog presetPackageIds={[p.id]} onClose={() => setAssign(false)} />}
       {section && (
         <SectionEditor
           open
@@ -338,5 +406,132 @@ function Editor({ d }: { d: AdminPackageDetail }) {
             : 'بسته بایگانی می‌شود و دیگر نمایش داده نمی‌شود. سوابق حفظ می‌شود.'}
       </ConfirmDialog>
     </div>
+  );
+}
+
+interface Step {
+  label: string;
+  done: boolean;
+  hint: string;
+  action?: { text: string; run?: () => void; to?: string };
+}
+
+/** «در یک نگاه»: where this package is in the create → publish → assign journey, and what's next. */
+function PackageSteps({ steps }: { steps: Step[] }) {
+  const next = steps.find((s) => !s.done);
+  return (
+    <Card className="flex flex-col gap-3" data-testid="package-steps">
+      <ol className="flex flex-wrap items-center gap-x-1 gap-y-2" aria-label="مراحل آماده‌سازی">
+        {steps.map((s, i) => (
+          <li key={s.label} className="flex items-center gap-1">
+            <span
+              className={cn(
+                'flex items-center gap-1.5 rounded-full px-3 py-1 text-sm',
+                s.done
+                  ? 'bg-primary-light font-bold text-primary'
+                  : s === next
+                    ? 'border-2 border-primary font-bold text-text'
+                    : 'border border-border text-text-secondary',
+              )}
+            >
+              {s.done ? (
+                <Check className="size-4" aria-hidden />
+              ) : (
+                <span aria-hidden>{toPersianDigits(i + 1)}</span>
+              )}
+              {s.label}
+              <span className="sr-only">{s.done ? ' (انجام شد)' : ' (مانده)'}</span>
+            </span>
+            {i < steps.length - 1 && <span className="h-px w-3 bg-border" aria-hidden />}
+          </li>
+        ))}
+      </ol>
+      {next ? (
+        <div className="flex flex-col gap-2 rounded-input bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-text">
+            <span className="font-bold">قدم بعدی — {next.label}: </span>
+            {next.hint}
+          </p>
+          {next.action &&
+            (next.action.to ? (
+              <Link
+                to={next.action.to}
+                className="flex min-h-12 shrink-0 items-center justify-center rounded-input bg-primary px-4 text-sm font-bold text-white hover:bg-primary-hover"
+              >
+                {next.action.text}
+              </Link>
+            ) : (
+              <Button className="shrink-0" onClick={next.action.run}>
+                {next.action.text}
+              </Button>
+            ))}
+        </div>
+      ) : (
+        <p className="rounded-input bg-primary-light p-3 text-sm font-bold text-primary">
+          این آموزش کامل است: منتشر شده و بازاریاب‌ها آن را می‌بینند.
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function AudienceCard({
+  audience,
+  paths,
+  published,
+  onAssign,
+}: {
+  audience: AdminAssignment[];
+  paths: AdminPath[];
+  published: boolean;
+  onAssign: () => void;
+}) {
+  const teams = useTeams();
+  const users = useUsers();
+  const brands = useBrands();
+  const name = (a: AdminAssignment) => {
+    if (a.type === 'global') return 'همه بازاریاب‌ها';
+    const list = a.type === 'team' ? teams.data : a.type === 'user' ? users.data : brands.data;
+    const n = (list ?? []).find((x) => x.id === a.targetId)?.name ?? '—';
+    return `${a.type === 'team' ? 'تیم' : a.type === 'user' ? 'فرد' : 'برند'}: ${n}`;
+  };
+  const pathName = new Map(paths.map((x) => [x.id, x.name]));
+  return (
+    <Card className="flex flex-col gap-2 text-sm" data-testid="audience-card">
+      <h2 className="flex items-center gap-2 font-bold">
+        <Users className="size-4 text-primary" aria-hidden /> چه کسانی این آموزش را می‌بینند؟
+      </h2>
+      {audience.length === 0 ? (
+        <p className="text-text-secondary">
+          {published
+            ? 'هنوز هیچ‌کس. مخاطبان را انتخاب کنید یا آموزش را در یک مسیر یادگیری بگذارید.'
+            : 'بعد از انتشار، مخاطبان را انتخاب کنید.'}
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {audience.map((a) => (
+            <li key={a.id} className="rounded-input bg-background px-2 py-1.5">
+              <span className="font-medium">{name(a)}</span>
+              {a.pathId && (
+                <span className="block text-xs text-text-secondary">
+                  از مسیر «{pathName.get(a.pathId) ?? '—'}»
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {published && (
+        <Button variant="secondary" onClick={onAssign}>
+          افزودن مخاطب
+        </Button>
+      )}
+      <Link
+        to="/admin/assignments"
+        className="flex min-h-12 items-center justify-center gap-1 text-sm font-bold text-primary"
+      >
+        <Eye className="size-4" aria-hidden /> همه مسیرها و مخاطبان
+      </Link>
+    </Card>
   );
 }

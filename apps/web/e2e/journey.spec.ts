@@ -185,8 +185,12 @@ test('admin: brands with real logos, unassigned tab, package editor', async ({ p
   await expect(page.getByRole('link', { name: /آزمون/ }).first()).toBeVisible();
 });
 
-test('RBAC: marketer is redirected away from the admin panel', async ({ page }) => {
+test('RBAC: marketer cannot use the admin panel (explanation + switch account)', async ({
+  page,
+}) => {
   await login(page, FRESH_MARKETER);
   await page.goto('/admin/users');
-  await expect(page).not.toHaveURL(/\/admin/);
+  await expect(page.getByRole('heading', { name: 'پنل ادمین' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ورود با حساب ادمین' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'کاربران' })).toHaveCount(0);
 });

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, FilePlus2, Pencil, Plus } from 'lucide-react';
+import { Archive, ArchiveRestore, FilePlus2, Pencil, Plus, Route as RouteIcon } from 'lucide-react';
 import {
   Button,
   Card,
@@ -25,6 +25,7 @@ import { errMsg } from '@/lib/errors';
 import type { AdminBrand, AdminPackage, AdminProduct } from '@/lib/types';
 import { useBrands, usePackagesAdmin, useProducts } from './adminQueries';
 import { PackageFormDialog } from './PackageFormDialog';
+import { PathDialog } from './AssignmentsPage';
 
 /** A2 — جزئیات برند: logo upload (D34), products with images, packages per product / brand-level (D32). */
 export function BrandDetailPage() {
@@ -39,6 +40,11 @@ export function BrandDetailPage() {
   const [newPkg, setNewPkg] = useState<{ productId: string | null } | null>(null);
   const [archive, setArchive] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [pathPreset, setPathPreset] = useState<{
+    name: string;
+    description: string;
+    packageIds: string[];
+  } | null>(null);
   const brand = brands.data?.find((b) => b.id === id);
 
   const patchBrand = useMutation({
@@ -66,6 +72,13 @@ export function BrandDetailPage() {
   const pkgs = packages.data ?? [];
   const byProduct = (pid: string | null) => pkgs.filter((p) => p.productId === pid);
   const list = (products.data ?? []).filter((p) => showArchived || !p.archived);
+  const publishedIds = (items: AdminPackage[]) =>
+    items.filter((x) => x.status === 'published').map((x) => x.id);
+  // Brand path: brand-level trainings first, then each product's trainings.
+  const brandPathIds = [
+    ...publishedIds(byProduct(null)),
+    ...list.flatMap((p) => publishedIds(byProduct(p.id))),
+  ];
 
   return (
     <div className="flex flex-col gap-4">
@@ -117,6 +130,29 @@ export function BrandDetailPage() {
         </div>
       </Card>
 
+      <div className="flex flex-col gap-2 rounded-card border border-info/30 bg-info-light p-3 text-sm leading-6 text-text sm:flex-row sm:items-center sm:justify-between">
+        <p>
+          هر محصول می‌تواند چند آموزش داشته باشد (مثلاً معرفی صوتی + آموزش کامل ویدیویی). «مسیر
+          آشنایی کامل» آموزش‌های منتشرشده را به ترتیب و با مهلت به بازاریاب‌ها می‌دهد.
+        </p>
+        <Button
+          variant="secondary"
+          className="shrink-0"
+          icon={<RouteIcon className="size-4" aria-hidden />}
+          disabled={!brandPathIds.length}
+          title={brandPathIds.length ? undefined : 'این برند هنوز آموزش منتشرشده ندارد'}
+          onClick={() =>
+            setPathPreset({
+              name: `آشنایی کامل با برند ${brand.name}`,
+              description: `همه آموزش‌های منتشرشده برند ${brand.name} به ترتیب.`,
+              packageIds: brandPathIds,
+            })
+          }
+        >
+          مسیر آشنایی با برند
+        </Button>
+      </div>
+
       <section className="flex flex-col gap-2" aria-labelledby="brand-level">
         <div className="flex items-center justify-between">
           <h2 id="brand-level" className="font-bold">
@@ -127,7 +163,7 @@ export function BrandDetailPage() {
             icon={<FilePlus2 className="size-4" aria-hidden />}
             onClick={() => setNewPkg({ productId: null })}
           >
-            بسته برند
+            آموزش سطح برند
           </Button>
         </div>
         <PackageList items={byProduct(null)} empty="بسته سطح برند ندارد." />
@@ -176,7 +212,7 @@ export function BrandDetailPage() {
                       {p.imageIsFallback && <p className="text-xs text-warning-fg">تصویر موقت</p>}
                     </div>
                   </div>
-                  <PackageList items={byProduct(p.id)} empty="بسته آموزشی ندارد." />
+                  <PackageList items={byProduct(p.id)} empty="هنوز آموزشی ندارد." />
                   <div className="mt-auto flex flex-wrap gap-2">
                     <Button
                       variant="ghost"
@@ -184,7 +220,27 @@ export function BrandDetailPage() {
                       icon={<FilePlus2 className="size-4" aria-hidden />}
                       onClick={() => setNewPkg({ productId: p.id })}
                     >
-                      بسته
+                      آموزش جدید
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="px-2 text-xs"
+                      icon={<RouteIcon className="size-4" aria-hidden />}
+                      disabled={!publishedIds(byProduct(p.id)).length}
+                      title={
+                        publishedIds(byProduct(p.id)).length
+                          ? undefined
+                          : 'اول یک آموزش برای این محصول منتشر کنید'
+                      }
+                      onClick={() =>
+                        setPathPreset({
+                          name: `آشنایی کامل با ${p.name}`,
+                          description: `آموزش‌های محصول «${p.name}» به ترتیب.`,
+                          packageIds: publishedIds(byProduct(p.id)),
+                        })
+                      }
+                    >
+                      مسیر آشنایی کامل
                     </Button>
                     <Uploader
                       kind="image"
@@ -225,6 +281,7 @@ export function BrandDetailPage() {
         )}
       </section>
       {editBrand && <BrandFormDialog open onClose={() => setEditBrand(false)} initial={brand} />}
+      {pathPreset && <PathDialog preset={pathPreset} onClose={() => setPathPreset(null)} />}
       {editProduct && (
         <ProductFormDialog
           open

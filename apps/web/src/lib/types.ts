@@ -449,6 +449,12 @@ export interface AdminPath {
   items: Array<{ packageId: string; order: number; deadlineOffsetDays: number | null }>;
   archived: boolean;
 }
+/** Result of saving a path: it is assigned to its audience and step deadlines are applied. */
+export interface AdminPathSaved extends AdminPath {
+  notified: number;
+  deadlinesUpdated: number;
+  warnings: string[];
+}
 export interface AdminAssignment {
   id: string;
   type: 'global' | 'team' | 'user' | 'brand';
@@ -456,6 +462,8 @@ export interface AdminAssignment {
   packageIds: string[];
   revokedAt: string | null;
   createdAt?: string;
+  /** Managed by this learning path — change it by editing the path. */
+  pathId?: string | null;
 }
 export interface AdminKpis {
   marketers: number;
