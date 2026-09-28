@@ -24,7 +24,29 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - name: Composite index coverage (query shapes vs firestore.indexes.json)
+        run: npm run check:indexes -w functions
       - run: npm run build
+
+  emulator:
+    name: Emulator (Rules + API on Firestore)
+    runs-on: ubuntu-latest
+    needs: quality
+    env:
+      GCLOUD_PROJECT: demo-seylane
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - name: Rules + integration tests on the Firebase emulators
+        run: npx -y firebase-tools@14 emulators:exec --project demo-seylane --only firestore,storage "npm run test:emulator -w functions"
 
   e2e:
     name: E2E (Playwright)

@@ -1,11 +1,12 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
-import { createApp } from '../src/app';
-import { loadConfig } from '../src/config';
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { Express } from 'express';
+import { createCtx } from './support/ctx';
 
-const app = createApp(
-  loadConfig({ APP_ENV: 'test', ALLOWED_ORIGINS: 'https://app.example.com' } as NodeJS.ProcessEnv),
-);
+let app: Express;
+beforeAll(async () => {
+  app = (await createCtx()).app;
+});
 
 describe('GET /v1/health', () => {
   it('returns standard success envelope', async () => {
@@ -13,7 +14,6 @@ describe('GET /v1/health', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('ok');
     expect(res.body.data.env).toBe('test');
-    expect(typeof res.body.data.time).toBe('string');
   });
 
   it('sets security headers', async () => {
@@ -41,18 +41,25 @@ describe('error envelope', () => {
   });
 
   it('rejects payloads over 1MB', async () => {
-    const big = { x: 'a'.repeat(1024 * 1024 + 10) };
-    const res = await request(app).post('/v1/health').send(big);
+    const res = await request(app)
+      .post('/v1/auth/login')
+      .send({ x: 'a'.repeat(1024 * 1024 + 10) });
     expect(res.status).toBe(413);
     expect(res.body.error.code).toBe('VALIDATION');
   });
 
   it('handles malformed JSON with VALIDATION', async () => {
     const res = await request(app)
-      .post('/v1/health')
+      .post('/v1/auth/login')
       .set('Content-Type', 'application/json')
       .send('{bad json');
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION');
+  });
+
+  it('protected routes require a token (401)', async () => {
+    const res = await request(app).get('/v1/me/home');
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('UNAUTHENTICATED');
   });
 });

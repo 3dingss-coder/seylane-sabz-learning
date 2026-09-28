@@ -8,13 +8,18 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
     "lint": "eslint .",
     "test": "vitest run",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "dev:local": "tsx watch src/local.ts"
+    "dev:local": "tsx watch src/local.ts",
+    "seed": "tsx ../scripts/seed-catalog.ts",
+    "test:emulator": "vitest run --config vitest.emulator.config.ts",
+    "check:indexes": "rm -f .query-log.jsonl && QUERY_LOG=$PWD/.query-log.jsonl vitest run && node ../scripts/check-indexes.mjs .query-log.jsonl"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^7.11.0",
+    "@google-cloud/storage": "^7.17.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "firebase-admin": "^13.5.0",
@@ -24,11 +29,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^4.17.23",
     "@types/node": "^20.19.0",
     "@types/supertest": "^6.0.3",
     "eslint": "^9.36.0",
+    "firebase": "^12.19.0",
     "globals": "^16.4.0",
     "supertest": "^7.1.4",
     "tsx": "^4.20.6",
