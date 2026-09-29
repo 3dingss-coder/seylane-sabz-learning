@@ -29,12 +29,16 @@ const SLIDES = [
 export function OnboardingPage() {
   const [i, setI] = useState(0);
   const [busy, setBusy] = useState(false);
-  const { setUser } = useAuth();
+  const { user, setUser, refreshMe } = useAuth();
   const nav = useNavigate();
   const finish = async () => {
     setBusy(true);
     try {
-      setUser(await api.post<Me>('/me/onboarding'));
+      // The endpoint returns only { onboardedAt }, so merge it into the existing profile;
+      // replacing the whole user would drop `role` and blank the screen until a reload.
+      const r = await api.post<Partial<Me>>('/me/onboarding');
+      if (user) setUser({ ...user, onboardedAt: r.onboardedAt ?? new Date().toISOString() });
+      else await refreshMe();
     } catch {
       /* non-blocking */
     }
