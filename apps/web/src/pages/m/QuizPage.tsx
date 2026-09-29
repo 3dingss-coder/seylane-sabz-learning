@@ -286,18 +286,6 @@ function QuizFlow({
           </Button>
         </>
       );
-    else if (!info.mediaCompleted)
-      body = (
-        <>
-          <EmptyState
-            title="آزمون هنوز باز نشده"
-            description="اول قسمت را کامل ببین یا گوش کن، بعد آزمون فعال می‌شود."
-          />
-          <Button size="lg" block onClick={() => nav(`/sections/${sectionId}`)}>
-            رفتن به قسمت
-          </Button>
-        </>
-      );
     else if (info.pendingRetake)
       body = (
         <EmptyState

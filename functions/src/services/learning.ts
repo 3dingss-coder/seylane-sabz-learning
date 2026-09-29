@@ -485,7 +485,6 @@ export async function getQuizForUser(d: Deps, user: Doc<User>, quizId: string) {
       passed,
       mediaCompleted: sv.mediaCompleted,
       canAttempt:
-        sv.mediaCompleted &&
         !passed &&
         (inProgress !== null || submitted.length < allowance.max) &&
         questions.length > 0,
@@ -509,8 +508,6 @@ export async function getQuizForUser(d: Deps, user: Doc<User>, quizId: string) {
 export async function startAttempt(d: Deps, user: Doc<User>, quizId: string) {
   const { quiz, sv, view } = await quizContext(d, user, quizId);
   if (sv.state === 'locked') throw new ApiError('FORBIDDEN', LOCKED);
-  if (!sv.mediaCompleted)
-    throw new ApiError('CONFLICT', 'اول قسمت را کامل ببینید یا گوش کنید، بعد آزمون فعال می‌شود.');
   const questions = await activeQuestions(d, quizId);
   if (questions.length === 0)
     throw new ApiError('CONFLICT', 'آزمونی برای این قسمت تعریف نشده است. به مدیر اطلاع داده شد.');

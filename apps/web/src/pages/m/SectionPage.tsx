@@ -67,7 +67,7 @@ function Player({ d }: { d: SectionDetail }) {
   };
   const tracker = usePlaybackTracker(s.id, onResult);
 
-  const quizReady = progress.completed && !s.quizPassed;
+  const quizReady = !s.quizPassed;
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -134,10 +134,10 @@ function Player({ d }: { d: SectionDetail }) {
             <p className="text-xs text-text-secondary">
               {progress.completed ? (
                 <span className="inline-flex items-center gap-1 font-bold text-success-fg">
-                  <CheckCircle2 className="size-4" aria-hidden /> آماده آزمون هستی.
+                  <CheckCircle2 className="size-4" aria-hidden /> این قسمت را کامل کردی.
                 </span>
               ) : (
-                `برای باز شدن آزمون باید حداقل ${faPercent(d.completionThreshold)} را کامل ببینی یا بشنوی. جلو زدن حساب نمی‌شود. (${faPercent(progress.percent)})`
+                `آزمون این قسمت همیشه باز است. برای کامل شدن قسمت، حداقل ${faPercent(d.completionThreshold)} را ببین یا بشنو. (${faPercent(progress.percent)})`
               )}
             </p>
           </Card>

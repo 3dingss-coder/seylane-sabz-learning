@@ -177,17 +177,20 @@ describe('M7/M8 quiz', () => {
     expect(submit?.body).toEqual({ answers: { q1: 'a', q2: 'a' } });
   });
 
-  it('blocks the quiz until the media is completed', async () => {
+  it('opens the quiz even before the media is completed', async () => {
     mockApi({
       ...loggedIn(),
       'GET /v1/me/sections/seed-pkg-formi-s1': () => ({ data: sectionDetail }),
       'GET /v1/me/quizzes/seed-pkg-formi-s1-quiz': () => ({
-        data: { ...quiz, attemptInfo: { ...quiz.attemptInfo, mediaCompleted: false } },
+        data: {
+          ...quiz,
+          attemptInfo: { ...quiz.attemptInfo, mediaCompleted: false, canAttempt: true },
+        },
       }),
     });
     renderApp('/quiz/seed-pkg-formi-s1');
-    expect(await screen.findByText('آزمون هنوز باز نشده')).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByTestId('quiz-start')).not.toBeInTheDocument());
+    expect(await screen.findByTestId('quiz-start')).toBeInTheDocument();
+    expect(screen.queryByText('آزمون هنوز باز نشده')).not.toBeInTheDocument();
   });
 });
 

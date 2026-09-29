@@ -184,7 +184,7 @@ function SectionRow({ s }: { s: SectionView }) {
       <Link to={`/sections/${s.id}`} data-testid="section-row">
         {body}
       </Link>
-      {s.state === 'quiz' && (
+      {!s.quizPassed && s.quizId && (
         <Link
           to={`/quiz/${s.id}`}
           className="flex min-h-12 items-center justify-center gap-2 rounded-card border border-info/30 bg-info-light text-sm font-bold text-info-fg"

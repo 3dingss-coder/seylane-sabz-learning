@@ -155,12 +155,12 @@ test('fresh marketer can open later sections without finishing earlier ones', as
     data: { sections: Array<{ quizId: string; state: string }> };
   };
   expect(pk.data.sections.some((s) => s.state === 'locked')).toBe(false);
-  // A quiz still needs its own media to be completed first (409), not a lock (403).
+  // Quizzes are open too: a later section's quiz can be started right away.
   const later = pk.data.sections[1];
   const r = await request.post(`${API}/me/quizzes/${later?.quizId}/attempts`, {
     headers: { Authorization: `Bearer ${t}` },
   });
-  expect(r.status()).toBe(409);
+  expect([200, 201]).toContain(r.status());
 });
 
 test('manager: team dashboard, completion report and CSV export', async ({ page }) => {

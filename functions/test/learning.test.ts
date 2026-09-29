@@ -144,10 +144,11 @@ describe('player & tracking (PROMPT 009)', () => {
 });
 
 describe('quiz & sequential lock (PROMPT 010)', () => {
-  it('quiz is closed until the media is completed; answerKey never sent', async () => {
+  it('quiz is open before the media is completed; answerKey never sent', async () => {
     const q = fx.sections[0];
-    const early = await ctx.api(m.token).post(`/v1/me/quizzes/${q?.quizId}/attempts`);
-    expect(early.status).toBe(409);
+    const early = await ctx.api(m.token).get(`/v1/me/quizzes/${q?.quizId}`);
+    expect(early.status).toBe(200);
+    expect(early.body.data.attemptInfo.canAttempt).toBe(true);
     await watchSection(ctx, m.token, q?.id ?? '', 120);
     const quiz = await ctx.api(m.token).get(`/v1/me/quizzes/${q?.quizId}`);
     expect(quiz.status).toBe(200);
