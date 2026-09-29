@@ -19,9 +19,9 @@ RATE_LIMIT_SCALE = "20"
 
 # Cloudflare D1 Database binding (SQLite at the edge — 100% free tier)
 # To connect your D1 database in Cloudflare Dashboard:
-#   Workers & Pages -> seylane-sabz-learning -> Settings -> Bindings -> Add -> D1 database -> Variable name: DB
+# Workers & Pages -> seylane-sabz-learning -> Settings -> Bindings -> Add -> D1 database -> Variable name: DB
 # Or uncomment below when deploying via CLI with your database_id:
-# [[d1_databases]]
-# binding = "DB"
-# database_name = "seylane-sabz-db"
-# database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+[[d1_databases]]
+binding = "DB"
+database_name = "seylane-sabz-db"
+database_id = "f7a2ed30-00f4-42e6-b26f-343c24fe1853"
