@@ -17,6 +17,12 @@ APP_ENV = "dev"
 PLAYBACK_BUDGET = "off"
 RATE_LIMIT_SCALE = "20"
 
+# Scheduled jobs (deadline warnings, reminders, weekly digest, web-push flush).
+# These must match CRON_JOBS in functions/src/services/cron.ts — the Worker's `scheduled`
+# handler dispatches on the cron expression. Times are UTC (Tehran has no DST).
+[triggers]
+crons = ["*/15 * * * *", "0 * * * *", "30 4 * * *", "30 6 * * *"]
+
 # Cloudflare D1 Database binding (SQLite at the edge — 100% free tier)
 # To connect your D1 database in Cloudflare Dashboard:
 # Workers & Pages -> seylane-sabz-learning -> Settings -> Bindings -> Add -> D1 database -> Variable name: DB
