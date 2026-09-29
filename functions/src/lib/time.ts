@@ -35,6 +35,19 @@ export function zonedParts(
   };
 }
 
+/** UTC offset of `timeZone` at instant `d` (minutes, rounded — enough for zones without seconds). */
+export function zonedOffsetMs(d: Date, timeZone: string): number {
+  const p = zonedParts(d, timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+  return asUtc - Math.floor(d.getTime() / 60_000) * 60_000;
+}
+
+/** End (23:59:59) of the calendar day `d` falls on in `timeZone`, as a UTC instant. */
+export function endOfZonedDay(d: Date, timeZone: string): Date {
+  const p = zonedParts(d, timeZone);
+  return new Date(Date.UTC(p.year, p.month - 1, p.day, 23, 59, 59) - zonedOffsetMs(d, timeZone));
+}
+
 /** YYYY-MM-DD in the given timezone (used for daily throttles / counters). */
 export function dayKey(d: Date, timeZone: string): string {
   const p = zonedParts(d, timeZone);
