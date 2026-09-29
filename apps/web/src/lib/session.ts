@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core';
+
 /**
  * Token storage (D36): the access token lives only in memory; the refresh token is persisted
  * so low-digital-literacy users are not asked to log in every time. On Android (Capacitor)
@@ -31,7 +33,9 @@ export const session = {
     if (native) {
       nativeRefresh = token;
       void import('@capacitor/preferences').then(({ Preferences }) =>
-        token ? Preferences.set({ key: REFRESH_KEY, value: token }) : Preferences.remove({ key: REFRESH_KEY }),
+        token
+          ? Preferences.set({ key: REFRESH_KEY, value: token })
+          : Preferences.remove({ key: REFRESH_KEY }),
       );
       return;
     }
@@ -51,7 +55,6 @@ export const session = {
 
 /** Must run before the first render on native builds so `session.refresh` is available synchronously. */
 export async function initNativeSession(): Promise<void> {
-  const { Capacitor } = await import('@capacitor/core');
   if (!Capacitor.isNativePlatform()) return;
   native = true;
   const { Preferences } = await import('@capacitor/preferences');

@@ -41,9 +41,13 @@ export interface AppConfig {
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const rawEnv = env.APP_ENV ?? (env.NODE_ENV === 'test' ? 'test' : 'dev');
   const appEnv: AppEnv = rawEnv === 'prod' || rawEnv === 'test' ? rawEnv : 'dev';
-  const allowedOrigins = (env.ALLOWED_ORIGINS ?? '')
-    .split(',')
-    .map((o) => o.trim())
+  const allowedOrigins = [
+    ...(env.ALLOWED_ORIGINS ?? '').split(','),
+    env.URL ?? '',
+    env.DEPLOY_PRIME_URL ?? '',
+    env.DEPLOY_URL ?? '',
+  ]
+    .map((o) => o.trim().replace(/\/$/, ''))
     .filter((o) => o.length > 0);
   const backend: DataBackend = env.DATA_BACKEND === 'memory' ? 'memory' : 'firestore';
   return {
@@ -62,7 +66,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     rateLimitScale:
       backend === 'memory' ? Math.max(1, Number.parseInt(env.RATE_LIMIT_SCALE ?? '1', 10) || 1) : 1,
     smtpUrl: env.SMTP_URL ?? '',
-    appUrl: (env.APP_URL ?? '').replace(/\/$/, ''),
+    appUrl: (env.APP_URL ?? env.URL ?? env.DEPLOY_PRIME_URL ?? '').replace(/\/$/, ''),
     mailFrom: env.MAIL_FROM ?? 'سیلانه‌سبز لرنینگ <no-reply@seylane-sabz.local>',
   };
 }

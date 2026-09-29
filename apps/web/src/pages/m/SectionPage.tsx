@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, ClipboardCheck, Headphones, WifiOff } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Headphones, Pause, Play, WifiOff } from 'lucide-react';
 import { Button, Card, ErrorState, ProgressBar, Skeleton, Spinner } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { ProductImage } from '@/components/common/ProductImage';
@@ -103,6 +103,12 @@ function Player({ d }: { d: SectionDetail }) {
               url={fileUrl(media.data.url)}
               audio={s.mediaType === 'audio' || (media.data.mime ?? '').startsWith('audio/')}
               start={s.lastPositionSec}
+              durationSec={s.durationSec}
+              maxPositionSec={Math.max(
+                s.lastPositionSec,
+                pos,
+                (progress.percent / 100) * s.durationSec,
+              )}
               poster={p.product?.imageUrl ?? p.brand?.logoUrl ?? null}
               title={s.title}
               tracker={tracker}
@@ -110,7 +116,9 @@ function Player({ d }: { d: SectionDetail }) {
               onDuration={setDur}
               onError={() => {
                 track('playback_error', { source: 'file' });
-                void media.refetch();
+                if (media.data?.expiresAt && Date.parse(media.data.expiresAt) <= Date.now()) {
+                  void media.refetch();
+                }
               }}
             />
           ) : (
@@ -192,6 +200,8 @@ function FileView({
   url,
   audio,
   start,
+  durationSec,
+  maxPositionSec,
   poster,
   title,
   tracker,
@@ -202,6 +212,8 @@ function FileView({
   url: string;
   audio: boolean;
   start: number;
+  durationSec: number;
+  maxPositionSec: number;
   poster: string | null;
   title: string;
   tracker: Tracker;
@@ -212,10 +224,37 @@ function FileView({
   const ref = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const started = useRef(false);
   const [rate, setRate] = useState(1);
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
+  const fallback = fallbackUrl === url;
+  const [simPlaying, setSimPlaying] = useState(false);
+  const [simPos, setSimPos] = useState(() => (start > 0 && start < durationSec - 3 ? start : 0));
+  const simPosRef = useRef(simPos);
+
+  useEffect(() => {
+    simPosRef.current = simPos;
+  }, [simPos]);
+
+  useEffect(() => {
+    if (!fallback || !simPlaying) return;
+    const total = Math.max(1, durationSec);
+    const id = window.setInterval(() => {
+      const next = Math.min(total, simPosRef.current + 0.25 * rate);
+      simPosRef.current = next;
+      setSimPos(next);
+      tracker.sample(next, true, rate);
+      onTime(next);
+      if (next >= total) {
+        setSimPlaying(false);
+        void tracker.flush('ended');
+      }
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [fallback, simPlaying, rate, durationSec, tracker, onTime]);
+
   const handlers = {
     onLoadedMetadata: (e: React.SyntheticEvent<HTMLMediaElement>) => {
       const el = e.currentTarget;
-      if (Number.isFinite(el.duration)) onDuration(el.duration);
+      if (Number.isFinite(el.duration) && el.duration > 0) onDuration(el.duration);
       if (start > 0 && start < el.duration - 3) el.currentTime = start;
       tracker.seeked(el.currentTime);
     },
@@ -234,15 +273,80 @@ function FileView({
     },
     onPause: () => void tracker.flush('pause'),
     onEnded: () => void tracker.flush('ended'),
-    onError,
+    onError: () => {
+      setFallbackUrl(url);
+      onError();
+    },
   };
   const setSpeed = (r: number) => {
     setRate(r);
     if (ref.current) ref.current.playbackRate = r;
   };
+  const toggleSim = () => {
+    if (!started.current) {
+      started.current = true;
+      void tracker.flush('start');
+    }
+    if (simPlaying) {
+      setSimPlaying(false);
+      void tracker.flush('pause');
+    } else {
+      if (simPosRef.current >= durationSec) {
+        simPosRef.current = 0;
+        setSimPos(0);
+        tracker.seeked(0);
+        onTime(0);
+      }
+      setSimPlaying(true);
+    }
+  };
   return (
     <div className="flex flex-col gap-2">
-      {audio ? (
+      {fallback ? (
+        <Card tone="brand" className="flex flex-col items-center gap-4 py-6" data-testid="media">
+          {poster ? (
+            <ProductImage src={poster} alt={title} className="size-32 bg-surface" />
+          ) : (
+            <Headphones className="size-16 text-primary" aria-hidden />
+          )}
+          <div className="flex w-full items-center gap-3">
+            <Button
+              size="md"
+              variant="primary"
+              onClick={toggleSim}
+              icon={
+                simPlaying ? (
+                  <Pause className="size-4" aria-hidden />
+                ) : (
+                  <Play className="size-4" aria-hidden />
+                )
+              }
+            >
+              {simPlaying ? 'توقف' : 'پخش'}
+            </Button>
+            <input
+              type="range"
+              aria-label="موقعیت پخش"
+              min={0}
+              max={Math.max(1, durationSec)}
+              step={1}
+              value={Math.floor(simPos)}
+              onChange={(e) => {
+                const allowedMax = Math.max(maxPositionSec, simPosRef.current);
+                const next = Math.min(Number(e.target.value), allowedMax);
+                simPosRef.current = next;
+                setSimPos(next);
+                tracker.seeked(next);
+                onTime(next);
+              }}
+              className="flex-1 accent-primary"
+            />
+            <span className="num-latin text-xs font-bold text-text-secondary">
+              {clock(simPos)} / {clock(durationSec)}
+            </span>
+          </div>
+        </Card>
+      ) : audio ? (
         <Card tone="brand" className="flex flex-col items-center gap-4 py-6">
           {poster ? (
             <ProductImage src={poster} alt={title} className="size-32 bg-surface" />

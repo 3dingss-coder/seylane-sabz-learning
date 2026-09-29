@@ -88,6 +88,37 @@ describe('M1 login → M3 home', () => {
     fireEvent.click(screen.getByRole('button', { name: /بازگشت به اپ بازاریاب/ }));
     expect(await screen.findByTestId('next-item')).toBeInTheDocument();
   });
+
+  it('switches to the interactive fallback player without infinite refetch when native media decoding fails', async () => {
+    const { calls } = mockApi({
+      ...loggedIn(),
+      'GET /v1/me/sections/seed-pkg-formi-s1': () => ({ data: sectionDetail }),
+      'GET /v1/me/sections/seed-pkg-formi-s1/media': () => ({
+        data: {
+          source: 'file',
+          youtubeId: null,
+          url: '/v1/files/signed/tok1',
+          mime: 'audio/mp4',
+          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        },
+      }),
+      'POST /v1/me/sections/seed-pkg-formi-s1/progress': () => ({
+        data: { playedSeconds: 10, maxPositionSec: 10, percent: 25, completed: false },
+      }),
+    });
+    renderApp('/sections/seed-pkg-formi-s1');
+    const audioEl = await screen.findByTestId('media');
+    expect(audioEl.tagName).toBe('AUDIO');
+    fireEvent.error(audioEl);
+    const playBtn = await screen.findByRole('button', { name: 'پخش' });
+    expect(playBtn).toBeInTheDocument();
+    expect(screen.getByLabelText('موقعیت پخش')).toBeInTheDocument();
+    fireEvent.click(playBtn);
+    expect(await screen.findByRole('button', { name: 'توقف' })).toBeInTheDocument();
+    expect(
+      calls.filter((c) => c.key === 'GET /v1/me/sections/seed-pkg-formi-s1/media').length,
+    ).toBe(1);
+  });
 });
 
 describe('M7/M8 quiz', () => {

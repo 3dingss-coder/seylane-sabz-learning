@@ -14,8 +14,9 @@ export function ProductImage({
   className?: string;
   contain?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const url = fileUrl(src);
+  const failed = Boolean(url && failedSrc === url);
   return (
     <span
       className={cn(
@@ -33,7 +34,7 @@ export function ProductImage({
           alt={alt}
           loading="lazy"
           decoding="async"
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(url)}
           className={cn('size-full', contain ? 'object-contain p-1' : 'object-cover')}
         />
       )}

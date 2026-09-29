@@ -185,7 +185,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
           )}
         </div>
       </Card>
-      {import.meta.env.DEV && mode === 'login' && (
+      {import.meta.env.VITE_APP_ENV !== 'prod' && mode === 'login' && (
         <Card className="mt-4 w-full max-w-sm">
           <p className="mb-2 text-sm font-bold text-text">حساب‌های آزمایشی (فقط محیط توسعه)</p>
           <div className="grid grid-cols-2 gap-2">

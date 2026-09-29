@@ -102,7 +102,7 @@ export function CompletionReport({
 
   return (
     <div className="flex flex-col gap-3">
-      <Card className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
+      <Card className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
         {teams && (
           <Select label="تیم" value={f('team')} onChange={(e) => set('team', e.target.value)}>
             <option value="">همه</option>

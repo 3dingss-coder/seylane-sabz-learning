@@ -16,7 +16,9 @@ export interface BrandLogoProps {
 const SIZES = { sm: 'size-10', md: 'size-14', lg: 'size-20' } as const;
 
 export function BrandLogo({ name, logoUrl, size = 'md', className }: BrandLogoProps) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const resolved = fileUrl(logoUrl);
+  const failed = Boolean(resolved && failedSrc === resolved);
   return (
     <span
       className={cn(
@@ -25,16 +27,17 @@ export function BrandLogo({ name, logoUrl, size = 'md', className }: BrandLogoPr
         className,
       )}
     >
-      {failed ? (
+      {failed || !resolved ? (
         <span className="line-clamp-2 text-center text-[10px] font-bold text-text-secondary">
           {name}
         </span>
       ) : (
         <img
-          src={fileUrl(logoUrl)}
+          src={resolved}
           alt={`لوگوی ${name}`}
           loading="lazy"
-          onError={() => setFailed(true)}
+          decoding="async"
+          onError={() => setFailedSrc(resolved)}
           className="max-h-full max-w-full object-contain"
         />
       )}

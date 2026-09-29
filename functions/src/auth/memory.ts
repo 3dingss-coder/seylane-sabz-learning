@@ -48,13 +48,16 @@ export class MemoryAuthProvider implements AuthProvider {
   private async issue(uid: string): Promise<AuthTokens> {
     const iat = Math.floor(this.now() / 1000);
     const acc = await this.store.get<Account>(`_auth/${uid}`);
-    const refreshToken = randomBytes(32).toString('base64url');
+    const gen = acc?.validAfter ?? 0;
+    const rtPayload = b64({ uid, gen, n: randomBytes(12).toString('base64url') });
+    const rtSig = createHmac('sha256', this.secret).update(`rt.${rtPayload}`).digest('base64url');
+    const refreshToken = `${rtPayload}.${rtSig}`;
     await this.store.set(`_auth_refresh/${sha(refreshToken)}`, {
       uid,
       createdAt: new Date(this.now()).toISOString(),
     });
     return {
-      idToken: this.sign(uid, iat, acc?.validAfter ?? 0),
+      idToken: this.sign(uid, iat, gen),
       refreshToken,
       expiresIn: TOKEN_TTL,
     };
@@ -62,7 +65,10 @@ export class MemoryAuthProvider implements AuthProvider {
 
   async createUser(p: { email: string; password: string; displayName: string }) {
     const email = p.email.toLowerCase();
-    const uid = this.store.newId();
+    const deterministicId = `u_${sha(email).slice(0, 18)}`;
+    const uid = (await this.store.get(`_auth/${deterministicId}`))
+      ? this.store.newId()
+      : deterministicId;
     await this.store.create(`_auth_email/${sha(email)}`, { uid });
     await this.store.create(`_auth/${uid}`, {
       email,
@@ -93,17 +99,48 @@ export class MemoryAuthProvider implements AuthProvider {
 
   async refresh(refreshToken: string) {
     const key = `_auth_refresh/${sha(refreshToken)}`;
-    const rec = await this.store.get<{ uid: string; rotatedAt?: number }>(key);
+    let rec: { uid: string; rotatedAt?: number; revoked?: boolean } | null = await this.store.get<{
+      uid: string;
+      rotatedAt?: number;
+      revoked?: boolean;
+    }>(key);
+    if (rec?.revoked) return null;
+    if (!rec) {
+      const parts = refreshToken.split('.');
+      if (parts.length !== 2) return null;
+      const [rtPayload, rtSig] = parts as [string, string];
+      const expected = createHmac('sha256', this.secret)
+        .update(`rt.${rtPayload}`)
+        .digest('base64url');
+      const a = Buffer.from(rtSig);
+      const b = Buffer.from(expected);
+      if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+      try {
+        const parsed = JSON.parse(Buffer.from(rtPayload, 'base64url').toString('utf8')) as {
+          uid?: string;
+          gen?: number;
+        };
+        if (!parsed.uid) return null;
+        const accCheck = await this.store.get<Account>(`_auth/${parsed.uid}`);
+        if (!accCheck || accCheck.disabled || (parsed.gen ?? 0) !== accCheck.validAfter)
+          return null;
+        rec = { uid: parsed.uid };
+      } catch {
+        return null;
+      }
+    }
     if (!rec) return null;
     // Rotation with a short grace window: a refresh interrupted by a page reload (response
     // never stored by the client) must not log the user out, but old tokens die quickly.
     if (rec.rotatedAt !== undefined && this.now() - rec.rotatedAt > REFRESH_GRACE_MS) {
-      await this.store.delete(key);
+      await this.store.set(key, { uid: rec.uid, revoked: true });
       return null;
     }
     const acc = await this.store.get<Account>(`_auth/${rec.uid}`);
     if (!acc || acc.disabled) return null;
-    if (rec.rotatedAt === undefined) await this.store.update(key, { rotatedAt: this.now() });
+    if (rec.rotatedAt === undefined) {
+      await this.store.set(key, { ...rec, rotatedAt: this.now() }, { merge: true });
+    }
     return { uid: rec.uid, tokens: await this.issue(rec.uid) };
   }
 
