@@ -6,9 +6,9 @@ import { parse } from '../http/validate';
 import type { Deps } from '../services/context';
 import * as assignments from '../services/assignments';
 import * as content from '../services/content';
-import * as jobs from '../services/jobs';
+import { isJobName, JOB_NAMES, runJob } from '../services/cron';
+import { ApiError } from '../http/errors';
 import * as mentor from '../services/mentor';
-import { runMentorDaily } from '../services/mentor-rules';
 import * as notify from '../services/notify';
 import * as policies from '../services/policies';
 import * as reports from '../services/reports';
@@ -131,6 +131,10 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   r.post(
     '/admin/packages/:id/archive',
     h(async (req) => content.archivePackage(d, actorOf(req), id(req))),
+  );
+  r.post(
+    '/admin/packages/:id/unarchive',
+    h(async (req) => content.unarchivePackage(d, actorOf(req), id(req))),
   );
   r.post(
     '/admin/packages/:id/sections',
@@ -391,24 +395,18 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   );
 
   // Manual job trigger (superadmin) — useful on dev / when schedules are paused.
+  // Same job table the cron triggers use, so a manual run cannot drift from a scheduled one.
   r.post(
     '/admin/jobs/:name',
     requireRole('superadmin'),
     h(async (req) => {
-      switch (id(req, 'name')) {
-        case 'deadline-sweep':
-          return jobs.runDeadlineSweep(d);
-        case 'daily-reminders':
-          return jobs.runDailyReminders(d);
-        case 'weekly-digest':
-          return jobs.runWeeklyDigest(d, true);
-        case 'mentor-daily':
-          return { nudges: await runMentorDaily(d) };
-        case 'flush-push':
-          return { sent: await notify.flushDeferredPush(d) };
-        default:
-          return { error: 'unknown job' };
-      }
+      const name = id(req, 'name');
+      if (!isJobName(name))
+        throw new ApiError(
+          'NOT_FOUND',
+          `کار زمان‌بندی‌شده «${name}» شناخته نشده است. (${JOB_NAMES.join('، ')})`,
+        );
+      return runJob(d, name, { force: true });
     }),
   );
   return r;
