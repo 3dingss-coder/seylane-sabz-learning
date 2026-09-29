@@ -20,7 +20,7 @@ import type { AuthResult, Me, Role } from './types';
 interface AuthState {
   user: Me | null;
   status: 'loading' | 'authenticated' | 'anonymous';
-  login(identifier: string, password: string): Promise<Me>;
+  login(identifier: string, password?: string): Promise<Me>;
   register(input: { name: string; identifier: string; password: string }): Promise<Me>;
   logout(): Promise<void>;
   refreshMe(): Promise<void>;
@@ -98,7 +98,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       status,
       login: async (identifier, password) =>
-        accept(await api.post<AuthResult>('/auth/login', { identifier, password })),
+        accept(
+          import.meta.env.VITE_APP_ENV === 'prod'
+            ? await api.post<AuthResult>('/auth/login', { identifier, password })
+            : await api.post<AuthResult>('/auth/demo-phone-login', { phone: identifier }),
+        ),
       register: async (input) => accept(await api.post<AuthResult>('/auth/register', input)),
       logout: async () => {
         try {

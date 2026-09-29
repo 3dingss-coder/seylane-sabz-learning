@@ -26,7 +26,7 @@ const loggedIn = () => {
 describe('M1 login → M3 home', () => {
   it('logs in with phone, stores refresh token and shows «کار بعدی»', async () => {
     const { calls } = mockApi({
-      'POST /v1/auth/login': () => ({
+      'POST /v1/auth/demo-phone-login': () => ({
         data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
       }),
       'GET /v1/me/home': () => ({ data: home }),
@@ -34,17 +34,15 @@ describe('M1 login → M3 home', () => {
       'GET /v1/me/mentor/nudges': () => ({ data: [] }),
     });
     renderApp('/login');
-    fireEvent.change(await screen.findByLabelText('شماره موبایل یا ایمیل'), {
+    fireEvent.change(await screen.findByLabelText('شماره موبایل'), {
       target: { value: '۰۹۱۲۰۰۰۰۰۰۴' },
     });
-    fireEvent.change(screen.getByLabelText('رمز عبور'), { target: { value: 'demo1234' } });
     fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
     expect(await screen.findByTestId('next-item')).toHaveTextContent('معرفی کلی محصول فورمی');
     expect(screen.getByRole('button', { name: /ادامه/ })).toBeInTheDocument();
     // Persian digits are normalised before sending
-    expect(calls.find((c) => c.key === 'POST /v1/auth/login')?.body).toEqual({
-      identifier: '09120000004',
-      password: 'demo1234',
+    expect(calls.find((c) => c.key === 'POST /v1/auth/demo-phone-login')?.body).toEqual({
+      phone: '09120000004',
     });
     expect(localStorage.getItem('ssl.refresh')).toBe('r1');
     // real product image, not a placeholder
@@ -54,20 +52,19 @@ describe('M1 login → M3 home', () => {
     );
   });
 
-  it('shows the server error message on wrong password', async () => {
+  it('shows the server error message on unknown phone', async () => {
     mockApi({
-      'POST /v1/auth/login': () => ({
+      'POST /v1/auth/demo-phone-login': () => ({
         status: 401,
-        error: { code: 'UNAUTHENTICATED', message: 'شماره یا رمز اشتباه است.' },
+        error: { code: 'UNAUTHENTICATED', message: 'حسابی با این شماره پیدا نشد.' },
       }),
     });
     renderApp('/login');
-    fireEvent.change(await screen.findByLabelText('شماره موبایل یا ایمیل'), {
+    fireEvent.change(await screen.findByLabelText('شماره موبایل'), {
       target: { value: '09120000004' },
     });
-    fireEvent.change(screen.getByLabelText('رمز عبور'), { target: { value: 'bad' } });
     fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('شماره یا رمز اشتباه است.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('حسابی با این شماره پیدا نشد.');
   });
 
   it('home shows empty state when nothing is assigned', async () => {
@@ -89,7 +86,7 @@ describe('M1 login → M3 home', () => {
     expect(await screen.findByTestId('next-item')).toBeInTheDocument();
   });
 
-  it('switches to the interactive fallback player without infinite refetch when native media decoding fails', async () => {
+  it('shows an error instead of faking playback when native media decoding fails', async () => {
     const { calls } = mockApi({
       ...loggedIn(),
       'GET /v1/me/sections/seed-pkg-formi-s1': () => ({ data: sectionDetail }),
@@ -110,11 +107,8 @@ describe('M1 login → M3 home', () => {
     const audioEl = await screen.findByTestId('media');
     expect(audioEl.tagName).toBe('AUDIO');
     fireEvent.error(audioEl);
-    const playBtn = await screen.findByRole('button', { name: 'پخش' });
-    expect(playBtn).toBeInTheDocument();
-    expect(screen.getByLabelText('موقعیت پخش')).toBeInTheDocument();
-    fireEvent.click(playBtn);
-    expect(await screen.findByRole('button', { name: 'توقف' })).toBeInTheDocument();
+    expect(await screen.findByTestId('media-error')).toHaveTextContent('بارگذاری نشد');
+    expect(screen.queryByLabelText('موقعیت پخش')).not.toBeInTheDocument();
     expect(
       calls.filter((c) => c.key === 'GET /v1/me/sections/seed-pkg-formi-s1/media').length,
     ).toBe(1);

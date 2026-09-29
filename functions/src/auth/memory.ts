@@ -97,6 +97,15 @@ export class MemoryAuthProvider implements AuthProvider {
     return { ok: true, uid: link.uid, tokens: await this.issue(link.uid) };
   }
 
+  /** Unsafe phone-only login for the disposable in-memory MVP, never Firebase/production. */
+  async demoSignIn(email: string): Promise<SignInResult> {
+    const link = await this.store.get<{ uid: string }>(`_auth_email/${sha(email.toLowerCase())}`);
+    const acc = link ? await this.store.get<Account>(`_auth/${link.uid}`) : null;
+    if (!link || !acc) return { ok: false, reason: 'invalid' };
+    if (acc.disabled) return { ok: false, reason: 'disabled' };
+    return { ok: true, uid: link.uid, tokens: await this.issue(link.uid) };
+  }
+
   async refresh(refreshToken: string) {
     const key = `_auth_refresh/${sha(refreshToken)}`;
     let rec: { uid: string; rotatedAt?: number; revoked?: boolean } | null = await this.store.get<{
