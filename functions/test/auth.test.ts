@@ -7,6 +7,22 @@ beforeEach(async () => {
 });
 
 describe('auth (PROMPT 002)', () => {
+  it('allows phone-only login only in the disposable memory MVP', async () => {
+    const created = await ctx.api().post('/v1/auth/register', {
+      name: 'آزمایشی',
+      identifier: '09351234567',
+      password: 'abc12345',
+    });
+    expect(created.status).toBe(201);
+    const login = await ctx.api().post('/v1/auth/demo-phone-login', { phone: '۰۹۳۵۱۲۳۴۵۶۷' });
+    expect(login.status).toBe(200);
+    expect(login.body.data.user.phone).toBe('09351234567');
+    expect((await ctx.api(login.body.data.idToken).get('/v1/me')).status).toBe(200);
+    expect(
+      (await ctx.api().post('/v1/auth/demo-phone-login', { phone: 'unknown@example.com' })).status,
+    ).toBe(400);
+  });
+
   it('registers with phone (Persian digits) → marketer + tokens, then logs in', async () => {
     const res = await ctx
       .api()

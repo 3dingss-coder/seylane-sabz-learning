@@ -10,7 +10,7 @@ import { track } from '@/lib/telemetry';
 
 type Mode = 'login' | 'register' | 'forgot';
 
-/** M1 — ثبت‌نام / ورود / بازیابی رمز (one page, three modes, ≤3 fields). */
+/** MVP phone-only login; registration/reset remain separate flows. */
 export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
   const { status, user, login, register } = useAuth();
   const nav = useNavigate();
@@ -45,8 +45,13 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
   const validate = () => {
     const e: Record<string, string> = {};
     if (mode === 'register' && name.trim().length < 2) e.name = 'نام و نام خانوادگی را بنویسید.';
-    if (!identifier.trim()) e.identifier = 'شماره موبایل یا ایمیل را وارد کنید.';
-    if (mode !== 'forgot' && password.length < (mode === 'register' ? 8 : 1))
+    if (mode === 'login' && !/^09\d{9}$/.test(toLatinDigits(identifier.trim())))
+      e.identifier = 'شماره موبایل معتبر وارد کنید.';
+    else if (!identifier.trim()) e.identifier = 'شماره موبایل یا ایمیل را وارد کنید.';
+    if (
+      (mode === 'register' && password.length < 8) ||
+      (mode === 'login' && import.meta.env.VITE_APP_ENV === 'prod' && !password)
+    )
       e.password = mode === 'register' ? 'رمز باید حداقل ۸ نویسه باشد.' : 'رمز را وارد کنید.';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -113,7 +118,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             />
           )}
           <Input
-            label="شماره موبایل یا ایمیل"
+            label={mode === 'login' ? 'شماره موبایل' : 'شماره موبایل یا ایمیل'}
             ltr
             inputMode={/^[\d۰-۹+]*$/.test(identifier) ? 'tel' : 'email'}
             autoComplete="username"
@@ -124,7 +129,8 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             icon={<Phone className="size-5" />}
             disabled={busy}
           />
-          {mode !== 'forgot' && (
+          {(mode === 'register' ||
+            (mode === 'login' && import.meta.env.VITE_APP_ENV === 'prod')) && (
             <Input
               label="رمز عبور"
               type="password"
@@ -156,24 +162,6 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
           </Button>
         </form>
         <div className="mt-4 flex flex-col items-center gap-1 text-sm">
-          {mode === 'login' && (
-            <>
-              <button
-                type="button"
-                className="min-h-12 font-bold text-primary"
-                onClick={() => switchMode('register')}
-              >
-                حساب ندارید؟ ثبت‌نام کنید
-              </button>
-              <button
-                type="button"
-                className="min-h-12 text-text-secondary"
-                onClick={() => switchMode('forgot')}
-              >
-                رمز را فراموش کرده‌ام
-              </button>
-            </>
-          )}
           {mode !== 'login' && (
             <button
               type="button"
@@ -196,14 +184,12 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
                 className="min-h-12 rounded-input border border-border px-2 text-sm text-text hover:border-primary/40"
                 onClick={() => {
                   setIdentifier(a.phone);
-                  setPassword('demo1234');
                 }}
               >
                 {a.label}
               </button>
             ))}
           </div>
-          <p className="mt-2 text-xs text-text-secondary">رمز همه: demo1234</p>
         </Card>
       )}
       <Link to="/gallery" className="sr-only">
@@ -215,8 +201,6 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
 
 /** Seeded local accounts (functions/src/seed/demo.ts). Rendered only in `vite dev`. */
 const DEMO_ACCOUNTS = [
-  { phone: '09120000001', label: 'مدیر ارشد' },
   { phone: '09120000002', label: 'ادمین' },
-  { phone: '09120000003', label: 'مدیر تیم' },
   { phone: '09120000004', label: 'بازاریاب' },
 ];

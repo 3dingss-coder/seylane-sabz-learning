@@ -6,6 +6,8 @@ import { rateLimit, type RateLimiter } from '../http/rateLimit';
 import { parse } from '../http/validate';
 import type { Deps } from '../services/context';
 import * as users from '../services/users';
+import { MemoryAuthProvider } from '../auth/memory';
+import { ApiError } from '../http/errors';
 
 const ip = (req: { ip?: string }) => req.ip ?? 'unknown';
 
@@ -38,6 +40,24 @@ export function authRouter(d: Deps, limiter: RateLimiter): Router {
     perIp('login', 10),
     h(async (req) => users.login(d, parse(users.loginSchema, req.body))),
   );
+  // Only the disposable memory-backed MVP can use passwordless login. Do not expose on Firebase.
+  if (d.config.env !== 'prod' && d.auth instanceof MemoryAuthProvider) {
+    const demoAuth = d.auth;
+    r.post(
+      '/auth/demo-phone-login',
+      perIp('demo-phone-login', 10),
+      h(async (req) => {
+        const { phone } = parse(z.object({ phone: z.string().max(20) }), req.body);
+        const id = users.parseIdentifier(phone);
+        if (id.kind !== 'phone') throw new ApiError('VALIDATION', 'شماره موبایل وارد کنید.');
+        const result = await demoAuth.demoSignIn(id.authEmail);
+        if (!result.ok) throw new ApiError('UNAUTHENTICATED', 'حسابی با این شماره پیدا نشد.');
+        const user = await d.store.get<import('../domain/types').User>(`users/${result.uid}`);
+        if (!user || user.status !== 'active') throw new ApiError('UNAUTHENTICATED');
+        return { user: users.publicUser(user), ...result.tokens };
+      }),
+    );
+  }
   r.post(
     '/auth/refresh',
     perIp('refresh', 30),
