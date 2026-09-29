@@ -1,8 +1,3 @@
-# Netlify / Cloudflare Pages routing rules.
-# Public catalog & branding images resolve directly from the static CDN bundle;
-# /v1/* API requests route to the bundled Netlify Function (or external Cloud Function if overridden in CI);
-# all other routes fall back to the SPA entry point.
-/v1/files/public/branding/holding-logo.png  /icons/logo-full.png       200
-/v1/files/public/*                          /catalog/:splat            200
-/v1/*                                       /.netlify/functions/api    200
-/*                                          /index.html                200
+# Cloudflare Pages SPA fallback routing.
+# API requests (/v1/*) are handled by Cloudflare Pages Functions (functions/v1/[[path]].ts) via _routes.json.
+/*  /index.html  200

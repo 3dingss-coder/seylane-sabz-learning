@@ -50,7 +50,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
     else if (!identifier.trim()) e.identifier = 'شماره موبایل یا ایمیل را وارد کنید.';
     if (
       (mode === 'register' && password.length < 8) ||
-      (mode === 'login' && import.meta.env.VITE_APP_ENV === 'prod' && !password)
+      (mode === 'login' && import.meta.env.VITE_REQUIRE_PASSWORD === 'true' && !password)
     )
       e.password = mode === 'register' ? 'رمز باید حداقل ۸ نویسه باشد.' : 'رمز را وارد کنید.';
     setErrors(e);
@@ -130,7 +130,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             disabled={busy}
           />
           {(mode === 'register' ||
-            (mode === 'login' && import.meta.env.VITE_APP_ENV === 'prod')) && (
+            (mode === 'login' && import.meta.env.VITE_REQUIRE_PASSWORD === 'true')) && (
             <Input
               label="رمز عبور"
               type="password"
@@ -162,7 +162,15 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
           </Button>
         </form>
         <div className="mt-4 flex flex-col items-center gap-1 text-sm">
-          {mode !== 'login' && (
+          {mode === 'login' ? (
+            <button
+              type="button"
+              className="min-h-12 font-bold text-primary"
+              onClick={() => switchMode('register')}
+            >
+              حساب ندارید؟ ثبت‌نام کنید
+            </button>
+          ) : (
             <button
               type="button"
               className="min-h-12 font-bold text-primary"
@@ -173,10 +181,10 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
           )}
         </div>
       </Card>
-      {import.meta.env.VITE_APP_ENV !== 'prod' && mode === 'login' && (
-        <Card className="mt-4 w-full max-w-sm">
-          <p className="mb-2 text-sm font-bold text-text">حساب‌های آزمایشی (فقط محیط توسعه)</p>
-          <div className="grid grid-cols-2 gap-2">
+      {mode === 'login' && (
+        <Card className="mt-4 w-full max-w-[400px]">
+          <p className="mb-2 text-sm font-bold text-text">ورود سریع آزمایشی</p>
+          <div className="grid grid-cols-3 gap-2">
             {DEMO_ACCOUNTS.map((a) => (
               <button
                 key={a.phone}
@@ -199,8 +207,9 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
   );
 }
 
-/** Seeded local accounts (functions/src/seed/demo.ts). Rendered only in `vite dev`. */
+/** Seeded accounts (functions/src/seed/demo.ts). */
 const DEMO_ACCOUNTS = [
   { phone: '09120000002', label: 'ادمین' },
+  { phone: '09120000003', label: 'مدیر تیم' },
   { phone: '09120000004', label: 'بازاریاب' },
 ];

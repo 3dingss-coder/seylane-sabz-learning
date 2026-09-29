@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomInt } from '../lib/crypto';
 import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { text } from '../http/validate';

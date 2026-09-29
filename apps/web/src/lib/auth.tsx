@@ -99,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       login: async (identifier, password) =>
         accept(
-          import.meta.env.VITE_APP_ENV === 'prod'
+          password && password.length > 0
             ? await api.post<AuthResult>('/auth/login', { identifier, password })
             : await api.post<AuthResult>('/auth/demo-phone-login', { phone: identifier }),
         ),

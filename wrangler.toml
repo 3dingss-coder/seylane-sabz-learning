@@ -1,0 +1,27 @@
+#:schema node_modules/wrangler/config-schema.json
+name = "seylane-sabz-learning"
+main = "functions/src/cloudflare-worker.ts"
+compatibility_date = "2025-04-01"
+
+[build]
+command = "npm run build"
+
+[assets]
+directory = "apps/web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/v1/*"]
+
+[vars]
+APP_ENV = "dev"
+PLAYBACK_BUDGET = "off"
+RATE_LIMIT_SCALE = "20"
+
+# Cloudflare D1 Database binding (SQLite at the edge — 100% free tier)
+# To connect your D1 database in Cloudflare Dashboard:
+#   Workers & Pages -> seylane-sabz-learning -> Settings -> Bindings -> Add -> D1 database -> Variable name: DB
+# Or uncomment below when deploying via CLI with your database_id:
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "seylane-sabz-db"
+# database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"

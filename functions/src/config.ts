@@ -3,7 +3,7 @@
  * (Firebase Functions params / GitHub Secrets) — never hard-coded secrets.
  */
 export type AppEnv = 'dev' | 'prod' | 'test';
-export type DataBackend = 'memory' | 'firestore';
+export type DataBackend = 'memory' | 'firestore' | 'd1';
 
 export interface AppConfig {
   env: AppEnv;
@@ -49,7 +49,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   ]
     .map((o) => o.trim().replace(/\/$/, ''))
     .filter((o) => o.length > 0);
-  const backend: DataBackend = env.DATA_BACKEND === 'memory' ? 'memory' : 'firestore';
+  const backend: DataBackend =
+    env.DATA_BACKEND === 'memory' ? 'memory' : env.DATA_BACKEND === 'd1' ? 'd1' : 'firestore';
   return {
     env: appEnv,
     version: env.APP_VERSION ?? '0.2.0',
@@ -61,10 +62,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     geminiApiKey: env.GEMINI_API_KEY ?? '',
     geminiModel: env.GEMINI_MODEL ?? 'gemini-2.5-flash-lite',
     dataDir: env.LOCAL_DATA_DIR ?? '.local-data',
-    playbackBudget: !(backend === 'memory' && env.PLAYBACK_BUDGET === 'off'),
+    playbackBudget: !((backend === 'memory' || backend === 'd1') && env.PLAYBACK_BUDGET === 'off'),
     trustProxyHops: Math.max(0, Math.min(5, Number.parseInt(env.TRUST_PROXY_HOPS ?? '1', 10) || 0)),
     rateLimitScale:
-      backend === 'memory' ? Math.max(1, Number.parseInt(env.RATE_LIMIT_SCALE ?? '1', 10) || 1) : 1,
+      backend === 'memory' || backend === 'd1'
+        ? Math.max(1, Number.parseInt(env.RATE_LIMIT_SCALE ?? '1', 10) || 1)
+        : 1,
     smtpUrl: env.SMTP_URL ?? '',
     appUrl: (env.APP_URL ?? env.URL ?? env.DEPLOY_PRIME_URL ?? '').replace(/\/$/, ''),
     mailFrom: env.MAIL_FROM ?? 'سیلانه‌سبز لرنینگ <no-reply@seylane-sabz.local>',

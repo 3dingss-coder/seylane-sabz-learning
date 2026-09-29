@@ -12,13 +12,15 @@ import path from 'node:path';
 import { LocalBlobStore } from '../blob/local';
 import { DEFAULT_POLICY } from '../domain/policy';
 import type { Brand, MediaAsset, Package, Product, Question, Quiz, Section } from '../domain/types';
-import { mp4DurationFromBuffer, sniff } from '../lib/media';
+import { createPlaceholderMp4, mp4DurationFromBuffer, sniff } from '../lib/media';
 import { DAY } from '../lib/time';
 import { audit, type Actor, type Deps } from '../services/context';
 import { refreshPackageSummary, validatePublish } from '../services/content';
 import { invalidateBrands } from '../services/catalog-cache';
 import { DEFAULT_BADGES } from '../services/rewards';
 import { catalogPaths, loadCatalog } from './catalog-source';
+
+export { createPlaceholderMp4 };
 
 const SEED: Actor = { id: 'seed', role: 'system' };
 
@@ -117,32 +119,6 @@ const SEED_MEDIA_DURATIONS: Record<string, number> = {
   'آموزش_فروش_آیس_بال.mp4': 608,
   'معرفی کلی‌ دارت.m4a': 347,
 };
-
-export function createPlaceholderMp4(isAudio = false, durationSec = 120): Buffer {
-  const brand = isAudio ? 'M4A ' : 'mp42';
-  const ftyp = Buffer.alloc(24);
-  ftyp.writeUInt32BE(24, 0);
-  ftyp.write('ftyp', 4, 'latin1');
-  ftyp.write(brand, 8, 'latin1');
-  ftyp.writeUInt32BE(0, 12);
-  ftyp.write(brand, 16, 'latin1');
-  ftyp.write('isom', 20, 'latin1');
-
-  const mvhd = Buffer.alloc(108);
-  mvhd.writeUInt32BE(108, 0);
-  mvhd.write('mvhd', 4, 'latin1');
-  mvhd.writeUInt8(0, 8);
-  mvhd.writeUInt32BE(1000, 20);
-  mvhd.writeUInt32BE(durationSec * 1000, 24);
-  mvhd.writeUInt32BE(0x00010000, 28);
-  mvhd.writeUInt16BE(0x0100, 32);
-
-  const moov = Buffer.alloc(8);
-  moov.writeUInt32BE(8 + mvhd.length, 0);
-  moov.write('moov', 4, 'latin1');
-
-  return Buffer.concat([ftyp, moov, mvhd]);
-}
 
 export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
   const log = opts.log ?? (() => undefined);
