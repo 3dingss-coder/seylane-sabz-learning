@@ -354,12 +354,25 @@ export async function adminUpdateUser(
     if (brands.some((b) => !b)) throw new ApiError('VALIDATION', 'برند انتخاب‌شده معتبر نیست.');
   }
   const warnings: string[] = [];
-  if (patch.status === 'inactive' && target.role === 'manager') {
-    const teams = await d.store.query<Team>({
+  // A user who stops being an active manager must not stay attached to a team: otherwise the team
+  // keeps showing them as its manager (listTeams) and their panel keeps listing its members.
+  const wasManager = target.role === 'manager';
+  const stopsManaging =
+    wasManager &&
+    ((patch.role !== undefined && patch.role !== 'manager') || patch.status === 'inactive');
+  const movedTeam = wasManager && patch.teamId !== undefined && patch.teamId !== target.teamId;
+  if (stopsManaging || movedTeam) {
+    const managed = await d.store.query<Team>({
       collection: 'teams',
       where: [['managerId', '==', userId]],
     });
-    if (teams.length) warnings.push('این مدیر مسئول تیم است؛ یک مدیر جدید برای تیم تعیین کنید.');
+    const toClear = stopsManaging ? managed : managed.filter((t) => t.id === target.teamId);
+    for (const t of toClear)
+      await d.store.update(`teams/${t.id}`, { managerId: null, updatedAt: nowIso(d) });
+    if (toClear.length)
+      warnings.push(
+        `مدیریت تیم «${toClear.map((t) => t.name).join('، ')}» از این کاربر گرفته شد؛ در بخش تیم‌ها مدیر جدیدی انتخاب کنید.`,
+      );
   }
   const update: Partial<User> = { ...patch, updatedAt: nowIso(d) } as Partial<User>;
   await d.store.update(`users/${userId}`, update as Record<string, unknown>);
@@ -396,7 +409,10 @@ export async function adminResetPassword(d: Deps, actor: Actor, userId: string) 
   const target = await d.store.get<User>(`users/${userId}`);
   if (!target) throw new ApiError('NOT_FOUND', 'کاربر پیدا نشد.');
   if (PRIVILEGED.includes(target.role) && actor.role !== 'superadmin')
-    throw new ApiError('FORBIDDEN');
+    throw new ApiError(
+      'FORBIDDEN',
+      'برای بازنشانی رمز کاربر مدیریتی (admin/superadmin) وارد حساب مدیر ارشد سیستم شوید.',
+    );
   await audit(d, actor, 'user.password_reset', 'users', userId);
   await track(d, 'admin_password_reset', actor.id, { method: target.email ? 'email' : 'temp' });
   if (target.email) {
@@ -432,18 +448,33 @@ export async function listTeams(d: Deps) {
     .sort((a, b) => a.name.localeCompare(b.name, 'fa'));
 }
 
-async function assignManager(d: Deps, teamId: string, managerId: string | null | undefined) {
-  if (!managerId) return;
+async function assignManager(
+  d: Deps,
+  teamId: string,
+  managerId: string | null | undefined,
+): Promise<string[]> {
+  if (!managerId) return [];
   const m = await d.store.get<User>(`users/${managerId}`);
   if (!m || m.role !== 'manager' || m.status !== 'active')
     throw new ApiError('VALIDATION', 'مدیر تیم باید کاربری فعال با نقش «مدیر فروش» باشد.');
+  const warnings: string[] = [];
+  // Moving a manager to another team frees the team they managed before — a team may not keep a
+  // `managerId` that no longer belongs to it.
+  if (m.teamId && m.teamId !== teamId) {
+    const prev = await d.store.get<Team>(`teams/${m.teamId}`);
+    if (prev && !prev.archived && prev.managerId === m.id) {
+      await d.store.update(`teams/${m.teamId}`, { managerId: null, updatedAt: nowIso(d) });
+      warnings.push(`تیم قبلی «${prev.name}» هم بدون مدیر ماند؛ برایش مدیر جدیدی انتخاب کنید.`);
+    }
+  }
   await d.store.update(`users/${managerId}`, { teamId, updatedAt: nowIso(d) });
+  return warnings;
 }
 
 export async function createTeam(d: Deps, actor: Actor, input: z.infer<typeof teamSchema>) {
   const id = d.store.newId();
   const now = nowIso(d);
-  await assignManager(d, id, input.managerId);
+  const warnings = await assignManager(d, id, input.managerId);
   const team: Team = {
     name: input.name,
     managerId: input.managerId ?? null,
@@ -453,7 +484,7 @@ export async function createTeam(d: Deps, actor: Actor, input: z.infer<typeof te
   };
   await d.store.set(`teams/${id}`, team);
   await audit(d, actor, 'team.created', 'teams', id, null, team);
-  return { id, ...team };
+  return { id, ...team, warnings };
 }
 
 export async function updateTeam(
@@ -464,11 +495,18 @@ export async function updateTeam(
 ) {
   const team = await d.store.get<Team>(`teams/${teamId}`);
   if (!team) throw new ApiError('NOT_FOUND', 'تیم پیدا نشد.');
-  if (input.managerId !== undefined) await assignManager(d, teamId, input.managerId);
+  const managerChanged = input.managerId !== undefined && input.managerId !== team.managerId;
+  const warnings = managerChanged ? await assignManager(d, teamId, input.managerId) : [];
+  // The previous manager is detached from the team (also when the team is archived), so their panel
+  // no longer shows a team the admin list has already hidden.
+  if ((managerChanged || input.archived) && team.managerId) {
+    await d.store.update(`users/${team.managerId}`, { teamId: null, updatedAt: nowIso(d) });
+    warnings.push('مدیر قبلی از این تیم جدا شد.');
+  }
   const patch = { ...input, updatedAt: nowIso(d) };
   await d.store.update(`teams/${teamId}`, patch);
   await audit(d, actor, 'team.updated', 'teams', teamId, team, patch);
-  return { ...team, ...patch, id: teamId };
+  return { ...team, ...patch, id: teamId, warnings };
 }
 
 /** Used by seed/bootstrap: first superadmin (never via public API). */
