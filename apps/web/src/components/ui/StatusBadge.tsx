@@ -58,8 +58,15 @@ const MAP: Record<BadgeStatus, { label: string; icon: LucideIcon; cls: string }>
   inactive: { label: 'غیرفعال', icon: UserX, cls: 'bg-background text-muted-fg border-border' },
 };
 
+/** Anything the API may send that the map does not know yet — never let a badge crash the page. */
+const FALLBACK: { label: string; icon: LucideIcon; cls: string } = {
+  label: '—',
+  icon: CircleDot,
+  cls: 'bg-background text-text-secondary border-border',
+};
+
 export function StatusBadge({ status, className }: { status: BadgeStatus; className?: string }) {
-  const { label, icon: Icon, cls } = MAP[status];
+  const { label, icon: Icon, cls } = MAP[status] ?? FALLBACK;
   return (
     <span
       className={cn(
