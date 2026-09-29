@@ -3,7 +3,7 @@
  * on one port (default 5173). Preview tools that pick "the first open port" can therefore never land
  * on the raw JSON API.
  *
- *   npm start          (PORT=5173 by default; RESEED=true to wipe and re-seed)
+ *   npm start          (PORT=3000 by default; RESEED=true to wipe and re-seed)
  *   npm run start:prod (SERVE_BUILD=true: serves the production build in apps/web/dist — the same
  *                       files users get, incl. the legacy-browser bundle — instead of Vite dev)
  */
@@ -115,7 +115,7 @@ async function main() {
     } else web(req, res, next);
   });
 
-  const port = Number(process.env.PORT ?? 5173);
+  const port = Number(process.env.PORT ?? 3000);
   server.listen(port, '0.0.0.0', () =>
     console.info(
       `[dev] web${serveBuild ? ' (production build)' : ''} + API on http://0.0.0.0:${port}  (API health: /v1/health)`,

@@ -13,7 +13,7 @@
   "scripts": {
     "start": "node scripts/start.mjs",
     "start:prod": "node scripts/start.mjs --prod",
-    "dev": "npm run dev -w apps/web",
+    "dev": "node scripts/start.mjs",
     "build": "npm run build -w functions && npm run build -w apps/web",
     "lint": "npm run lint -w functions && npm run lint -w apps/web",
     "typecheck": "npm run typecheck -w functions && npm run typecheck -w apps/web",
@@ -22,6 +22,10 @@
     "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "prettier": "^3.6.2"
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6"
+  },
+  "dependencies": {
+    "workbox-window": "^7.4.1"
   }
 }

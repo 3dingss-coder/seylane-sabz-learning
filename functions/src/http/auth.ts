@@ -4,9 +4,12 @@ import type { Role, User } from '../domain/types';
 import type { Actor, Deps } from '../services/context';
 import { ApiError } from './errors';
 
-declare module 'express-serve-static-core' {
-  interface Request {
-    user?: Doc<User>;
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      user?: Doc<User>;
+    }
   }
 }
 

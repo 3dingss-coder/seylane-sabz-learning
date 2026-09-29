@@ -2,7 +2,7 @@
 // Self-healing launcher for `npm start`.
 // Plain Node (no dependencies) so it works on a fresh checkout / reset sandbox:
 //   1. installs dependencies if node_modules is missing or incomplete
-//   2. starts the single-port dev server (web + API on :5173)
+//   2. starts the single-port dev server (web + API on :3000)
 //   3. restarts the dev server automatically if it crashes
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';

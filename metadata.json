@@ -1,0 +1,7 @@
+{
+  "name": "سیلانهسبز لرنینگ",
+  "description": "سیلانهسبز لرنینگ — آموزش محصولات برای بازاریابها",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
