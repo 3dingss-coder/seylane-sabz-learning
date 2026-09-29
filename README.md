@@ -4,7 +4,8 @@ Internal micro-learning / sales-enablement app for Seylane Sabz holding marketer
 The spec is **[`PRODUCT-MASTER-SPEC.md`](./PRODUCT-MASTER-SPEC.md)**, which is the single source of truth. This README covers how to run, build and deploy.
 
 **Status:** all 15 build prompts are implemented. See [`docs/IMPLEMENTATION-STATUS.md`](./docs/IMPLEMENTATION-STATUS.md) for tests and the §37 checklists.
-What still needs the owner (Firebase/Cloudflare accounts, keys, keystore, real device): [`docs/USER-TODO.md`](./docs/USER-TODO.md).
+**Cloudflare + GitHub Auto-Deploy (Persian Guide):** **[`docs/CLOUDFLARE-SETUP-FA.md`](./docs/CLOUDFLARE-SETUP-FA.md)** — full-stack deployment on Cloudflare Workers/Pages + **Cloudflare D1** SQLite database (100% free tier, zero Firebase dependency).
+What still needs the owner (Cloudflare keys, keystore, real device): [`docs/USER-TODO.md`](./docs/USER-TODO.md).
 Release checklist and runbook: [`docs/RELEASE.md`](./docs/RELEASE.md).
 
 | Surface | Path | Who |

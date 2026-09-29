@@ -11,8 +11,9 @@ const PASS = 'demo1234';
 
 async function login(page: Page, identifier: string) {
   await page.goto('/login');
-  await page.getByLabel('شماره موبایل یا ایمیل').fill(identifier);
-  await page.getByLabel('رمز عبور').fill(PASS);
+  await page.getByLabel(/شماره موبایل/).fill(identifier);
+  const pw = page.getByLabel('رمز عبور');
+  if (await pw.isVisible()) await pw.fill(PASS);
   await page.getByRole('button', { name: 'ورود' }).click();
   await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
 }

@@ -1,5 +1,5 @@
 import { notifyTemplate } from '../services/notify';
-import { Router } from 'express';
+import { Router, type LightRouter } from '../http/router';
 import { z } from 'zod';
 import { authenticate, h, me } from '../http/auth';
 import { rateLimit, type RateLimiter } from '../http/rateLimit';
@@ -12,7 +12,7 @@ import { ApiError } from '../http/errors';
 const ip = (req: { ip?: string }) => req.ip ?? 'unknown';
 
 /** Spec §21.1 — public auth endpoints (API is the only gateway, D35). */
-export function authRouter(d: Deps, limiter: RateLimiter): Router {
+export function authRouter(d: Deps, limiter: RateLimiter): LightRouter {
   const r = Router();
   const perIp = (name: string, n: number) => rateLimit(limiter, name, n, 60_000, ip);
   r.post(
@@ -40,8 +40,8 @@ export function authRouter(d: Deps, limiter: RateLimiter): Router {
     perIp('login', 10),
     h(async (req) => users.login(d, parse(users.loginSchema, req.body))),
   );
-  // Only the disposable memory-backed MVP can use passwordless login. Do not expose on Firebase.
-  if (d.config.env !== 'prod' && d.auth instanceof MemoryAuthProvider) {
+  // MemoryAuthProvider (local dev + Cloudflare D1) supports phone-only login. Never exposed on Firebase Auth.
+  if (d.auth instanceof MemoryAuthProvider) {
     const demoAuth = d.auth;
     r.post(
       '/auth/demo-phone-login',

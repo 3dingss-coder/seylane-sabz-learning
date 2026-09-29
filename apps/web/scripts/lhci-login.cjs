@@ -15,7 +15,8 @@ module.exports = async (browser, context) => {
     const hasSession = await page.evaluate(() => !!localStorage.getItem('ssl.refresh'));
     if (hasSession) return;
     await page.type('input[autocomplete="username"]', '09120000005');
-    await page.type('input[type="password"]', 'demo1234');
+    const pw = await page.$('input[type="password"]');
+    if (pw) await pw.type('demo1234');
     await Promise.all([
       page.waitForFunction(() => location.pathname !== '/login', { timeout: 20000 }),
       page.click('button[type="submit"]'),

@@ -86,10 +86,19 @@ export async function seedDemo(d: Deps) {
   }
 
   // Welcome / guidance messages from Manager Reza to Sara and Ali
-  const managerReza = await d.store.query<User>({ collection: 'users', where: [['phone', '==', '09120000003']] });
+  const managerReza = await d.store.query<User>({
+    collection: 'users',
+    where: [['phone', '==', '09120000003']],
+  });
   const managerId = managerReza[0]?.id;
-  const sara = await d.store.query<User>({ collection: 'users', where: [['phone', '==', '09120000004']] });
-  const ali = await d.store.query<User>({ collection: 'users', where: [['phone', '==', '09120000005']] });
+  const sara = await d.store.query<User>({
+    collection: 'users',
+    where: [['phone', '==', '09120000004']],
+  });
+  const ali = await d.store.query<User>({
+    collection: 'users',
+    where: [['phone', '==', '09120000005']],
+  });
   if (managerId && sara[0]) {
     if (!(await d.store.get('messages/demo-msg-sara-1'))) {
       await d.store.set('messages/demo-msg-sara-1', {

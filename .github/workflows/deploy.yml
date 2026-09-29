@@ -1,99 +1,121 @@
-name: Deploy
+name: Deploy to Cloudflare (Worker + D1 Database)
 
-# Runs only after CI passes on main (dev env) — prod deploys are manual (workflow_dispatch).
-# Requires GitHub Secrets (never commit them):
-#   FIREBASE_SERVICE_ACCOUNT_DEV / FIREBASE_SERVICE_ACCOUNT_PROD  (JSON)
-#   FIREBASE_PROJECT_DEV / FIREBASE_PROJECT_PROD
-#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_PAGES_PROJECT
-#   FIREBASE_WEB_API_KEY, GEMINI_API_KEY (optional; mentor falls back to rules-only), BACKUP_BUCKET (optional)
-# Repository/environment variables (public):
-#   VITE_API_BASE      e.g. https://europe-west1-<project>.cloudfunctions.net/api
-#   ALLOWED_ORIGINS    e.g. https://learn.example.com,https://localhost   (https://localhost = Android app)
-#   VITE_SENTRY_DSN    optional
-#   APP_URL            public web URL, e.g. https://learn.example.com (email links + absolute Web Push links)
-#   TRUST_PROXY_HOPS   optional (default 1 = Google front end; 2 if Cloudflare proxies the API)
-#   VITE_FIREBASE_API_KEY / _PROJECT_ID / _MESSAGING_SENDER_ID / _APP_ID / _VAPID_KEY   optional (Web Push)
-# Optional secrets: SMTP_URL (smtps://user:pass@host:465 — weekly manager email), MAIL_FROM
+# Automatically deploys the full-stack site (React PWA + /v1/* API + Cloudflare D1 SQLite Database)
+# to Cloudflare on every push to `main` (or manual trigger).
+#
+# Required GitHub Secrets (Settings -> Secrets and variables -> Actions -> New repository secret):
+#   CLOUDFLARE_API_TOKEN    (Cloudflare API Token with Workers Scripts:Edit, D1:Edit, Cloudflare Pages:Edit)
+#   CLOUDFLARE_ACCOUNT_ID   (Your 32-character Cloudflare Account ID)
+#
+# Optional Secrets / Variables:
+#   GEMINI_API_KEY                 (Optional: enables AI Mentor; falls back to rule-based mentor without it)
+#   CLOUDFLARE_D1_DATABASE_NAME    (Optional: defaults to `seylane-sabz-db`; auto-created if missing)
+#   CLOUDFLARE_PAGES_PROJECT       (Optional: if you also want `wrangler pages deploy` in addition to Worker)
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: Target environment
-        type: choice
-        options: [dev, prod]
-        default: dev
+
+concurrency:
+  group: deploy-cloudflare-main
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    if: >-
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event.workflow_run.conclusion == 'success')
+    name: Build & Deploy to Cloudflare + D1
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment || 'dev' }}
-    env:
-      TARGET: ${{ github.event.inputs.environment || 'dev' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Check deploy secrets are configured
-        id: secrets
+
+      - name: Check Cloudflare credentials
+        id: cf
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}" ] || [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ]; then
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Deploy secrets missing — skipping deploy (see README › Deployment)."
+            {
+              echo "### ☁️ راهنمای اتصال خودکار GitHub به Cloudflare"
+              echo "برای اینکه گیت‌هاب به‌صورت خودکار دیتابیس D1 و سایت را روی کلودفلر منتشر کند، دو مقدار زیر را در **Settings → Secrets and variables → Actions** ثبت کنید:"
+              echo "- \`CLOUDFLARE_API_TOKEN\`"
+              echo "- \`CLOUDFLARE_ACCOUNT_ID\`"
+              echo ""
+              echo "یا مستقیماً از داخل داشبورد کلودفلر (**Workers & Pages → Create → Import a repository**) مخزن گیت‌هاب را وصل کنید."
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
+
       - uses: actions/setup-node@v4
-        if: steps.secrets.outputs.configured == 'true'
+        if: steps.cf.outputs.configured == 'true'
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-      - if: steps.secrets.outputs.configured == 'true'
+
+      - if: steps.cf.outputs.configured == 'true'
         run: npm ci
-      - name: Build web
-        if: steps.secrets.outputs.configured == 'true'
-        run: npm run build
+
+      - name: Build Functions + Seed Snapshot + Web PWA
+        if: steps.cf.outputs.configured == 'true'
         env:
-          VITE_APP_ENV: ${{ env.TARGET }}
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
-          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
-          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
-          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
-          VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
-      - name: Deploy Cloud Functions + Rules
-        if: steps.secrets.outputs.configured == 'true'
-        env:
-          SMTP_URL: ${{ secrets.SMTP_URL }}
-          MAIL_FROM: ${{ secrets.MAIL_FROM }}
-        run: |
-          echo '${{ env.TARGET == 'prod' && secrets.FIREBASE_SERVICE_ACCOUNT_PROD || secrets.FIREBASE_SERVICE_ACCOUNT_DEV }}' > "$RUNNER_TEMP/sa.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
-          # Runtime config for the functions (read by functions/src/config.ts); never committed.
-          {
-            echo "APP_ENV=${{ env.TARGET }}"
-            echo "DATA_BACKEND=firestore"
-            echo "ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }}"
-            echo "FIREBASE_WEB_API_KEY=${{ secrets.FIREBASE_WEB_API_KEY }}"
-            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}"
-            echo "BACKUP_BUCKET=${{ secrets.BACKUP_BUCKET }}"
-            echo "APP_VERSION=${{ github.sha }}"
-            echo "APP_URL=${{ vars.APP_URL }}"
-            echo "TRUST_PROXY_HOPS=${{ vars.TRUST_PROXY_HOPS || '1' }}"
-            # Passed via env (not template-expanded in the script) so passwords with $ or quotes survive.
-            echo "SMTP_URL=$SMTP_URL"
-            echo "MAIL_FROM=$MAIL_FROM"
-          } > functions/.env
-          npx -y firebase-tools@14 deploy --only functions,firestore,storage --project "${{ env.TARGET == 'prod' && secrets.FIREBASE_PROJECT_PROD || secrets.FIREBASE_PROJECT_DEV }}" --non-interactive
-          rm -f "$RUNNER_TEMP/sa.json" functions/.env
-      - name: Deploy PWA to Cloudflare Pages
-        if: steps.secrets.outputs.configured == 'true'
-        run: npx -y wrangler@4 pages deploy apps/web/dist --project-name "${{ secrets.CLOUDFLARE_PAGES_PROJECT }}" --branch "${{ env.TARGET == 'prod' && 'main' || 'dev' }}"
+        run: npm run build
+
+      - name: Provision Cloudflare D1 Database & Deploy Full-Stack Worker
+        if: steps.cf.outputs.configured == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DB_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME || 'seylane-sabz-db' }}
+        run: |
+          set -e
+          echo "Checking Cloudflare D1 database: $DB_NAME ..."
+          DB_JSON=$(npx --yes wrangler@4 d1 list --json 2>/dev/null || echo "[]")
+          DB_ID=$(node -e '
+            try {
+              const list = JSON.parse(process.argv[1] || "[]");
+              const found = Array.isArray(list) ? list.find(d => d.name === process.argv[2]) : null;
+              if (found && found.uuid) process.stdout.write(found.uuid);
+            } catch {}
+          ' "$DB_JSON" "$DB_NAME")
+
+          if [ -z "$DB_ID" ]; then
+            echo "Creating Cloudflare D1 database: $DB_NAME ..."
+            npx --yes wrangler@4 d1 create "$DB_NAME" || true
+            DB_JSON=$(npx --yes wrangler@4 d1 list --json 2>/dev/null || echo "[]")
+            DB_ID=$(node -e '
+              try {
+                const list = JSON.parse(process.argv[1] || "[]");
+                const found = Array.isArray(list) ? list.find(d => d.name === process.argv[2]) : null;
+                if (found && found.uuid) process.stdout.write(found.uuid);
+              } catch {}
+            ' "$DB_JSON" "$DB_NAME")
+          fi
+
+          if [ -n "$DB_ID" ]; then
+            echo "Binding D1 database ($DB_NAME -> $DB_ID) in wrangler.toml ..."
+            cat >> wrangler.toml <<EOF
+
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "$DB_NAME"
+          database_id = "$DB_ID"
+          EOF
+            echo "Applying D1 schema migration (migrations/0001_init.sql) ..."
+            npx --yes wrangler@4 d1 execute "$DB_NAME" --remote --file=migrations/0001_init.sql || true
+          else
+            echo "::warning::Could not resolve D1 database ID; deploying Worker with in-memory fallback."
+          fi
+
+          npx --yes wrangler@4 deploy
+
+      - name: Optional Deploy to Cloudflare Pages (if CLOUDFLARE_PAGES_PROJECT is set)
+        if: steps.cf.outputs.configured == 'true' && (secrets.CLOUDFLARE_PAGES_PROJECT != '' || vars.CLOUDFLARE_PAGES_PROJECT != '')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_PROJECT: ${{ secrets.CLOUDFLARE_PAGES_PROJECT || vars.CLOUDFLARE_PAGES_PROJECT }}
+        run: |
+          npx --yes wrangler@4 pages deploy apps/web/dist --project-name "$PAGES_PROJECT" --branch main

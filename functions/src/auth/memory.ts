@@ -1,4 +1,13 @@
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import {
+  base64UrlToString,
+  hashPassword,
+  hmacSha256Base64Url,
+  randomBytesBase64Url,
+  sha256Hex,
+  stringToBase64Url,
+  timingSafeEqualStr,
+  verifyPassword,
+} from '../lib/crypto';
 import type { DocStore } from '../store/types';
 import type { AuthProvider, AuthTokens, SignInResult } from './types';
 
@@ -15,20 +24,8 @@ interface Account {
 const REFRESH_GRACE_MS = 30_000;
 const TOKEN_TTL = 3600;
 
-function hashPassword(password: string): string {
-  const salt = randomBytes(16);
-  const key = scryptSync(password, salt, 32);
-  return `scrypt$${salt.toString('base64')}$${key.toString('base64')}`;
-}
-function verifyPassword(password: string, stored: string): boolean {
-  const [, saltB64, keyB64] = stored.split('$');
-  if (!saltB64 || !keyB64) return false;
-  const key = scryptSync(password, Buffer.from(saltB64, 'base64'), 32);
-  const expected = Buffer.from(keyB64, 'base64');
-  return key.length === expected.length && timingSafeEqual(key, expected);
-}
-const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
-const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+const b64 = (o: unknown) => stringToBase64Url(JSON.stringify(o));
+const sha = (s: string) => sha256Hex(s);
 
 /** Self-contained auth (HS256 JWT + opaque refresh tokens) persisted in the DocStore. */
 export class MemoryAuthProvider implements AuthProvider {
@@ -41,7 +38,7 @@ export class MemoryAuthProvider implements AuthProvider {
   private sign(uid: string, iat: number, gen: number): string {
     const head = b64({ alg: 'HS256', typ: 'JWT' });
     const body = b64({ sub: uid, iat, exp: iat + TOKEN_TTL, gen });
-    const sig = createHmac('sha256', this.secret).update(`${head}.${body}`).digest('base64url');
+    const sig = hmacSha256Base64Url(this.secret, `${head}.${body}`);
     return `${head}.${body}.${sig}`;
   }
 
@@ -49,8 +46,8 @@ export class MemoryAuthProvider implements AuthProvider {
     const iat = Math.floor(this.now() / 1000);
     const acc = await this.store.get<Account>(`_auth/${uid}`);
     const gen = acc?.validAfter ?? 0;
-    const rtPayload = b64({ uid, gen, n: randomBytes(12).toString('base64url') });
-    const rtSig = createHmac('sha256', this.secret).update(`rt.${rtPayload}`).digest('base64url');
+    const rtPayload = b64({ uid, gen, n: randomBytesBase64Url(12) });
+    const rtSig = hmacSha256Base64Url(this.secret, `rt.${rtPayload}`);
     const refreshToken = `${rtPayload}.${rtSig}`;
     await this.store.set(`_auth_refresh/${sha(refreshToken)}`, {
       uid,
@@ -97,7 +94,7 @@ export class MemoryAuthProvider implements AuthProvider {
     return { ok: true, uid: link.uid, tokens: await this.issue(link.uid) };
   }
 
-  /** Unsafe phone-only login for the disposable in-memory MVP, never Firebase/production. */
+  /** Phone-only login for the MemoryAuthProvider (local + Cloudflare D1), never Firebase Auth. */
   async demoSignIn(email: string): Promise<SignInResult> {
     const link = await this.store.get<{ uid: string }>(`_auth_email/${sha(email.toLowerCase())}`);
     const acc = link ? await this.store.get<Account>(`_auth/${link.uid}`) : null;
@@ -118,14 +115,10 @@ export class MemoryAuthProvider implements AuthProvider {
       const parts = refreshToken.split('.');
       if (parts.length !== 2) return null;
       const [rtPayload, rtSig] = parts as [string, string];
-      const expected = createHmac('sha256', this.secret)
-        .update(`rt.${rtPayload}`)
-        .digest('base64url');
-      const a = Buffer.from(rtSig);
-      const b = Buffer.from(expected);
-      if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+      const expected = hmacSha256Base64Url(this.secret, `rt.${rtPayload}`);
+      if (!timingSafeEqualStr(rtSig, expected)) return null;
       try {
-        const parsed = JSON.parse(Buffer.from(rtPayload, 'base64url').toString('utf8')) as {
+        const parsed = JSON.parse(base64UrlToString(rtPayload)) as {
           uid?: string;
           gen?: number;
         };
@@ -157,15 +150,11 @@ export class MemoryAuthProvider implements AuthProvider {
     const parts = idToken.split('.');
     if (parts.length !== 3) return null;
     const [head, body, sig] = parts as [string, string, string];
-    const expected = createHmac('sha256', this.secret)
-      .update(`${head}.${body}`)
-      .digest('base64url');
-    const a = Buffer.from(sig);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+    const expected = hmacSha256Base64Url(this.secret, `${head}.${body}`);
+    if (!timingSafeEqualStr(sig, expected)) return null;
     let payload: { sub?: string; iat?: number; exp?: number; gen?: number };
     try {
-      payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as typeof payload;
+      payload = JSON.parse(base64UrlToString(body)) as typeof payload;
     } catch {
       return null;
     }

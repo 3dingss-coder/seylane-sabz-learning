@@ -1,6 +1,0 @@
-# Base directory is apps/web, so paths here are relative to it.
-[build]
-  publish = "dist"
-
-[functions]
-  directory = "netlify/functions"

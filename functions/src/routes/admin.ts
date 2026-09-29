@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type LightRouter } from '../http/router';
 import { z } from 'zod';
 import { actorOf, h, me, requireRole } from '../http/auth';
 import { rateLimit, type RateLimiter } from '../http/rateLimit';
@@ -18,7 +18,7 @@ const id = (req: { params: Record<string, string | undefined> }, k = 'id') =>
   String(req.params[k] ?? '');
 
 /** Spec §21.4 — admin+ only. roles.manage / transcripts restricted to superadmin in services. */
-export function adminRouter(d: Deps, limiter: RateLimiter): Router {
+export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   const r = Router();
   r.use('/admin', requireRole('admin', 'superadmin'));
 

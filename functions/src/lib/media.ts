@@ -61,10 +61,26 @@ export const EXT: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+function toBufferLike(u8: Uint8Array): Buffer {
+  if (typeof Buffer !== 'undefined' && typeof Buffer.from === 'function') {
+    return Buffer.from(u8.buffer, u8.byteOffset, u8.byteLength);
+  }
+  return u8 as unknown as Buffer;
+}
+
+function asciiSlice(buf: Uint8Array, s: number, e: number): string {
+  let out = '';
+  const end = Math.min(buf.length, e);
+  for (let i = s; i < end; i++) {
+    out += String.fromCharCode(buf[i] ?? 0);
+  }
+  return out;
+}
+
 /** Returns the detected canonical MIME and the kinds it may serve, or null if unknown. */
-export function sniff(buf: Buffer): { mime: string; kinds: MediaKind[] } | null {
+export function sniff(buf: Uint8Array): { mime: string; kinds: MediaKind[] } | null {
   if (buf.length < 12) return null;
-  const ascii = (s: number, e: number) => buf.subarray(s, e).toString('latin1');
+  const ascii = (s: number, e: number) => asciiSlice(buf, s, e);
   if (ascii(4, 8) === 'ftyp') {
     const brand = ascii(8, 12);
     if (brand === 'M4A ' || brand === 'M4B ') return { mime: 'audio/mp4', kinds: ['audio'] };
@@ -96,20 +112,62 @@ export function sniff(buf: Buffer): { mime: string; kinds: MediaKind[] } | null 
 }
 
 /** Finds `mvhd` in a buffer (moov may be at start or end) → duration in seconds. */
-export function mp4DurationFromBuffer(buf: Buffer): number | null {
-  const idx = buf.indexOf('mvhd', 0, 'latin1');
+export function mp4DurationFromBuffer(buf: Uint8Array): number | null {
+  let idx = -1;
+  for (let i = 0; i <= buf.length - 4; i++) {
+    if (buf[i] === 0x6d && buf[i + 1] === 0x76 && buf[i + 2] === 0x68 && buf[i + 3] === 0x64) {
+      idx = i;
+      break;
+    }
+  }
   if (idx < 4) return null;
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const version = buf[idx + 4];
   try {
     if (version === 1) {
-      const timescale = buf.readUInt32BE(idx + 4 + 4 + 16);
-      const duration = Number(buf.readBigUInt64BE(idx + 4 + 4 + 16 + 4));
+      const timescale = view.getUint32(idx + 4 + 4 + 16, false);
+      const duration = Number(view.getBigUint64(idx + 4 + 4 + 16 + 4, false));
       return timescale ? Math.round((duration / timescale) * 10) / 10 : null;
     }
-    const timescale = buf.readUInt32BE(idx + 4 + 4 + 8);
-    const duration = buf.readUInt32BE(idx + 4 + 4 + 8 + 4);
+    const timescale = view.getUint32(idx + 4 + 4 + 8, false);
+    const duration = view.getUint32(idx + 4 + 4 + 8 + 4, false);
     return timescale ? Math.round((duration / timescale) * 10) / 10 : null;
   } catch {
     return null;
   }
+}
+
+function writeAscii(u8: Uint8Array, offset: number, str: string) {
+  for (let i = 0; i < str.length; i++) {
+    u8[offset + i] = str.charCodeAt(i);
+  }
+}
+
+export function createPlaceholderMp4(isAudio = false, durationSec = 120): Buffer {
+  const brand = isAudio ? 'M4A ' : 'mp42';
+  const out = new Uint8Array(24 + 8 + 108);
+  const view = new DataView(out.buffer);
+
+  // ftyp (24 bytes)
+  view.setUint32(0, 24, false);
+  writeAscii(out, 4, 'ftyp');
+  writeAscii(out, 8, brand);
+  view.setUint32(12, 0, false);
+  writeAscii(out, 16, brand);
+  writeAscii(out, 20, 'isom');
+
+  // moov header (8 bytes)
+  view.setUint32(24, 8 + 108, false);
+  writeAscii(out, 28, 'moov');
+
+  // mvhd (108 bytes at offset 32)
+  view.setUint32(32, 108, false);
+  writeAscii(out, 36, 'mvhd');
+  out[40] = 0;
+  view.setUint32(32 + 20, 1000, false);
+  view.setUint32(32 + 24, durationSec * 1000, false);
+  view.setUint32(32 + 28, 0x00010000, false);
+  view.setUint16(32 + 32, 0x0100, false);
+
+  return toBufferLike(out);
 }

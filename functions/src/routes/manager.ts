@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type LightRouter } from '../http/router';
 import { z } from 'zod';
 import { h, me, requireRole } from '../http/auth';
 import { rateLimit, type RateLimiter } from '../http/rateLimit';
@@ -7,7 +7,7 @@ import type { Deps } from '../services/context';
 import * as reports from '../services/reports';
 
 /** Spec §21.3 — team scope enforced in every service call (teamId == manager.teamId). */
-export function managerRouter(d: Deps, limiter: RateLimiter): Router {
+export function managerRouter(d: Deps, limiter: RateLimiter): LightRouter {
   const r = Router();
   r.use('/manager', requireRole('manager'));
   const uid = (req: Parameters<typeof me>[0]) => me(req).id;

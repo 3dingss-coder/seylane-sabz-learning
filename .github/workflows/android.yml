@@ -47,7 +47,7 @@ jobs:
         working-directory: apps/web
       - name: Debug APK
         working-directory: apps/web/android
-        run: ./gradlew --no-daemon assembleDebug
+        run: chmod +x ./gradlew && ./gradlew --no-daemon assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: seylane-learning-debug-apk

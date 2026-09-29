@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { sha256Hex } from './crypto';
 
 /** Deterministic document ids (idempotency + uniqueness without queries). */
 export const ids = {
@@ -8,8 +8,8 @@ export const ids = {
   userBadge: (userId: string, badgeId: string) => `${userId}_${badgeId}`,
   escalation: (userId: string, packageId: string, type: string) => `${userId}_${packageId}_${type}`,
   uniqueKey: (kind: 'phone' | 'email', value: string) =>
-    `${kind}_${createHash('sha256').update(value.toLowerCase()).digest('hex').slice(0, 40)}`,
-  hash: (s: string) => createHash('sha256').update(s).digest('hex').slice(0, 40),
+    `${kind}_${sha256Hex(value.toLowerCase()).slice(0, 40)}`,
+  hash: (s: string) => sha256Hex(s).slice(0, 40),
 };
 
 /** Iranian mobile normalisation → 09xxxxxxxxx (accepts +98 / 0098 / Persian digits). */

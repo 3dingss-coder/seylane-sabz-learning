@@ -2,5 +2,5 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "rootDir": "src", "outDir": "lib" },
   "include": ["src"],
-  "exclude": ["src/local.ts"]
+  "exclude": ["src/local.ts", "src/cloudflare-worker.ts"]
 }

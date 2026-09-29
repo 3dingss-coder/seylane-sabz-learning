@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type LightRouter } from '../http/router';
 import { z } from 'zod';
 import { h, me } from '../http/auth';
 import { rateLimit, type RateLimiter } from '../http/rateLimit';
@@ -27,7 +27,7 @@ const CLIENT_EVENTS = [
 ] as const;
 
 /** Spec §21.2 — marketer module (authenticated; data scoped to the caller). */
-export function meRouter(d: Deps, limiter: RateLimiter): Router {
+export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
   const r = Router();
   const uid = (req: Parameters<typeof me>[0]) => me(req).id;
 
