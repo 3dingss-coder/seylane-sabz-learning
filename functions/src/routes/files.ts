@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises';
 import { Router, type Request } from 'express';
 import { LocalBlobStore } from '../blob/local';
 import { ApiError } from '../http/errors';
+import { createPlaceholderMp4 } from '../seed/seed';
 
 /**
  * Local-mode blob endpoints (Firebase mode uses Storage signed URLs instead):
@@ -40,7 +41,28 @@ export function localFilesRouter(blob: LocalBlobStore): Router {
 
   const send = (res: import('express').Response, p: string) => {
     const full = blob.resolve(p);
-    if (!fs.existsSync(full)) throw new ApiError('NOT_FOUND');
+    if (!fs.existsSync(full)) {
+      // Serverless / snapshot cold start: generate seeded placeholder media on demand.
+      if (p.startsWith('media/audio/seed-media-') || p.startsWith('media/video/seed-media-')) {
+        const isAudio = p.startsWith('media/audio/');
+        const buf = createPlaceholderMp4(isAudio, isAudio ? 420 : 540);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.setHeader('Content-Type', isAudio ? 'audio/mp4' : 'video/mp4');
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        res.status(200).send(buf);
+        return;
+      }
+      if (p === 'branding/holding-logo.png') {
+        res.redirect(302, '/icons/logo-full.png');
+        return;
+      }
+      if (p.startsWith('brands/') || p.startsWith('products/')) {
+        res.redirect(302, `/catalog/${p}`);
+        return;
+      }
+      throw new ApiError('NOT_FOUND');
+    }
     const meta = fs.existsSync(`${full}.meta.json`)
       ? (JSON.parse(fs.readFileSync(`${full}.meta.json`, 'utf8')) as { contentType?: string })
       : {};

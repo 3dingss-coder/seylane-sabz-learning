@@ -163,4 +163,22 @@ describe('auth (PROMPT 002)', () => {
     expect(r.body.data.role).toBe('marketer');
     expect(r.body.data.name).toBe('نام جدید');
   });
+
+  it('stateless signed refresh token survives cold-start store reset until revoked', async () => {
+    const u = await ctx.user('marketer');
+    const login = await ctx
+      .api()
+      .post('/v1/auth/login', { identifier: u.phone, password: 'pass1234' });
+    const rt = login.body.data.refreshToken as string;
+    // Simulate a serverless cold start where in-memory _auth_refresh docs are absent
+    const list = await ctx.deps.store.query({ collection: '_auth_refresh' });
+    for (const d of list) await ctx.deps.store.delete(`_auth_refresh/${d.id}`);
+    const refreshed = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
+    expect(refreshed.status).toBe(200);
+    // Revocation (logout) increments validAfter so old signed refresh tokens are rejected
+    const token = refreshed.body.data.idToken as string;
+    expect((await ctx.api(token).post('/v1/auth/logout')).status).toBe(204);
+    const afterLogout = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
+    expect(afterLogout.status).toBe(401);
+  });
 });

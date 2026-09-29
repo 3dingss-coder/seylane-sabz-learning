@@ -151,7 +151,7 @@ export function JalaliDateField({
         <div
           role="dialog"
           aria-label={`تقویم ${label}`}
-          className="absolute top-full z-40 mt-1 w-[19rem] max-w-[calc(100vw-2rem)] rounded-card border border-border bg-surface p-3 shadow-lg"
+          className="absolute inset-x-0 top-full z-40 mt-1 w-[19rem] max-w-[calc(100vw-2rem)] rounded-card border border-border bg-surface p-3 shadow-lg"
         >
           <div className="mb-2 flex items-center justify-between">
             <button

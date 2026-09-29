@@ -102,7 +102,23 @@ async function putFile(d: Deps, objectPath: string, file: string, mime: string, 
 
 const short = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 12);
 
-function createPlaceholderMp4(isAudio = false, durationSec = 120): Buffer {
+const SEED_MEDIA_DURATIONS: Record<string, number> = {
+  'معرفی کلی محصول فورمی.m4a': 419,
+  'آموزش کامل محصول فورمی.mp4': 527,
+  'معرفی کلی بابل.m4a': 333,
+  'کتابچه_جامع_فروش_BUBBLE.mp4': 564,
+  'ای_تی_ال_پادزهر_دردهای_دیجیتال.m4a': 454,
+  'آموزش_ویدیویی_ATL.mp4': 564,
+  'معرفی کلی ویت آس.m4a': 430,
+  'آموزش_کرم_ترک_پای__WITH_US_.mp4': 571,
+  'معرفی کلی ضدآفتاب استیکی پیکسل.m4a': 393,
+  'آموزش کامل ضدآفتاب پیکسل.mp4': 602,
+  'معرفی کلی آیس بال.m4a': 419,
+  'آموزش_فروش_آیس_بال.mp4': 608,
+  'معرفی کلی‌ دارت.m4a': 347,
+};
+
+export function createPlaceholderMp4(isAudio = false, durationSec = 120): Buffer {
   const brand = isAudio ? 'M4A ' : 'mp42';
   const ftyp = Buffer.alloc(24);
   ftyp.writeUInt32BE(24, 0);
@@ -358,11 +374,12 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
     for (const [i, s] of sp.sections.entries()) {
       const file = path.join(opts.repoRoot, s.file);
       const existsOnDisk = fs.existsSync(file);
+      const fallbackDur = SEED_MEDIA_DURATIONS[s.file] ?? (s.mediaType === 'audio' ? 360 : 480);
       const buf = existsOnDisk
         ? fs.readFileSync(file)
-        : createPlaceholderMp4(s.mediaType === 'audio', s.mediaType === 'audio' ? 180 : 300);
+        : createPlaceholderMp4(s.mediaType === 'audio', fallbackDur);
       const detected = sniff(buf.subarray(0, 64));
-      const durationSec = mp4DurationFromBuffer(buf) ?? (s.mediaType === 'audio' ? 180 : 300);
+      const durationSec = mp4DurationFromBuffer(buf) ?? fallbackDur;
       const mime = s.mediaType === 'audio' ? 'audio/mp4' : (detected?.mime ?? 'video/mp4');
       const ext =
         path.extname(s.file).replace(/^\./, '').toLowerCase() ||

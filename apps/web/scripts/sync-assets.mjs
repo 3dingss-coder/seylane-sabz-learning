@@ -6,10 +6,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  CATALOG_DIR,
   LOGOS_DIR,
   PRODUCT_IMAGES_DIR,
+  REPO_ROOT,
   UI_KIT_DIR,
   loadCatalog,
+  parseCsv,
 } from '../../../scripts/lib/catalog-source.mjs';
 
 const WEB_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,6 +55,42 @@ const products = catalog.products
 
 fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify({ brands, products }, null, 2));
+
+// Also mirror reactivated brands/products from data/catalog-supplement.json so static CDN
+// deployments (e.g. Netlify) can serve their logos and product images directly from /catalog/.
+const supPath = path.join(REPO_ROOT, 'data', 'catalog-supplement.json');
+if (fs.existsSync(supPath)) {
+  const sup = JSON.parse(fs.readFileSync(supPath, 'utf8'));
+  const imageFiles = fs.readdirSync(PRODUCT_IMAGES_DIR);
+  for (const b of sup.reactivatedBrands ?? []) {
+    if (!b.logoFile) continue;
+    const srcFile = path.join(LOGOS_DIR, b.logoFile);
+    if (!fs.existsSync(srcFile)) continue;
+    const ext = path.extname(b.logoFile).toLowerCase();
+    if (copyIfChanged(srcFile, path.join(OUT, `brands/${b.id}/logo${ext}`))) copied++;
+  }
+  const hiddenPath = path.join(CATALOG_DIR, 'hidden-products.csv');
+  if (fs.existsSync(hiddenPath)) {
+    const hiddenById = new Map(
+      parseCsv(fs.readFileSync(hiddenPath, 'utf8')).map((r) => [r['شناسه محصول'], r['کد محصول']]),
+    );
+    for (const rp of sup.reactivatedProducts ?? []) {
+      const code = hiddenById.get(rp.id);
+      if (!code) continue;
+      const byCode = imageFiles.filter((f) => f.startsWith(`${code}_`));
+      if (byCode.length !== 1) continue;
+      const ext = path.extname(byCode[0]).toLowerCase();
+      if (
+        copyIfChanged(
+          path.join(PRODUCT_IMAGES_DIR, byCode[0]),
+          path.join(OUT, `products/${rp.id}/main${ext}`),
+        )
+      ) {
+        copied++;
+      }
+    }
+  }
+}
 
 // App icons: Seylane Sabz holding mark from the UI helper kit.
 const iconSrc = path.join(UI_KIT_DIR, 'اپ مشتری', 'لوگو و آیکون');

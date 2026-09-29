@@ -1,0 +1,38 @@
+# Netlify configuration for Seylane Sabz Learning (سیلانه‌سبز لرنینگ)
+# Ready for one-click deployment on https://app.netlify.com
+
+[build]
+  command = "npm run build"
+  publish = "apps/web/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_FLAGS = "--no-audit --no-fund"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  included_files = ["functions/lib/seed-snapshot.json"]
+
+# Static CDN shortcut for public catalog & branding assets
+[[redirects]]
+  from = "/v1/files/public/branding/holding-logo.png"
+  to = "/icons/logo-full.png"
+  status = 200
+
+[[redirects]]
+  from = "/v1/files/public/*"
+  to = "/catalog/:splat"
+  status = 200
+
+# Route API calls to the bundled Netlify Serverless Function
+[[redirects]]
+  from = "/v1/*"
+  to = "/.netlify/functions/api"
+  status = 200
+
+# SPA fallback for client-side React Router routes
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
