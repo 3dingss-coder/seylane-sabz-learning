@@ -7,7 +7,7 @@ import { ApiError, api } from '@/lib/api';
 import { errMsg } from '@/lib/errors';
 import type { AdminPackage } from '@/lib/types';
 import { useBrands, useProducts } from './adminQueries';
-import { fromLocalInput, toLocalInput } from '@/lib/dates';
+import { fromZonedInput, toZonedInput } from '@/lib/dates';
 import { JalaliDateField } from '@/components/common/JalaliDateField';
 
 /** Create or edit package metadata. Brand may stay empty → unassigned draft (D33). */
@@ -28,7 +28,7 @@ export function PackageFormDialog({
   const [description, setDescription] = useState(initial?.description ?? '');
   const [brandId, setBrandId] = useState(initial?.brandId ?? presetBrandId ?? '');
   const [productId, setProductId] = useState(initial?.productId ?? presetProductId ?? '');
-  const [deadline, setDeadline] = useState(toLocalInput(initial?.deadlineAt ?? null));
+  const [deadline, setDeadline] = useState(toZonedInput(initial?.deadlineAt ?? null));
   const [minutes, setMinutes] = useState(String(initial?.estimatedMinutes ?? ''));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const brands = useBrands();
@@ -43,7 +43,7 @@ export function PackageFormDialog({
         description: description.trim(),
         brandId: brandId || null,
         productId: productId || null,
-        deadlineAt: fromLocalInput(deadline),
+        deadlineAt: fromZonedInput(deadline),
         ...(minutes ? { estimatedMinutes: Number(minutes) } : {}),
       };
       return initial
@@ -143,6 +143,7 @@ export function PackageFormDialog({
             value={deadline}
             onChange={setDeadline}
             error={errors.deadlineAt}
+            hint="تا پایان این لحظه (به وقت تهران) باید آموزش تمام شود."
           />
           <Input
             label="زمان تقریبی (دقیقه)"
