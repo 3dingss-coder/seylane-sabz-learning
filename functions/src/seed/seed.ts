@@ -102,6 +102,32 @@ async function putFile(d: Deps, objectPath: string, file: string, mime: string, 
 
 const short = (s: string) => createHash('sha1').update(s).digest('hex').slice(0, 12);
 
+function createPlaceholderMp4(isAudio = false, durationSec = 120): Buffer {
+  const brand = isAudio ? 'M4A ' : 'mp42';
+  const ftyp = Buffer.alloc(24);
+  ftyp.writeUInt32BE(24, 0);
+  ftyp.write('ftyp', 4, 'latin1');
+  ftyp.write(brand, 8, 'latin1');
+  ftyp.writeUInt32BE(0, 12);
+  ftyp.write(brand, 16, 'latin1');
+  ftyp.write('isom', 20, 'latin1');
+
+  const mvhd = Buffer.alloc(108);
+  mvhd.writeUInt32BE(108, 0);
+  mvhd.write('mvhd', 4, 'latin1');
+  mvhd.writeUInt8(0, 8);
+  mvhd.writeUInt32BE(1000, 20);
+  mvhd.writeUInt32BE(durationSec * 1000, 24);
+  mvhd.writeUInt32BE(0x00010000, 28);
+  mvhd.writeUInt16BE(0x0100, 32);
+
+  const moov = Buffer.alloc(8);
+  moov.writeUInt32BE(8 + mvhd.length, 0);
+  moov.write('moov', 4, 'latin1');
+
+  return Buffer.concat([ftyp, moov, mvhd]);
+}
+
 export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
   const log = opts.log ?? (() => undefined);
   const link = !!opts.linkLocalFiles;
@@ -284,7 +310,6 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
   const brandsById = new Map(brandInputs.map((b) => [b.id, b]));
   const productsById = new Map(productInputs.map((p) => [p.id, p]));
   const publishedIds: string[] = [];
-  let skippedPackages = 0;
   for (const sp of sup.trainingPackages) {
     const pkgPath = `packages/${sp.id}`;
     const exists = await d.store.get<Package>(pkgPath);
@@ -311,16 +336,6 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
       if (exists.status === 'published') publishedIds.push(sp.id);
       continue;
     }
-    // Sample media may be absent (e.g. a checkout/import without the large *.mp4/*.m4a files).
-    // Skip that package instead of crashing the whole seed (and the local API with it).
-    const missing = sp.sections
-      .map((s) => s.file)
-      .filter((f) => !fs.existsSync(path.join(opts.repoRoot, f)));
-    if (missing.length) {
-      console.warn(`[seed] skipping package ${sp.id}: media not found: ${missing.join(', ')}`);
-      skippedPackages++;
-      continue;
-    }
     const pkg: Package = {
       brandId: sp.brandId,
       productId: sp.productId,
@@ -342,14 +357,23 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
     await d.store.set(pkgPath, pkg as unknown as Record<string, unknown>);
     for (const [i, s] of sp.sections.entries()) {
       const file = path.join(opts.repoRoot, s.file);
-      const buf = fs.readFileSync(file);
+      const existsOnDisk = fs.existsSync(file);
+      const buf = existsOnDisk
+        ? fs.readFileSync(file)
+        : createPlaceholderMp4(s.mediaType === 'audio', s.mediaType === 'audio' ? 180 : 300);
       const detected = sniff(buf.subarray(0, 64));
-      const durationSec = mp4DurationFromBuffer(buf) ?? 0;
+      const durationSec = mp4DurationFromBuffer(buf) ?? (s.mediaType === 'audio' ? 180 : 300);
       const mime = s.mediaType === 'audio' ? 'audio/mp4' : (detected?.mime ?? 'video/mp4');
-      const ext = path.extname(s.file).slice(1).toLowerCase();
+      const ext =
+        path.extname(s.file).replace(/^\./, '').toLowerCase() ||
+        (s.mediaType === 'audio' ? 'm4a' : 'mp4');
       const mediaId = `seed-media-${short(s.file)}`;
       const objectPath = `media/${s.mediaType}/${mediaId}.${ext}`;
-      await putFile(d, objectPath, file, mime, link);
+      if (existsOnDisk) {
+        await putFile(d, objectPath, file, mime, link);
+      } else {
+        await d.blob.put(objectPath, buf, mime);
+      }
       const asset: MediaAsset = {
         kind: s.mediaType,
         status: 'ready',
@@ -452,7 +476,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
       publish: sp.publish,
     });
   }
-  report.packages = sup.trainingPackages.length - skippedPackages;
+  report.packages = sup.trainingPackages.length;
 
   // 6) Global assignment of the sample packages (idempotent id)
   if (publishedIds.length) {

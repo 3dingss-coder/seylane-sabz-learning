@@ -84,6 +84,39 @@ export async function seedDemo(d: Deps) {
     out.push({ role: u.role, name: u.name, phone: u.phone, password: DEMO_PASSWORD });
     if (u.key === 'marketer2') await seedDemoProgress(d, user.id);
   }
+
+  // Welcome / guidance messages from Manager Reza to Sara and Ali
+  const managerReza = await d.store.query<User>({ collection: 'users', where: [['phone', '==', '09120000003']] });
+  const managerId = managerReza[0]?.id;
+  const sara = await d.store.query<User>({ collection: 'users', where: [['phone', '==', '09120000004']] });
+  const ali = await d.store.query<User>({ collection: 'users', where: [['phone', '==', '09120000005']] });
+  if (managerId && sara[0]) {
+    if (!(await d.store.get('messages/demo-msg-sara-1'))) {
+      await d.store.set('messages/demo-msg-sara-1', {
+        fromUserId: managerId,
+        toUserId: sara[0].id,
+        type: 'manager_note',
+        body: 'سارا جان، دوره‌های آموزشی جدید محصولات فورمی و آیس بابل منتشر شده است. لطفاً پیش از پایان مهلت ویدیوها را مشاهده کن و آزمون را بده.',
+        packageId: 'seed-pkg-formi',
+        readAt: null,
+        createdAt: iso,
+      });
+    }
+  }
+  if (managerId && ali[0]) {
+    if (!(await d.store.get('messages/demo-msg-ali-1'))) {
+      await d.store.set('messages/demo-msg-ali-1', {
+        fromUserId: managerId,
+        toUserId: ali[0].id,
+        type: 'manager_note',
+        body: 'علی عزیز، خسته نباشی. پیشرفت خوبی در بسته فورمی داشتی، آزمون را هم به زودی ثبت کن.',
+        packageId: 'seed-pkg-formi',
+        readAt: null,
+        createdAt: iso,
+      });
+    }
+  }
+
   return out;
 }
 

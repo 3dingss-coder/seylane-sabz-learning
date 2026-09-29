@@ -14,7 +14,7 @@ const bin = (name) =>
   join(root, 'node_modules', '.bin', process.platform === 'win32' ? `${name}.cmd` : name);
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
-const required = ['tsx', 'vite'];
+const required = ['tsx'];
 if (!required.every((b) => existsSync(bin(b)))) {
   console.log('[start] dependencies missing → running npm ci (first run takes ~30s) …');
   let r = spawnSync(npm, ['ci', '--no-audit', '--no-fund'], { cwd: root, stdio: 'inherit' });

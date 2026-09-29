@@ -47,8 +47,11 @@ async function main() {
     LOCAL_DATA_DIR: process.env.LOCAL_DATA_DIR ?? path.join(repoRoot, 'functions', '.local-data'),
   });
   const deps = buildMemoryDeps(config, { persist: process.env.LOCAL_PERSIST !== 'false' });
-  const brands = await deps.store.query({ collection: 'brands', limit: 1 });
-  if (!brands.length || process.env.RESEED === 'true') {
+  const [brands, pkgs] = await Promise.all([
+    deps.store.query({ collection: 'brands', limit: 1 }),
+    deps.store.query({ collection: 'packages', limit: 1 }),
+  ]);
+  if (!brands.length || !pkgs.length || process.env.RESEED === 'true') {
     console.info('[dev] seeding catalog + demo data …');
     const report = await runSeed(deps, { repoRoot, demo: true, linkLocalFiles: true });
     console.info(`[dev] seed done: ${report.brands} brands, ${report.packages} packages`);
@@ -115,7 +118,9 @@ async function main() {
     } else web(req, res, next);
   });
 
-  const port = Number(process.env.PORT ?? 3000);
+  // In AI Studio / Cloud Run, PORT is set to 8080 for the platform ingress,
+  // while the preview iframe expects the user dev server on port 3000.
+  const port = 3000;
   server.listen(port, '0.0.0.0', () =>
     console.info(
       `[dev] web${serveBuild ? ' (production build)' : ''} + API on http://0.0.0.0:${port}  (API health: /v1/health)`,
