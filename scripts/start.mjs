@@ -25,7 +25,7 @@ if (!required.every((b) => existsSync(bin(b)))) {
   }
 }
 
-// `npm run start:prod` → build the web app once, then serve dist/ (legacy-browser bundle included).
+// `npm run start:prod` → build the web app once, then serve dist/.
 const prod = process.argv.includes('--prod');
 if (prod) {
   console.log('[start] building the production web app …');
