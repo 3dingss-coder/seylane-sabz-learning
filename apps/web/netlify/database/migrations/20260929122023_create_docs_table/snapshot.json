@@ -1,0 +1,114 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "06381d8b-3b47-419e-92f6-f2618fd5daa8",
+  "prevIds": [
+    "00000000-0000-0000-0000-000000000000"
+  ],
+  "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "docs",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "col",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "docs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "docs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "grp",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "docs"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "data",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "docs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "docs"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "grp",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "docs_grp_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "docs"
+    },
+    {
+      "columns": [
+        "col",
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "docs_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "docs"
+    }
+  ],
+  "renames": []
+}
