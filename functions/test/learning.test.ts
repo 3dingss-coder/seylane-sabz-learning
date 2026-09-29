@@ -124,10 +124,11 @@ describe('player & tracking (PROMPT 009)', () => {
     expect(p.body.data.percent).toBe(75);
   });
 
-  it('locked section rejects progress/media (sequential lock)', async () => {
+  it('later section is open without finishing the previous one (no sequential lock)', async () => {
     const s2 = fx.sections[1]?.id ?? '';
-    expect((await hb(s2, { positionSec: 5, playedDeltaSec: 5 })).status).toBe(403);
-    expect((await ctx.api(m.token).get(`/v1/me/sections/${s2}/media`)).status).toBe(403);
+    const pkg = await ctx.api(m.token).get(`/v1/me/packages/${fx.packageId}`);
+    expect(pkg.body.data.sections[1].state).not.toBe('locked');
+    expect((await ctx.api(m.token).get(`/v1/me/sections/${s2}/media`)).status).not.toBe(403);
   });
 
   it('media URL is short-lived and signed for unlocked sections', async () => {

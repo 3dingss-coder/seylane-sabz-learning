@@ -127,7 +127,6 @@ export function computePackageView(
 ): PackageView {
   const nowIso = shared.now.toISOString();
   const sections: SectionView[] = [];
-  let prevDone = true;
   const ordered = [...pkg.sections].sort((a, b) => a.order - b.order);
   for (const s of ordered) {
     const p = progress.get(s.id);
@@ -137,12 +136,10 @@ export function computePackageView(
     const quizPassed = !!p?.quizPassed;
     const done = mediaCompleted && quizPassed;
     let state: SectionState;
-    let lockReason: string | null = null;
+    const lockReason: string | null = null;
+    // No sequential lock: every section is open regardless of earlier sections' progress.
     if (done) state = 'completed';
-    else if (!prevDone) {
-      state = 'locked';
-      lockReason = 'ابتدا قسمت قبل را کامل کنید و در آزمون آن قبول شوید.';
-    } else if (mediaCompleted) state = 'quiz';
+    else if (mediaCompleted) state = 'quiz';
     else if ((p?.playedSeconds ?? 0) > 0) state = 'in_progress';
     else state = 'open';
     sections.push({
@@ -160,8 +157,6 @@ export function computePackageView(
       lockReason,
       archived: s.archived,
     });
-    // Archived sections never block the sequence.
-    if (!s.archived) prevDone = prevDone && done;
   }
   const active = sections.filter((s) => !s.archived);
   const totalDur = active.reduce((a, s) => a + Math.max(1, s.durationSec), 0);

@@ -133,7 +133,7 @@ test('marketer: home → section → (played) → quiz pass → next section unl
   await expect(rows.nth(1)).toBeVisible();
 });
 
-test('fresh marketer sees later sections locked and cannot start their quiz', async ({
+test('fresh marketer can open later sections without finishing earlier ones', async ({
   page,
   request,
 }) => {
@@ -141,11 +141,10 @@ test('fresh marketer sees later sections locked and cannot start their quiz', as
   await page.goto('/learn');
   await page.getByRole('tab', { name: /جدید/ }).click();
   await expect(page.getByTestId('package-card').first()).toBeVisible();
-  // Multi-part package (فورمی): part 2+ stays locked until part 1 is done.
+  // Multi-part package (فورمی): no sequential lock, part 2 is open from the start.
   await page.goto('/packages/seed-pkg-formi');
-  await expect(page.getByText(/ابتدا قسمت قبل را کامل کنید/).first()).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByTestId('section-row').nth(1)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/ابتدا قسمت قبل را کامل کنید/)).toHaveCount(0);
 
   const t = await token(request, FRESH_MARKETER);
   const pk = (await (
@@ -155,12 +154,13 @@ test('fresh marketer sees later sections locked and cannot start their quiz', as
   ).json()) as {
     data: { sections: Array<{ quizId: string; state: string }> };
   };
-  const locked = pk.data.sections.find((s) => s.state === 'locked');
-  expect(locked).toBeTruthy();
-  const r = await request.post(`${API}/me/quizzes/${locked?.quizId}/attempts`, {
+  expect(pk.data.sections.some((s) => s.state === 'locked')).toBe(false);
+  // A quiz still needs its own media to be completed first (409), not a lock (403).
+  const later = pk.data.sections[1];
+  const r = await request.post(`${API}/me/quizzes/${later?.quizId}/attempts`, {
     headers: { Authorization: `Bearer ${t}` },
   });
-  expect(r.status()).toBe(403);
+  expect(r.status()).toBe(409);
 });
 
 test('manager: team dashboard, completion report and CSV export', async ({ page }) => {
