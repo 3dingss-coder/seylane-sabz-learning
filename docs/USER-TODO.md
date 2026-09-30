@@ -63,8 +63,7 @@
 - [ ] بازیابی رمز با شماره موبایل: از طریق «بازنشانی رمز» توسط ادمین (ارسال SMS هزینه دارد)
 - [x] **Cron Triggers روی Cloudflare فعال شد** (یادآوری‌ها، هشدار مهلت‌ها، خلاصهٔ هفتگی، flush Push): بلوک `[triggers] crons` در `wrangler.toml` باز است و `functions/src/services/cron.ts` چهار schedule را dispatch می‌کند؛ تست `functions/test/cron.test.ts` هم‌سانی لیست را نگهبانی می‌کند. پس از هر استقرار، در Workers → Settings → Triggers باید چهار schedule دیده شود. اجرای دستی هر کار: `POST /v1/admin/jobs/<name>`.
 - [ ] صفحه مدیریت Jobها در پنل ادمین ساخته نشده (اجرای دستی: `POST /v1/admin/jobs/:name`؛ همان جدولی که cron از آن استفاده می‌کند)
-- [ ] صفحه‌ی «کیفیت منتور» در پنل ادمین ساخته نشده (داده‌اش آماده است: `GET /v1/admin/reports/mentor-quality` و `GET /v1/admin/knowledge`)
-- [ ] `mentor_chat_opened` و رویدادهای صوتی در `analytics_events` ثبت می‌شوند؛ اگر داشبورد تحلیلی جداگانه می‌خواهید، مصرف آن‌ها را در گزارش کیفیت ببینید
+- [ ] `mentor_chat_opened` و رویدادهای صوتی در `analytics_events` ثبت می‌شوند؛ مصرف آن‌ها در «گزارش‌ها → کیفیت منتور» دیده می‌شود (داشبورد تحلیلی جداگانه ساخته نشده)
 
 ## ۵. تست‌هایی که فقط در CI اجرا می‌شوند
 

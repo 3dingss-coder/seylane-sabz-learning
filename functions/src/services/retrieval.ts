@@ -3,7 +3,12 @@ import type { Doc } from '../store/types';
 import { aiHub } from '../ai/hub';
 import { cosine } from '../ai/local';
 import { tokenize } from './mentor';
-import { KNOWLEDGE_COLLECTION, type KnowledgeItem, type KnowledgeKind } from './knowledge';
+import {
+  KNOWLEDGE_COLLECTION,
+  rebuildKnowledgeIndex,
+  type KnowledgeItem,
+  type KnowledgeKind,
+} from './knowledge';
 import type { Deps } from './context';
 
 /**
@@ -145,12 +150,46 @@ export function expandQuery(query: string): string[] {
 
 const indexCache = new WeakMap<Deps, { at: number; items: KnowledgeItem[] }>();
 
+/**
+ * First-run self-healing. The index is normally built by the `knowledge-reindex` job, but a fresh
+ * deploy (or a wiped local store) would otherwise answer «نمی‌دانم» to everything until 08:30
+ * Tehran. So the first request that finds an empty index builds it inline — once per process per
+ * cooldown, never in parallel — and every later request just reads the result.
+ */
+const bootstrapState = new WeakMap<Deps, { at: number; running: Promise<void> | null }>();
+export const BOOTSTRAP_COOLDOWN_MS = 10 * 60_000;
+
+async function bootstrapIndex(d: Deps): Promise<void> {
+  const now = d.clock().getTime();
+  const state = bootstrapState.get(d) ?? { at: 0, running: null };
+  bootstrapState.set(d, state);
+  if (state.running) return state.running;
+  if (now - state.at < BOOTSTRAP_COOLDOWN_MS) return;
+  state.at = now;
+  state.running = rebuildKnowledgeIndex(d)
+    .then(() => {
+      indexCache.delete(d);
+    })
+    .catch((e: unknown) => {
+      console.warn('[retrieval] index bootstrap failed', (e as Error).message);
+    })
+    .finally(() => {
+      state.running = null;
+    });
+  return state.running;
+}
+
 export async function loadIndex(d: Deps, maxAgeMs = 60_000): Promise<KnowledgeItem[]> {
   const cached = indexCache.get(d);
   const now = d.clock().getTime();
   if (cached && now - cached.at < maxAgeMs) return cached.items;
   const items = await d.store.query<KnowledgeItem>({ collection: KNOWLEDGE_COLLECTION });
-  const live = items.filter((i) => !i.archived);
+  let live = items.filter((i) => !i.archived);
+  if (!live.length && !items.length) {
+    await bootstrapIndex(d);
+    const rebuilt = await d.store.query<KnowledgeItem>({ collection: KNOWLEDGE_COLLECTION });
+    live = rebuilt.filter((i) => !i.archived);
+  }
   indexCache.set(d, { at: now, items: live });
   return live;
 }

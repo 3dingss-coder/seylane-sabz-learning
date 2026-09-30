@@ -239,6 +239,23 @@ async function sectionPath(
   return s?.mediaPath ?? null;
 }
 
+describe('first-run self-healing', () => {
+  it('builds the index on the first question when nothing has indexed it yet', async () => {
+    const { ctx, marketer } = await setup();
+    // No rebuildKnowledgeIndex() call anywhere before this point — a fresh deploy / wiped store.
+    expect(await ctx.deps.store.query({ collection: KNOWLEDGE_COLLECTION })).toHaveLength(0);
+    const user = await loadUser(ctx, marketer.id);
+    const r = await answerQuestion(ctx.deps, user, {
+      question: 'این کرم برای چه پوستی مناسب است؟',
+    });
+    expect(r.outcome).toBe('answered');
+    expect(r.sources.length).toBeGreaterThan(0);
+    expect(
+      (await ctx.deps.store.query({ collection: KNOWLEDGE_COLLECTION })).length,
+    ).toBeGreaterThan(0);
+  });
+});
+
 describe('hybrid retrieval', () => {
   it('finds the relevant section for a colloquial Persian question', async () => {
     const { ctx, marketer } = await setup();

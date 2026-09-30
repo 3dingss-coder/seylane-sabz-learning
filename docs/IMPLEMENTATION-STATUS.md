@@ -27,7 +27,7 @@ What is still open needs accounts, keys or devices the owner has to provide. See
 
 | Suite | Count | Runs |
 |---|---|---|
-| Functions unit + API (Vitest + supertest, memory backend) — includes 27 mentor-AI tests | 145 | local + CI |
+| Functions unit + API (Vitest + supertest, memory backend) — includes 28 mentor-AI tests | 146 | local + CI |
 | Web unit/integration (Vitest + Testing Library, mocked API, axe structural checks) | 64 | local + CI |
 | Emulator: security rules + the API suite on Firestore + Storage adapter (`functions/test-emulator/*`) | 6 rules + 3 storage + API suite | CI only (no JDK in the dev sandbox) |
 | E2E Playwright: foundation (5, on Chromium desktop/mobile + WebKit iPhone) + §28.2 journeys (5) + axe WCAG AA (4) | 14 specs | CI only |
@@ -70,7 +70,8 @@ D27–D40. The latest are D38 (Android appId + push gated on `google-services.js
 - **Voice calls** (`services/voice.ts`): turn transport (MediaRecorder → Whisper → grounded answer → Gemini TTS wrapped as WAV) and a duplex Live transport with server-minted ephemeral tokens; double quota (per user + global) from policy; transcript stored only with consent.
 - **Behaviour engine** (`services/behavior.ts`): deterministic signals → momentum/pressure/health/risk → B1–B12 interventions (dedupe per user/rule/day, ≤2/day) → manager escalation through the existing notify pipeline.
 - **Multimodal ingest** (`services/media-ingest.ts`): video/audio/image/PDF/YouTube → structured facts cached per extractor version; coverage reported on the admin knowledge screen.
-- **Surfaces**: `POST /me/mentor/ask`, `GET /me/mentor/behavior`, `POST /me/mentor/voice/*`, `POST /me/mentor/coach/*`, `GET /admin/reports/mentor-quality`, `GET /admin/knowledge`, `POST /admin/knowledge/{extract,rebuild}`; cron jobs `mentor-daily` (nudges + behaviour sweep) and `knowledge-reindex` (media + incremental reindex); the marketer UI gets a voice call sheet and a behaviour brief card, and the voice policy fields are editable in `/admin/policies`.
+- **First-run self-healing**: an empty knowledge index is built by the first question that needs it (once per 10 min, no parallelism), so a fresh deploy never answers «نمی‌دانم» to everything until the cron slot.
+- **Surfaces**: `POST /me/mentor/ask`, `GET /me/mentor/behavior`, `POST /me/mentor/voice/*`, `POST /me/mentor/coach/*`, `GET /admin/reports/mentor-quality`, `GET /admin/knowledge`, `POST /admin/knowledge/{extract,rebuild}`; cron jobs `mentor-daily` (nudges + behaviour sweep) and `knowledge-reindex` (media + incremental reindex); the marketer UI gets a voice call sheet and a behaviour brief card, the admin reports page gains AI-quality + knowledge panels (with manual extract/reindex), and the voice policy fields are editable in `/admin/policies`.
 - **Keys**: Gemini + Groq (both free tier). Procurement checklist: [`USER-TODO.md`](./USER-TODO.md) §۳.۵.
 
 ## Completion pass (PROMPT 015, after the gap review)
