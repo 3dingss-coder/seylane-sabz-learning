@@ -93,9 +93,13 @@ function TeamDialog({ initial, onClose }: { initial?: AdminTeam; onClose: () => 
         ? api.patch(`/admin/teams/${initial.id}`, body)
         : api.post('/admin/teams', body);
     },
-    onSuccess: () => {
+    onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['admin'] });
-      toast.show({ type: 'success', message: 'ذخیره شد.' });
+      const warnings = (r as { warnings?: string[] } | undefined)?.warnings ?? [];
+      toast.show({
+        type: warnings.length ? 'warning' : 'success',
+        message: warnings.length ? `ذخیره شد. ${warnings.join(' ')}` : 'ذخیره شد.',
+      });
       onClose();
     },
     onError: (e) =>

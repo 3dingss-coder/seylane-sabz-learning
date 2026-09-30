@@ -111,6 +111,7 @@ export async function runDeadlineSweep(d: Deps) {
 
 /** Daily 10:00 Tehran: reminder for in-progress training (throttled daily). */
 export async function runDailyReminders(d: Deps) {
+  const policy = await getPolicy(d);
   const shared = await loadShared(d);
   const marketers = await d.store.query<User>({
     collection: 'users',
@@ -119,19 +120,23 @@ export async function runDailyReminders(d: Deps) {
       ['status', '==', 'active'],
     ],
   });
+  // The admin sets this in «سیاست‌ها» («یادآوری پس از چند روز عدم فعالیت») — it must drive the job.
+  const inactiveMs = Math.max(1, policy.reminderInactiveDays) * DAY;
+  const throttleMs = Math.max(20 * HOUR, inactiveMs);
+  const now = d.clock().getTime();
   let sent = 0;
   for (const u of marketers as Doc<User>[]) {
+    // Skip anyone who was active inside the inactivity window.
+    if (u.lastActiveAt && now - Date.parse(u.lastActiveAt) < inactiveMs) continue;
     const { packages } = await loadUserLearning(d, u, shared);
     const p = packages.find((x) => x.status === 'in_progress' && x.packageStatus === 'published');
     if (!p) continue;
-    // Skip if the user was active today.
-    if (u.lastActiveAt && d.clock().getTime() - Date.parse(u.lastActiveAt) < 20 * HOUR) continue;
     sent += await notifyTemplate(
       d,
       [u.id],
       'reminder',
       { title: p.title, percent: p.percent },
-      { actionRef: `/packages/${p.id}`, throttleKey: 'daily_reminder', throttleMs: 20 * HOUR },
+      { actionRef: `/packages/${p.id}`, throttleKey: 'daily_reminder', throttleMs },
     );
   }
   return { sent };

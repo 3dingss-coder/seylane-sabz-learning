@@ -5,6 +5,7 @@ import { extractYoutubeId } from '../lib/ids';
 import { EXT, MEDIA_RULES, mp4DurationFromBuffer, sniff, type MediaKind } from '../lib/media';
 import type { Doc } from '../store/types';
 import type {
+  Assignment,
   Brand,
   MediaAsset,
   Package,
@@ -527,9 +528,10 @@ export async function publishPackage(d: Deps, actor: Actor, id: string) {
   if (issues.length)
     throw new ApiError('VALIDATION', 'بسته هنوز کامل نیست و منتشر نمی‌شود.', { issues });
   const now = nowIso(d);
+  const publishedAt = pkg.publishedAt ?? now;
   await d.store.update(`packages/${id}`, {
     status: 'published',
-    publishedAt: pkg.publishedAt ?? now,
+    publishedAt,
     updatedAt: now,
   });
   await audit(
@@ -543,8 +545,10 @@ export async function publishPackage(d: Deps, actor: Actor, id: string) {
   );
   await track(d, 'admin_package_published', actor.id, { packageId: id });
   const { notifyAssignedUsers } = await import('./assignments');
-  await notifyAssignedUsers(d, [id]);
-  return { ...pkg, status: 'published' as const, id };
+  const { notified, recipients } = await notifyAssignedUsers(d, [id]);
+  // Return the stored document (not the pre-publish one) so callers can trust publishedAt/status.
+  const fresh = await d.store.get<Package>(`packages/${id}`);
+  return { ...(fresh ?? pkg), status: 'published' as const, notified, recipients, id };
 }
 
 export async function unpublishPackage(d: Deps, actor: Actor, id: string) {
@@ -587,7 +591,38 @@ export async function archivePackage(d: Deps, actor: Actor, id: string) {
     { status: 'archived' },
   );
   await track(d, 'admin_package_archived', actor.id, { packageId: id });
-  return { ...pkg, status: 'archived' as const, id };
+  const assignments = await d.store.query<Assignment>({
+    collection: 'assignments',
+    where: [['revokedAt', '==', null]],
+  });
+  return {
+    ...pkg,
+    status: 'archived' as const,
+    id,
+    /** Active assignments that referenced it — they keep the (now invisible) package. */
+    affectedAssignments: assignments.filter((a) => a.packageIds.includes(id)).length,
+  };
+}
+
+/**
+ * Restores an archived package. It goes back to `published` only when it still passes the publish
+ * rules (a deadline that expired while it was archived must be fixed first) — otherwise to `draft`.
+ */
+export async function unarchivePackage(d: Deps, actor: Actor, id: string) {
+  const pkg = await d.store.get<Package>(`packages/${id}`);
+  if (!pkg) throw notFound('بسته');
+  if (pkg.status !== 'archived') return { ...pkg, id, publishIssues: [] as string[] };
+  const issues = await validatePublish(d, pkg);
+  const status = issues.length ? ('draft' as const) : ('published' as const);
+  await d.store.update(`packages/${id}`, { status, updatedAt: nowIso(d) });
+  await audit(d, actor, 'package.unarchived', 'packages', id, { status: pkg.status }, { status });
+  await track(d, 'admin_package_unarchived', actor.id, { packageId: id, status });
+  if (status === 'published') {
+    const { notifyAssignedUsers } = await import('./assignments');
+    await notifyAssignedUsers(d, [id]);
+  }
+  const fresh = await d.store.get<Package>(`packages/${id}`);
+  return { ...(fresh ?? pkg), status, id, publishIssues: issues };
 }
 
 // ─── Sections ───────────────────────────────────────────────────────────────
@@ -783,6 +818,13 @@ export async function updateSection(
       await resolveMedia(d, merged),
     );
   }
+  // Restoring an archived section puts it at the END of the list: keeping its old `order` would
+  // collide with the section that took its place while it was archived.
+  if (input.archived === false && s.archived) {
+    const live = await d.store.query<Section>({ collection: `packages/${packageId}/sections` });
+    patch.order =
+      live.reduce((m, x) => (x.id === sectionId || x.archived ? m : Math.max(m, x.order)), 0) + 1;
+  }
   await d.store.update(path, patch);
   await refreshPackageSummary(d, packageId);
   await audit(
@@ -805,7 +847,9 @@ export async function reorderSections(
   packageId: string,
   orderIds: string[],
 ) {
-  const sections = await d.store.query<Section>({ collection: `packages/${packageId}/sections` });
+  const sections = (
+    await d.store.query<Section>({ collection: `packages/${packageId}/sections` })
+  ).filter((s) => !s.archived);
   const known = new Set(sections.map((s) => s.id));
   if (orderIds.length !== sections.length || orderIds.some((id) => !known.has(id)))
     throw new ApiError('VALIDATION', 'ترتیب ارسالی با قسمت‌های بسته مطابقت ندارد.');
@@ -873,6 +917,9 @@ async function bumpQuiz(d: Deps, quizId: string) {
   await d.store.update(`quizzes/${quizId}`, {
     version: (quiz?.version ?? 1) + 1,
     questionCount: qs.length,
+    // Any admin edit of the questions IS the review that `flagQuestion` asked for; leaving the
+    // flag on forever made the «بازبینی» banner meaningless in the quiz builder.
+    needsReview: false,
     updatedAt: nowIso(d),
   });
 }

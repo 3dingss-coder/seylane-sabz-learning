@@ -10,6 +10,7 @@ import { LocalBlobStore } from '../../src/blob/local';
 import { loadConfig } from '../../src/config';
 import type { Package, Role, User } from '../../src/domain/types';
 import { RateLimiter } from '../../src/http/rateLimit';
+import type { AiHub } from '../../src/ai/hub';
 import { FakeLlm, type LlmClient } from '../../src/llm/types';
 import { RecordingPushSender } from '../../src/push/types';
 import { SYSTEM, type Deps } from '../../src/services/context';
@@ -84,7 +85,7 @@ export interface TestCtx {
 let phoneSeq = 0;
 
 export async function createCtx(
-  opts: { llm?: LlmClient | null; start?: string } = {},
+  opts: { llm?: LlmClient | null; start?: string; ai?: AiHub } = {},
 ): Promise<TestCtx> {
   const now = { value: new Date(opts.start ?? '2026-10-03T06:30:00.000Z') }; // 10:00 Tehran, Saturday
   const clock = () => new Date(now.value.getTime());
@@ -104,6 +105,7 @@ export async function createCtx(
     push: new RecordingPushSender(),
     mail: new RecordingMailer(),
     llm: opts.llm === undefined ? new FakeLlm() : opts.llm,
+    ...(opts.ai ? { ai: opts.ai } : {}),
     clock,
   };
   const limiter = new RateLimiter(() => clock().getTime());

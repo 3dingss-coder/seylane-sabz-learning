@@ -21,7 +21,7 @@ import { errMsg } from '@/lib/errors';
 import { faDate } from '@/lib/format';
 import type { AdminAssignment, AdminPath, AdminPathSaved } from '@/lib/types';
 import { useBrands, usePackagesAdmin, useTeams, useUsers } from './adminQueries';
-import { fromLocalInput, toLocalInput } from '@/lib/dates';
+import { fromZonedInput, toZonedInput } from '@/lib/dates';
 import { JalaliDateField } from '@/components/common/JalaliDateField';
 
 type Scope = 'global' | 'team' | 'user' | 'brand';
@@ -303,13 +303,23 @@ export function AssignmentDialog({
   const toast = useToast();
   const m = useMutation({
     mutationFn: () =>
-      api.post('/admin/assignments', {
-        type,
-        targetId: type === 'global' ? null : targetId,
-        packageIds,
-      }),
-    onSuccess: () => {
-      toast.show({ type: 'success', message: 'انتساب ثبت شد و به مخاطبان اطلاع داده شد.' });
+      api.post<{ warnings?: string[]; recipients?: number; notified?: number }>(
+        '/admin/assignments',
+        {
+          type,
+          targetId: type === 'global' ? null : targetId,
+          packageIds,
+        },
+      ),
+    onSuccess: (r) => {
+      const res = r as { warnings?: string[]; recipients?: number; notified?: number };
+      const warnings = res.warnings ?? [];
+      toast.show({
+        type: warnings.length ? 'warning' : 'success',
+        message: warnings.length
+          ? `انتساب ثبت شد. ${warnings.join(' ')}`
+          : `انتساب ثبت شد و به ${toPersianDigits(res.notified ?? 0)} مخاطب اطلاع داده شد.`,
+      });
       void qc.invalidateQueries({ queryKey: ['admin'] });
       onClose();
     },
@@ -482,11 +492,14 @@ export function PathDialog({
   onClose: () => void;
 }) {
   const pkgs = usePackagesAdmin('status=published');
+  // Titles come from the unfiltered list: a step pointing at a draft (or a package that was
+  // un-published after the path was saved) must still show its name, not a raw id.
+  const allPkgs = usePackagesAdmin();
   const [name, setName] = useState(initial?.name ?? preset?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? preset?.description ?? '');
   const [scope, setScope] = useState<Scope>(initial?.scope ?? 'global');
   const [targetId, setTargetId] = useState(initial?.targetId ?? '');
-  const [startAt, setStartAt] = useState(toLocalInput(initial?.startAt ?? null));
+  const [startAt, setStartAt] = useState(toZonedInput(initial?.startAt ?? null));
   const [items, setItems] = useState<Array<{ packageId: string; deadlineOffsetDays: string }>>(
     initial
       ? initial.items.map((i) => ({
@@ -499,7 +512,10 @@ export function PathDialog({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const qc = useQueryClient();
   const toast = useToast();
-  const titles = new Map((pkgs.data ?? []).map((p) => [p.id, p.title]));
+  const titles = useMemo(
+    () => new Map((allPkgs.data ?? []).map((p) => [p.id, p.title])),
+    [allPkgs.data],
+  );
   const m = useMutation({
     mutationFn: () => {
       const body = {
@@ -507,7 +523,7 @@ export function PathDialog({
         description: description.trim(),
         scope,
         targetId: scope === 'global' ? null : targetId,
-        startAt: fromLocalInput(startAt),
+        startAt: fromZonedInput(startAt),
         items: items.map((i) => ({
           packageId: i.packageId,
           deadlineOffsetDays: i.deadlineOffsetDays === '' ? null : Number(i.deadlineOffsetDays),
@@ -603,12 +619,14 @@ export function PathDialog({
           value={startAt}
           onChange={setStartAt}
           error={errors.startAt}
+          hint="ساعت به وقت تهران ثبت می‌شود؛ بازاریاب همان ساعت را می‌بیند."
         />
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium">مراحل (به ترتیب)</p>
           <p className="text-xs leading-5 text-text-secondary">
             بازاریاب آموزش‌ها را به همین ترتیب می‌بیند. در خانه «روز» بنویسید مهلت هر مرحله چند روز
-            بعد از تاریخ شروع است (اختیاری).
+            بعد از تاریخ شروع است؛ مهلت تا پایان آن روز (۲۳:۵۹) حساب می‌شود. اگر خالی بگذارید، مهلت
+            خودِ آموزش تغییر نمی‌کند.
           </p>
           {items.map((it, i) => (
             <div

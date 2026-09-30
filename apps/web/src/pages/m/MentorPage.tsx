@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
+import { MentorBriefCard } from '@/components/learning/MentorBriefCard';
 import { MentorChat } from '@/components/learning/MentorChat';
 import { api } from '@/lib/api';
 import { qk } from '@/lib/queries';
@@ -15,7 +16,8 @@ export function MentorPage() {
   });
   return (
     <div className="flex h-[calc(100dvh-12rem)] flex-col md:h-[calc(100dvh-8rem)]">
-      <PageHeader title="منتور" subtitle="پیشنهادهای شخصی و پاسخ به سؤال‌ها" />
+      <PageHeader title="منتور" subtitle="وضعیت مسیر یادگیری، پاسخ به سؤال‌ها و تماس صوتی" />
+      <MentorBriefCard />
       {(nudges.data ?? []).slice(0, 3).map((n) => (
         <Link
           key={n.id}

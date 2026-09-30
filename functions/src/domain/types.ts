@@ -327,16 +327,26 @@ export interface MentorNudge {
   createdAt: string;
 }
 
+export type ChatSourceType =
+  'package' | 'section' | 'product' | 'brand' | 'faq' | 'play' | 'policy' | 'media';
+
+export type ChatMode = 'text' | 'voice' | 'coach';
+
 export interface ChatMessage {
   userId: string;
   role: 'user' | 'assistant';
   text: string;
   packageId: string | null;
-  sources: Array<{ type: 'package' | 'section'; id: string; title: string }>;
+  sources: Array<{ type: ChatSourceType; id: string; title: string }>;
   outcome: 'answered' | 'unknown' | 'blocked' | 'fallback' | null;
   feedback: 'up' | 'down' | null;
   createdAt: string;
   expireAt: Date;
+  /** 'voice' → spoken through the phone-style call, 'coach' → sales role-play. */
+  mode?: ChatMode | null;
+  /** Which model answered, e.g. `groq:whisper-large-v3-turbo` (quality audit). */
+  provider?: string | null;
+  latencyMs?: number | null;
 }
 
 export interface Policy {
@@ -355,6 +365,10 @@ export interface Policy {
   mentorChatEnabled: boolean;
   mentorDailyLimitPerUser: number;
   mentorDailyLimitGlobal: number;
+  /** Voice calls (F14-V): STT → grounded answer → TTS, or a duplex Live session. */
+  mentorVoiceEnabled: boolean;
+  mentorVoiceMinutesPerUser: number;
+  mentorVoiceMinutesGlobal: number;
   updatedAt: string;
   updatedBy: string | null;
 }

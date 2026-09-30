@@ -35,11 +35,22 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
   const [p, setP] = useState<PolicyData>(initial);
   const [warn, setWarn] = useState(initial.warningHours.join(', '));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [dirty, setDirty] = useState(false);
   const qc = useQueryClient();
   const toast = useToast();
-  useEffect(() => setP(initial), [initial]);
+  // Only adopt server data while nothing is being edited: the query refetches on focus and after
+  // every invalidation, and that used to wipe half-typed changes.
+  useEffect(() => {
+    if (dirty) return;
+    setP(initial);
+    setWarn(initial.warningHours.join(', '));
+  }, [initial, dirty]);
+  const update = (fn: (x: PolicyData) => PolicyData) => {
+    setDirty(true);
+    setP(fn);
+  };
   const num = (k: keyof PolicyData) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setP((x) => ({ ...x, [k]: Number(e.target.value) }));
+    update((x) => ({ ...x, [k]: Number(e.target.value) }));
   const m = useMutation({
     mutationFn: () => {
       const rest: Partial<PolicyData> = { ...p };
@@ -51,9 +62,15 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
         .filter((n) => Number.isFinite(n) && n > 0);
       return api.put<PolicyData>('/admin/policies', { ...rest, warningHours });
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.show({ type: 'success', message: 'سیاست‌ها ذخیره شد.' });
       setErrors({});
+      // The server normalises what was sent (warning hours are de-duplicated and sorted) — show
+      // that result instead of what was typed, then let further refetches sync the form again.
+      const hours = saved.warningHours;
+      setWarn(hours.join(', '));
+      setP((x) => ({ ...x, warningHours: hours }));
+      setDirty(false);
       void qc.invalidateQueries({ queryKey: ['admin', 'policies'] });
     },
     onError: (e) => {
@@ -120,7 +137,7 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
             min={0}
             value={p.pointsTable[k]}
             onChange={(e) =>
-              setP((x) => ({
+              update((x) => ({
                 ...x,
                 pointsTable: { ...x.pointsTable, [k]: Number(e.target.value) },
               }))
@@ -133,7 +150,7 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
             type="checkbox"
             className="size-5 accent-primary"
             checked={p.penaltyEnabled}
-            onChange={(e) => setP((x) => ({ ...x, penaltyEnabled: e.target.checked }))}
+            onChange={(e) => update((x) => ({ ...x, penaltyEnabled: e.target.checked }))}
           />
           کسر امتیاز برای تأخیر
         </label>
@@ -155,7 +172,10 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
           label="هشدار مهلت (ساعت قبل، با کاما)"
           ltr
           value={warn}
-          onChange={(e) => setWarn(e.target.value)}
+          onChange={(e) => {
+            setDirty(true);
+            setWarn(e.target.value);
+          }}
           error={errors.warningHours}
           hint="مثال: 48, 24"
         />
@@ -166,7 +186,7 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
             ltr
             value={p.quietHours.start}
             onChange={(e) =>
-              setP((x) => ({ ...x, quietHours: { ...x.quietHours, start: e.target.value } }))
+              update((x) => ({ ...x, quietHours: { ...x.quietHours, start: e.target.value } }))
             }
             error={errors['quietHours.start']}
           />
@@ -176,7 +196,7 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
             ltr
             value={p.quietHours.end}
             onChange={(e) =>
-              setP((x) => ({ ...x, quietHours: { ...x.quietHours, end: e.target.value } }))
+              update((x) => ({ ...x, quietHours: { ...x.quietHours, end: e.target.value } }))
             }
             error={errors['quietHours.end']}
           />
@@ -195,7 +215,7 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
           <Select
             label="روز خلاصه هفتگی"
             value={p.weeklyDigestDay}
-            onChange={(e) => setP((x) => ({ ...x, weeklyDigestDay: Number(e.target.value) }))}
+            onChange={(e) => update((x) => ({ ...x, weeklyDigestDay: Number(e.target.value) }))}
           >
             {DAYS.map((d, i) => (
               <option key={d} value={i}>
@@ -222,7 +242,7 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
             type="checkbox"
             className="size-5 accent-primary"
             checked={p.mentorChatEnabled}
-            onChange={(e) => setP((x) => ({ ...x, mentorChatEnabled: e.target.checked }))}
+            onChange={(e) => update((x) => ({ ...x, mentorChatEnabled: e.target.checked }))}
           />
           چت منتور فعال باشد
         </label>
@@ -246,6 +266,39 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
           hint="برای ماندن در سهمیه رایگان"
         />
       </Card>
+      <Card className="flex flex-col gap-3 p-4">
+        <h2 className="font-bold">تماس صوتی با منتور</h2>
+        <label className="flex min-h-12 items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-5 accent-primary"
+            checked={p.mentorVoiceEnabled}
+            onChange={(e) => update((x) => ({ ...x, mentorVoiceEnabled: e.target.checked }))}
+          />
+          تماس صوتی فعال باشد
+        </label>
+        <Input
+          label="سقف دقیقه صوتی روزانه هر کاربر"
+          type="number"
+          ltr
+          min={1}
+          max={120}
+          value={p.mentorVoiceMinutesPerUser}
+          onChange={num('mentorVoiceMinutesPerUser')}
+          error={errors.mentorVoiceMinutesPerUser}
+        />
+        <Input
+          label="سقف دقیقه صوتی روزانه کل سیستم"
+          type="number"
+          ltr
+          min={1}
+          max={5000}
+          value={p.mentorVoiceMinutesGlobal}
+          onChange={num('mentorVoiceMinutesGlobal')}
+          error={errors.mentorVoiceMinutesGlobal}
+          hint="تبدیل گفتار به متن رایگان است؛ سقف را برای کنترل هزینه نگه دارید"
+        />
+      </Card>
       <div className="flex flex-col gap-1 lg:col-span-2">
         <Button
           type="submit"
@@ -255,6 +308,11 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
         >
           ذخیره سیاست‌ها
         </Button>
+        {dirty && (
+          <p className="text-center text-xs font-bold text-warning-fg" role="status">
+            تغییری هنوز ذخیره نشده — دکمه «ذخیره سیاست‌ها» را بزنید.
+          </p>
+        )}
         {initial.updatedAt && (
           <p className="text-center text-xs text-muted-fg">
             آخرین تغییر: {faDateTime(initial.updatedAt)}

@@ -5,6 +5,7 @@ import type { Express } from 'express';
 import { createApp } from './app';
 import { loadConfig } from './config';
 import { buildFirebaseDeps } from './deps';
+import type { JobName } from './services/cron';
 import type { Deps } from './services/context';
 
 // Region close to users; max instances keeps free-tier cost bounded (risk R4).
@@ -22,7 +23,7 @@ export const api = onRequest({ memory: '512MiB', timeoutSeconds: 60 }, async (re
 });
 
 const TZ = 'Asia/Tehran';
-const job = (schedule: string, name: string, run: (d: Deps) => Promise<unknown>) =>
+const job = (schedule: string, name: JobName | 'backup', run: (d: Deps) => Promise<unknown>) =>
   onSchedule(
     { schedule, timeZone: TZ, retryCount: 1, memory: '512MiB', timeoutSeconds: 540 },
     async () => {
@@ -31,22 +32,18 @@ const job = (schedule: string, name: string, run: (d: Deps) => Promise<unknown>)
     },
   );
 
-// Spec §26 / PROMPT 011 — all jobs are idempotent (deterministic ids / throttle log).
-export const deadlineSweep = job('every 60 minutes', 'deadline-sweep', async (d) =>
-  (await import('./services/jobs')).runDeadlineSweep(d),
-);
-export const dailyReminders = job('0 10 * * *', 'daily-reminders', async (d) =>
-  (await import('./services/jobs')).runDailyReminders(d),
-);
-export const weeklyDigest = job('0 * * * *', 'weekly-digest', async (d) =>
-  (await import('./services/jobs')).runWeeklyDigest(d),
-);
-export const mentorDaily = job('0 8 * * *', 'mentor-daily', async (d) => ({
-  nudges: await (await import('./services/mentor-rules')).runMentorDaily(d),
-}));
-export const flushDeferredPush = job('every 15 minutes', 'flush-push', async (d) => ({
-  sent: await (await import('./services/notify')).flushDeferredPush(d),
-}));
+// Spec §26 / PROMPT 011 — all jobs are idempotent (deterministic ids / throttle log) and come
+// from the same table the Cloudflare cron triggers dispatch (services/cron.ts), so a job cannot
+// behave differently on one platform than on the other.
+const shared = () => import('./services/cron');
+const scheduled = (schedule: string, name: JobName) =>
+  job(schedule, name, async (d) => (await shared()).runJob(d, name));
+
+export const deadlineSweep = scheduled('every 60 minutes', 'deadline-sweep');
+export const dailyReminders = scheduled('0 10 * * *', 'daily-reminders');
+export const weeklyDigest = scheduled('0 * * * *', 'weekly-digest');
+export const mentorDaily = scheduled('0 8 * * *', 'mentor-daily');
+export const flushDeferredPush = scheduled('every 15 minutes', 'flush-push');
 export const dailyBackup = job('0 3 * * *', 'backup', async () =>
   (await import('./services/backup')).exportFirestore(),
 );

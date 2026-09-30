@@ -34,6 +34,10 @@ export function SectionEditor({
   const [minutes, setMinutes] = useState(
     initial?.durationSec ? String(Math.round((initial.durationSec / 60) * 10) / 10) : '',
   );
+  // The field shows minutes with one decimal, which cannot represent every second count. Editing
+  // the section used to round-trip the stored duration through it (305s → 5.1 → 306s), quietly
+  // moving the completion threshold. Only a touched field may change the duration now.
+  const [minutesEdited, setMinutesEdited] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const qc = useQueryClient();
   const toast = useToast();
@@ -43,7 +47,10 @@ export function SectionEditor({
     (initial?.mediaSource === 'file' && initial.mediaId && initial.mediaType === mediaType),
   );
   const durationSec =
-    media?.durationSec ?? (minutes ? Math.round(Number(minutes) * 60) : undefined);
+    media?.durationSec ??
+    (minutesEdited && minutes
+      ? Math.round(Number(minutes) * 60)
+      : (initial?.durationSec ?? undefined));
 
   const m = useMutation({
     mutationFn: () => {
@@ -62,7 +69,11 @@ export function SectionEditor({
         : api.post(`/admin/packages/${packageId}/sections`, body);
     },
     onSuccess: () => {
+      // The section list lives on the package screen, but the counts on the content tree and the
+      // brand page are derived from it too.
       void qc.invalidateQueries({ queryKey: ak.pkg(packageId) });
+      void qc.invalidateQueries({ queryKey: ['admin', 'tree'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'packages'] });
       toast.show({
         type: 'success',
         message: initial ? 'قسمت ذخیره شد.' : 'قسمت اضافه شد. حالا سؤال‌های آزمون را بنویسید.',
@@ -171,7 +182,10 @@ export function SectionEditor({
             min={0}
             step={0.1}
             value={minutes}
-            onChange={(e) => setMinutes(e.target.value)}
+            onChange={(e) => {
+              setMinutesEdited(true);
+              setMinutes(e.target.value);
+            }}
             error={errors.durationSec}
             hint={
               source === 'youtube'

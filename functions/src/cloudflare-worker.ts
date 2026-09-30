@@ -1,24 +1,46 @@
 import { buildCloudflareDeps, createFetchHandler, type CloudflareEnv } from './web-handler';
+import { runCron } from './services/cron';
+import type { Deps } from './services/context';
 import type { Data } from './store/types';
 import seedSnapshotJson from '../lib/seed-snapshot.json';
 
 const seedSnapshot = seedSnapshotJson as unknown as Record<string, Record<string, Data>>;
 
-let cachedHandler: Promise<(request: Request) => Promise<Response>> | null = null;
+/** The two Cron Trigger globals, declared locally — the project ships no @cloudflare/workers-types. */
+interface CronTriggerEvent {
+  /** The cron expression from `[triggers] crons`, e.g. "0 * * * *". */
+  cron: string;
+  scheduledTime: number;
+  noRetry?: boolean;
+}
+interface ExecutionContextLike {
+  waitUntil(promise: Promise<unknown>): void;
+  passThroughOnException?(): void;
+}
+
+let cachedDeps: Promise<Deps> | null = null;
 let cachedHasD1: boolean | null = null;
 
-function getHandler(env: CloudflareEnv): Promise<(request: Request) => Promise<Response>> {
+/** Deps (store + services) are built once per isolate and reused by the fetch and cron entrypoints. */
+function getDeps(env: CloudflareEnv): Promise<Deps> {
   const hasD1 = Boolean(env.DB && typeof env.DB.prepare === 'function');
-  if (!cachedHandler || cachedHasD1 !== hasD1) {
+  if (!cachedDeps || cachedHasD1 !== hasD1) {
     cachedHasD1 = hasD1;
-    cachedHandler = buildCloudflareDeps(env, seedSnapshot)
-      .then((deps) => createFetchHandler(deps))
-      .catch((err) => {
-        cachedHandler = null;
-        throw err;
-      });
+    cachedDeps = buildCloudflareDeps(env, seedSnapshot).catch((err) => {
+      cachedDeps = null;
+      throw err;
+    });
   }
-  return cachedHandler;
+  return cachedDeps;
+}
+
+function getHandler(env: CloudflareEnv): Promise<(request: Request) => Promise<Response>> {
+  return getDeps(env)
+    .then((deps) => createFetchHandler(deps))
+    .catch((err) => {
+      cachedDeps = null;
+      throw err;
+    });
 }
 
 export default {
@@ -60,5 +82,23 @@ export default {
     }
 
     return new Response('Not Found', { status: 404 });
+  },
+
+  /**
+   * Cloudflare Cron Triggers (`[triggers] crons` in wrangler.toml). Without this handler none of
+   * the reminder / deadline / digest jobs run on the deployed Worker, so nothing the admin
+   * configures under «سیاست‌ها» ever reaches a marketer's phone.
+   */
+  async scheduled(
+    event: CronTriggerEvent,
+    env: CloudflareEnv,
+    ctx: ExecutionContextLike,
+  ): Promise<void> {
+    ctx.waitUntil(
+      getDeps(env ?? {})
+        .then((deps) => runCron(deps, event.cron))
+        .then((r) => console.info('[cron]', JSON.stringify(r)))
+        .catch((err) => console.error('[cron] startup/run failed', err)),
+    );
   },
 };

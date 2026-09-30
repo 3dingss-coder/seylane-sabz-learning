@@ -6,9 +6,13 @@ import { parse } from '../http/validate';
 import type { Deps } from '../services/context';
 import * as assignments from '../services/assignments';
 import * as content from '../services/content';
-import * as jobs from '../services/jobs';
+import { isJobName, JOB_NAMES, runJob } from '../services/cron';
+import { invalidateIndexCache as invalidateKnowledgeCache } from '../services/retrieval';
+import { ApiError } from '../http/errors';
 import * as mentor from '../services/mentor';
-import { runMentorDaily } from '../services/mentor-rules';
+import * as aiQuality from '../services/mentor-quality';
+import * as knowledge from '../services/knowledge';
+import * as mediaIngest from '../services/media-ingest';
 import * as notify from '../services/notify';
 import * as policies from '../services/policies';
 import * as reports from '../services/reports';
@@ -131,6 +135,10 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   r.post(
     '/admin/packages/:id/archive',
     h(async (req) => content.archivePackage(d, actorOf(req), id(req))),
+  );
+  r.post(
+    '/admin/packages/:id/unarchive',
+    h(async (req) => content.unarchivePackage(d, actorOf(req), id(req))),
   );
   r.post(
     '/admin/packages/:id/sections',
@@ -312,6 +320,65 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     '/admin/reports/mentor',
     h(async () => mentor.mentorStats(d)),
   );
+  // AI quality dashboard: provider mix, failovers, latency, unknown rate, voice minutes.
+  r.get(
+    '/admin/reports/mentor-quality',
+    h(async () => aiQuality.aiQualityReport(d)),
+  );
+  // Knowledge index (what the assistant knows) — stats + health of the embeddings + coverage
+  // of the multimodal library (how much of the uploaded media is machine-readable yet).
+  r.get(
+    '/admin/knowledge',
+    h(async () => ({
+      ...(await knowledge.knowledgeStats(d)),
+      media: await mediaIngest.mediaCoverage(d),
+    })),
+  );
+  // Read new media (video/audio/image/PDF) into structured knowledge, then rebuild the index.
+  r.post(
+    '/admin/knowledge/extract',
+    requireRole('superadmin'),
+    rateLimit(
+      limiter,
+      'reindex',
+      6,
+      60 * 60_000,
+      (req) => me(req).id,
+      'استخراج محتوا حداکثر ۶ بار در ساعت ممکن است.',
+    ),
+    h(async (req) => {
+      const body = parse(
+        z.object({
+          limit: z.number().int().min(1).max(50).optional(),
+          only: z.enum(['sections', 'products', 'all']).optional(),
+        }),
+        req.body ?? {},
+      );
+      const extraction = await mediaIngest.extractPendingMedia(d, body);
+      invalidateKnowledgeCache(d);
+      return extraction;
+    }),
+  );
+  // Rebuild the whole index (incremental); also runs daily in the mentor-daily cron slot.
+  r.post(
+    '/admin/knowledge/rebuild',
+    requireRole('superadmin'),
+    rateLimit(
+      limiter,
+      'reindex',
+      3,
+      60 * 60_000,
+      (req) => me(req).id,
+      'بازسازی ایندکس حداکثر ۳ بار در ساعت ممکن است.',
+    ),
+    h(async (req) => {
+      const result = await knowledge.rebuildKnowledgeIndex(d, {
+        embed: parse(z.object({ embed: z.boolean().optional() }), req.body).embed !== false,
+      });
+      invalidateKnowledgeCache(d);
+      return result;
+    }),
+  );
   r.get(
     '/admin/retake-requests',
     h(async (req) =>
@@ -391,24 +458,18 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   );
 
   // Manual job trigger (superadmin) — useful on dev / when schedules are paused.
+  // Same job table the cron triggers use, so a manual run cannot drift from a scheduled one.
   r.post(
     '/admin/jobs/:name',
     requireRole('superadmin'),
     h(async (req) => {
-      switch (id(req, 'name')) {
-        case 'deadline-sweep':
-          return jobs.runDeadlineSweep(d);
-        case 'daily-reminders':
-          return jobs.runDailyReminders(d);
-        case 'weekly-digest':
-          return jobs.runWeeklyDigest(d, true);
-        case 'mentor-daily':
-          return { nudges: await runMentorDaily(d) };
-        case 'flush-push':
-          return { sent: await notify.flushDeferredPush(d) };
-        default:
-          return { error: 'unknown job' };
-      }
+      const name = id(req, 'name');
+      if (!isJobName(name))
+        throw new ApiError(
+          'NOT_FOUND',
+          `کار زمان‌بندی‌شده «${name}» شناخته نشده است. (${JOB_NAMES.join('، ')})`,
+        );
+      return runJob(d, name, { force: true });
     }),
   );
   return r;

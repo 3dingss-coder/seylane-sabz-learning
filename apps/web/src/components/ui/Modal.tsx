@@ -15,6 +15,11 @@ export interface ModalProps {
 }
 
 const SIZES = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' } as const;
+
+// Every open modal registers here; only the topmost one closes on Escape. A confirm dialog nested
+// inside a form dialog (e.g. «بازنشانی رمز» in UsersPage) used to close both at once, discarding
+// data the outer dialog was still holding.
+const openStack: symbol[] = [];
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
@@ -33,6 +38,9 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
 
   useEffect(() => {
     if (!open) return;
+    const token = Symbol('modal');
+    openStack.push(token);
+    const isTop = () => openStack[openStack.length - 1] === token;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
     const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
@@ -42,6 +50,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (!isTop()) return;
         e.stopPropagation();
         onCloseRef.current();
         return;
@@ -61,6 +70,8 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
     };
     document.addEventListener('keydown', onKey);
     return () => {
+      const i = openStack.indexOf(token);
+      if (i >= 0) openStack.splice(i, 1);
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus();

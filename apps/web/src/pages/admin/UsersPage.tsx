@@ -159,16 +159,21 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
   const canPrivileged = me?.role === 'superadmin';
   const save = useMutation({
     mutationFn: () =>
-      api.patch(`/admin/users/${user.id}`, {
+      api.patch<{ warnings?: string[] }>(`/admin/users/${user.id}`, {
         name: name.trim(),
         role,
         teamId: teamId || null,
         status,
         brandIds,
       }),
-    onSuccess: () => {
+    onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['admin'] });
-      toast.show({ type: 'success', message: 'ذخیره شد.' });
+      const warnings = r?.warnings ?? [];
+      // Changes that detach a team or revoke a role must not be swallowed by a generic toast.
+      toast.show({
+        type: warnings.length ? 'warning' : 'success',
+        message: warnings.length ? `ذخیره شد. ${warnings.join(' ')}` : 'ذخیره شد.',
+      });
       onClose();
     },
     onError: (e) =>

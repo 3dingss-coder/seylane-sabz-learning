@@ -7,7 +7,6 @@ import { Tabs, Textarea } from '@/components/common/Field';
 import { QueryState } from '@/components/common/QueryState';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { api } from '@/lib/api';
-import { toPersianDigits } from '@/lib/digits';
 import { errMsg } from '@/lib/errors';
 import { faPercent, faRelative } from '@/lib/format';
 import type { RetakeItem } from '@/lib/types';
@@ -91,8 +90,8 @@ export function RetakeList({
                       </p>
                       {r.escalated && (
                         <p className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-warning-fg">
-                          <AlertTriangle className="size-3.5" aria-hidden /> ارجاع به مدیر سیستم
-                          (بیش از {toPersianDigits(2)} بار تأیید شده)
+                          <AlertTriangle className="size-3.5" aria-hidden /> ارجاع به مدیر ارشد (سقف
+                          آزمون‌های مجدد این کاربر پر شده)
                         </p>
                       )}
                     </div>

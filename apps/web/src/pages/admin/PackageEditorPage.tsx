@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   Archive,
+  ArchiveRestore,
   Check,
   Users,
   ArrowDown,
@@ -22,7 +23,7 @@ import { Button, Card, EmptyState, Skeleton, StatusBadge, useToast } from '@/com
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
-import { api } from '@/lib/api';
+import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { errMsg } from '@/lib/errors';
@@ -75,24 +76,50 @@ function Editor({ d }: { d: AdminPackageDetail }) {
   const refresh = () => void qc.invalidateQueries({ queryKey: ['admin'] });
 
   const action = useMutation({
-    mutationFn: (a: 'publish' | 'unpublish' | 'archive') =>
-      api.post(`/admin/packages/${p.id}/${a}`),
-    onSuccess: (_r, a) => {
+    mutationFn: (a: 'publish' | 'unpublish' | 'archive' | 'unarchive') =>
+      api.post<{
+        notified?: number;
+        recipients?: number;
+        affectedAssignments?: number;
+      }>(`/admin/packages/${p.id}/${a}`),
+    onSuccess: (r, a) => {
+      // `recipients` is undefined when the package was already published (nothing new to announce).
+      const recipients = r?.recipients;
+      const affected = r?.affectedAssignments ?? 0;
+      let message = 'منتشر شد.';
+      if (a === 'publish' && recipients)
+        message = `منتشر شد و هم‌اکنون برای ${toPersianDigits(recipients)} مخاطب در دسترس است.`;
+      if (a === 'publish' && recipients === 0)
+        message =
+          'منتشر شد؛ اما هنوز مخاطبی ندارد — تا وقتی در «مسیرها و مخاطبان» به کسی انتساب نگیرد، هیچ بازاریابی آن را نمی‌بیند.';
+      if (a === 'unpublish') message = 'از انتشار خارج شد؛ پیشرفت‌های ثبت‌شده باقی می‌ماند.';
+      if (a === 'unarchive') message = 'از بایگانی بازگردانده شد.';
+      if (a === 'archive')
+        message =
+          affected > 0
+            ? `بایگانی شد ${toPersianDigits(affected)} انتساب فعال هنوز به آن اشاره می‌کند.`
+            : 'بایگانی شد.';
       toast.show({
-        type: 'success',
-        message:
-          a === 'publish'
-            ? 'منتشر شد و برای مخاطبان فعال است.'
-            : a === 'unpublish'
-              ? 'از انتشار خارج شد.'
-              : 'بایگانی شد.',
+        type: a === 'publish' && recipients === 0 ? 'warning' : 'success',
+        message,
       });
       setConfirm(null);
       refresh();
     },
     onError: (e) => {
       setConfirm(null);
-      toast.show({ type: 'error', message: errMsg(e) });
+      // Publishing is refused with a list of concrete problems (`details.issues`); the generic
+      // message alone left the admin guessing which of them was the blocker.
+      const issues =
+        e instanceof ApiError
+          ? ((e.details as { issues?: string[] } | undefined)?.issues ?? [])
+          : [];
+      toast.show({
+        type: 'error',
+        message: issues.length
+          ? `${errMsg(e)} ${issues.slice(0, 3).join(' | ')}${issues.length > 3 ? ' …' : ''}`
+          : errMsg(e),
+      });
     },
   });
   const reorder = useMutation({
@@ -133,13 +160,24 @@ function Editor({ d }: { d: AdminPackageDetail }) {
           </span>
         }
         actions={
-          <Button
-            variant="ghost"
-            icon={<Pencil className="size-4" aria-hidden />}
-            onClick={() => setEditMeta(true)}
-          >
-            ویرایش
-          </Button>
+          <>
+            {p.status === 'archived' && (
+              <Button
+                icon={<ArchiveRestore className="size-4" aria-hidden />}
+                loading={action.isPending && action.variables === 'unarchive'}
+                onClick={() => action.mutate('unarchive')}
+              >
+                بازگردانی از بایگانی
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              icon={<Pencil className="size-4" aria-hidden />}
+              onClick={() => setEditMeta(true)}
+            >
+              ویرایش
+            </Button>
+          </>
         }
       />
       <PackageSteps
@@ -181,7 +219,7 @@ function Editor({ d }: { d: AdminPackageDetail }) {
                 ? 'موارد زرد رنگ کنار صفحه را کامل کنید تا انتشار فعال شود.'
                 : 'همه چیز آماده است. منتشر کنید.',
             action:
-              d.publishIssues.length > 0
+              d.publishIssues.length > 0 || p.status === 'archived'
                 ? undefined
                 : { text: 'انتشار', run: () => setConfirm('publish') },
           },

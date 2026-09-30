@@ -212,7 +212,11 @@ export const feedbackSchema = z.object({
   feedback: z.enum(['up', 'down']),
 });
 
-async function consumeQuota(d: Deps, userId: string): Promise<'ok' | 'user' | 'global'> {
+/**
+ * Daily chat quota (per user + global, from policy). Exported so the multi-provider `/ask` and
+ * voice pipelines share the exact same accounting as the legacy chat endpoint.
+ */
+export async function consumeQuota(d: Deps, userId: string): Promise<'ok' | 'user' | 'global'> {
   const policy = await getPolicy(d);
   const day = dayKey(d.clock(), policy.timezone);
   return d.store.runTransaction(async (tx) => {
@@ -401,6 +405,9 @@ export async function chatHistory(d: Deps, userId: string, packageId: string | n
       sources: m.sources,
       outcome: m.outcome,
       feedback: m.feedback,
+      mode: m.mode ?? null,
+      provider: m.provider ?? null,
+      latencyMs: m.latencyMs ?? null,
       createdAt: m.createdAt,
     }));
 }

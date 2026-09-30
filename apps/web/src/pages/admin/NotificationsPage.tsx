@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Send } from 'lucide-react';
-import { Button, Card, Input, Modal, TableSkeleton, useToast } from '@/components/ui';
+import { Bell, Pencil, Send } from 'lucide-react';
+import { Button, Card, EmptyState, Input, Modal, TableSkeleton, useToast } from '@/components/ui';
 import { Select, Tabs, Textarea } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
@@ -9,7 +10,10 @@ import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { ApiError, api } from '@/lib/api';
 import { toPersianDigits } from '@/lib/digits';
 import { errMsg } from '@/lib/errors';
+import { faRelative } from '@/lib/format';
 import { ROLE_LABEL } from '@/lib/format';
+import { useNotifications } from '@/lib/queries';
+import { cn } from '@/lib/cn';
 import type { NotificationTemplate } from '@/lib/types';
 import { useTeams, useUsers } from './adminQueries';
 
@@ -33,7 +37,8 @@ const KEY_LABEL: Record<string, string> = {
 
 /** A7 — اعلان‌ها: editable templates + manual broadcast. */
 export function NotificationsPage() {
-  const [tab, setTab] = useState<'templates' | 'send'>('templates');
+  const [tab, setTab] = useState<'inbox' | 'templates' | 'send'>('inbox');
+  const inbox = useNotifications();
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="اعلان‌ها" />
@@ -42,11 +47,87 @@ export function NotificationsPage() {
         value={tab}
         onChange={setTab}
         items={[
+          { value: 'inbox', label: 'صندوق من', count: inbox.data?.unread },
           { value: 'templates', label: 'قالب‌ها' },
           { value: 'send', label: 'ارسال دستی' },
         ]}
       />
-      {tab === 'templates' ? <Templates /> : <ManualSend />}
+      {tab === 'inbox' ? <Inbox /> : tab === 'templates' ? <Templates /> : <ManualSend />}
+    </div>
+  );
+}
+
+/**
+ * The admin/manager inbox: escalations, weekly digests and the «ارسال دستی» broadcast all land on
+ * these users, and until now nothing in the admin panel listed them.
+ */
+function Inbox() {
+  const q = useNotifications();
+  const qc = useQueryClient();
+  const nav = useNavigate();
+  const readOne = useMutation({
+    mutationFn: (id: string) => api.post(`/me/notifications/${id}/read`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['me', 'notifications'] }),
+  });
+  const readAll = useMutation({
+    mutationFn: () => api.post('/me/notifications/read-all'),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['me', 'notifications'] }),
+  });
+  return (
+    <div className="flex flex-col gap-3">
+      {(q.data?.unread ?? 0) > 0 && (
+        <div className="flex justify-end">
+          <Button
+            variant="ghost"
+            loading={readAll.isPending}
+            icon={<Bell className="size-4" aria-hidden />}
+            onClick={() => readAll.mutate()}
+          >
+            همه خوانده شد
+          </Button>
+        </div>
+      )}
+      <QueryState
+        query={q}
+        loading={<TableSkeleton rows={5} />}
+        isEmpty={(d) => d.items.length === 0}
+        empty={<EmptyState title="اعلانی نداری" icon={<Bell className="size-8" />} />}
+      >
+        {(d) => (
+          <ul className="flex flex-col gap-2">
+            {d.items.map((it) => (
+              <li key={it.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!it.readAt) readOne.mutate(it.id);
+                    if (it.actionRef) nav(it.actionRef);
+                  }}
+                  className={cn(
+                    'flex min-h-12 w-full items-start gap-3 rounded-card border p-3 text-start',
+                    it.readAt ? 'border-border bg-surface' : 'border-primary/30 bg-primary-light',
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-text">{it.title}</p>
+                    <p className="text-sm leading-6 text-text-secondary">{it.body}</p>
+                    <p className="mt-1 text-xs text-muted-fg">
+                      {faRelative(it.createdAt)}
+                      {it.actionRef ? ' • با کلیک باز می‌شود' : ''}
+                    </p>
+                  </div>
+                  {!it.readAt && (
+                    <span
+                      className="mt-2 size-2 shrink-0 rounded-full bg-primary"
+                      aria-label="خوانده نشده"
+                    />
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </QueryState>
     </div>
   );
 }
@@ -183,9 +264,12 @@ function ManualSend() {
       }),
     onSuccess: (r) => {
       setConfirm(false);
+      const count = r.count ?? 0;
       toast.show({
-        type: 'success',
-        message: `برای ${toPersianDigits(r.count ?? 0)} نفر ارسال شد.`,
+        type: count ? 'success' : 'warning',
+        message: count
+          ? `برای ${toPersianDigits(count)} نفر ارسال شد.`
+          : 'اعلانی ارسال نشد؛ مخاطبی با این انتخاب پیدا نشد.',
       });
       setTitle('');
       setBody('');
@@ -221,7 +305,7 @@ function ManualSend() {
           >
             <option value="">انتخاب کنید</option>
             {audience === 'role' &&
-              ['marketer', 'manager', 'admin'].map((r) => (
+              ['marketer', 'manager', 'admin', 'superadmin'].map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABEL[r]}
                 </option>
