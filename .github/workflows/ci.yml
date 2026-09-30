@@ -70,7 +70,20 @@ jobs:
         working-directory: functions
         run: |
           LOCAL_PERSIST=false RESEED=true PORT=5001 nohup npx tsx src/local.ts > /tmp/api.log 2>&1 &
-          npx -y wait-on@8 -t 120000 http://127.0.0.1:5001/v1/health
+          API_PID=$!
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:5001/v1/health > /dev/null 2>&1; then
+              echo "API is healthy after ${i}s"
+              exit 0
+            fi
+            if ! kill -0 "$API_PID" 2> /dev/null; then
+              echo "::error title=Local API exited early::$(tail -n 20 /tmp/api.log | tr '\n' ' ' | cut -c1-900)"
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "::error title=Local API did not become healthy in 90s::$(tail -n 20 /tmp/api.log | tr '\n' ' ' | cut -c1-900)"
+          exit 1
       - name: Lighthouse CI
         working-directory: apps/web
         run: |

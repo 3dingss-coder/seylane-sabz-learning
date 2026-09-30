@@ -32,7 +32,14 @@ jobs:
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_SECRET: ${{ secrets.CLOUDFLARE_PAGES_PROJECT }}
+          PAGES_VAR: ${{ vars.CLOUDFLARE_PAGES_PROJECT }}
         run: |
+          if [ -n "$PAGES_SECRET" ] || [ -n "$PAGES_VAR" ]; then
+            echo "pages=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pages=false" >> "$GITHUB_OUTPUT"
+          fi
           if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
             {
@@ -69,6 +76,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DB_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME || 'seylane-sabz-db' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -e
           echo "Checking Cloudflare D1 database: $DB_NAME ..."
@@ -95,24 +103,21 @@ jobs:
           fi
 
           if [ -n "$DB_ID" ]; then
-            echo "Binding D1 database ($DB_NAME -> $DB_ID) in wrangler.toml ..."
-            cat >> wrangler.toml <<EOF
-
-          [[d1_databases]]
-          binding = "DB"
-          database_name = "$DB_NAME"
-          database_id = "$DB_ID"
-          EOF
             echo "Applying D1 schema migration (migrations/0001_init.sql) ..."
             npx --yes wrangler@4 d1 execute "$DB_NAME" --remote --file=migrations/0001_init.sql || true
           else
-            echo "::warning::Could not resolve D1 database ID; deploying Worker with in-memory fallback."
+            echo "::warning::Could not resolve D1 database ID; deploying with the binding already in wrangler.toml."
           fi
 
           npx --yes wrangler@4 deploy
 
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "Syncing GEMINI_API_KEY to the Worker ..."
+            printf '%s' "$GEMINI_API_KEY" | npx --yes wrangler@4 secret put GEMINI_API_KEY
+          fi
+
       - name: Optional Deploy to Cloudflare Pages (if CLOUDFLARE_PAGES_PROJECT is set)
-        if: steps.cf.outputs.configured == 'true' && (secrets.CLOUDFLARE_PAGES_PROJECT != '' || vars.CLOUDFLARE_PAGES_PROJECT != '')
+        if: steps.cf.outputs.configured == 'true' && steps.cf.outputs.pages == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
