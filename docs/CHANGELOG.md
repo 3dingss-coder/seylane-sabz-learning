@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-09-30 — منتور هوشمند: دانش‌نامه‌ی چندوجهی، تماس صوتی و موتور رفتاری (F14-V)
+
+**چرا:** منتور نسخه‌ی MVP فقط روی متنِ تأییدشده جست‌وجو می‌کرد و یک مدل داشت. نیاز واقعی تیم فروش سه چیز است: پاسخ به «هر» سؤالی از «هر» نوع محتوایی (متن، تصویر، صدا، ویدیو، PDF)، گفت‌وگوی صوتی طبیعی، و راهنمایی روزانه‌ی «الان چه کار کنم؟». سند کامل: [`docs/MENTOR-AI.md`](./MENTOR-AI.md) — فهرست کلیدها: [`docs/USER-TODO.md`](./USER-TODO.md) §۳.۵.
+
+**لایه‌ی چندمدلی (`functions/src/ai/`)**
+
+| جزء | کار |
+|---|---|
+| `hub.ts` | مسیریابی بر اساس «کار» (chat/classify/vision/transcribe/synthesize/embed/realtime) با failover، تله‌متری هر فراخوانی و رد صریح قابلیت‌های پشتیبانی‌نشده |
+| `gemini.ts` | چت، درک تصویر/PDF/ویدیو، TTS فارسی (PCM 24k)، ایمبدینگ دسته‌ای، توکن موقت Live برای تماس دوطرفه |
+| `groq.ts` | Whisper فارسی برای گفتار→متن + لِین سریع مدل کوچک؛ TTS را عمداً رد می‌کند (صدای فارسی ندارد) |
+| `local.ts` | ایمبدینگ آفلاین ۱۲۸بُعدی به‌عنوان پشتیبان اضطراری (بدون کلید) |
+| `handoff.ts` | «پاکت» مهرشده‌ی زمینه بین مرحله‌ها؛ مدل‌ها آزادانه با هم چت نمی‌کنند، ارجاع‌ها قابل اثبات‌اند |
+| `prompts.ts` | کتابخانه‌ی پرامپت با `PROMPT_VERSION` (پاسخ، استخراج رسانه، دسته‌بندی، لحن صوتی، مربی، قاضی، پیام رفتاری) |
+
+**دانش و بازیابی** — `services/knowledge.ts` همه‌ی برندها/محصولات/بسته‌ها/قسمت‌ها (با متن آموزش)/آزمون‌ها (بدون کلید پاسخ)/سیاست‌ها/پلی‌های فروش/FAQ/استخراج رسانه‌ها را در یک ایندکس افزایشی جمع می‌کند (فقط تغییر‌یافته‌ها بازنویسی و دوباره ایمبد می‌شوند). `services/retrieval.ts` بازیابی ترکیبی BM25 + کسینوس با گسترش مترادف فارسی، تنوع بین بسته‌ها و **آستانه‌ی اطمینان روی سیگنال خام** دارد؛ زیر آستانه، پاسخ «نمی‌دانم + نزدیک‌ترین مطلب» است و هیچ مدلی صدا زده نمی‌شود.
+
+**درک چندوجهی** — `services/media-ingest.ts`: ویدیو/صدای آپلودی (Whisper، و برای فایل‌های کوچک درک تصویری Gemini)، تصویر محصول (بسته‌بندی/ادعاها)، PDF و YouTube (مستقیم با URL). خروجی به‌صورت دانش ساخت‌یافته در `media_extractions` و کلیدش به `EXTRACTOR_VERSION` گره خورده؛ فایل سالمِ خوانده‌شده دوباره خوانده نمی‌شود. کرون `knowledge-reindex` روزانه همین کار + بازسازی افزایشی را انجام می‌دهد.
+
+**تماس صوتی** — `services/voice.ts`: مسیر turn (MediaRecorder → Whisper با پرامپت واژگان برند/محصول → همان خط تولید مستند → Gemini TTS که PCM خامش با `wrapPcmAsWav` به WAV قابل پخش در مرورگر تبدیل می‌شود) و مسیر Live دوطرفه با توکن موقت (کلید اصلی هرگز به کلاینت نمی‌رسد، فکت‌ها از ابزار `voice/ground` می‌آید). سهمیه‌ی دوگانه‌ی دقیقه‌ای از سیاست‌ها؛ پایان تماس = ثبت خلاصه (با رضایت) + استخراج «کارهای گفته‌شده».
+
+**موتور رفتاری** — `services/behavior.ts`: سیگنال → وضعیت (`momentum`/`pressure`/`health`/`risk` + دلیل متنی) → قواعد B1–B12 با اولویت و کانال (کارت/چت/صدا/Push/نقش مدیر)، dedupe روزانه و حداکثر ۲ مداخله در روز؛ بحرانی‌ها با رعایت ساعت سکوت به مدیر escalated می‌شوند. جمله‌بندی پیام با مدل انجام می‌شود، **تصمیم با قاعده**.
+
+**کیفیت و پاسخ‌دهی** — عدد/درصد/تومان/ساعت در پاسخ باید در منابع باشد، وگرنه قاضی بازنویسی می‌کند و در نهایت پاسخ استخراجی («طبق محتوای آموزش: …») جایگزین می‌شود. داشبورد `GET /admin/reports/mentor-quality` نرخ «نمی‌دانم»، تأخیر هر مرحله، failover هر ارائه‌دهنده، دقیقه‌های صوتی و رضایت 👍/👎 را نشان می‌دهد.
+
+**رابط‌ها** — نقاط پایانی بازاریاب: `/me/mentor/ask`, `/me/mentor/behavior`, `/me/mentor/voice/{session,turn,ground,transcript}`, `/me/mentor/coach/{start,turn,debrief}`. ادمین: گزارش کیفیت، `GET /admin/knowledge`، `POST /admin/knowledge/{extract,rebuild}`. وب: کارت «وضعیت مسیر» + برگه‌ی تماس صوتی + دکمه‌ی تماس در چت + فیلدهای سیاست صوتی در `/admin/policies`. کارهای زمان‌بندی: `mentor-daily` (ناج‌ها + سوئیپ رفتاری) و `knowledge-reindex`.
+
+**تست و گیت:** `functions/test/mentor-ai.test.ts` با ۲۷ تست جدید (گاردریل‌ها، «نمی‌دانم» با صفر فراخوانی مدل، رد ادعای عددی بی‌منبع، افزایشی بودن ایندکس، جداسازی دسترسی، سقف صوتی، مسیر STT→پاسخ→TTS، قواعد B1–B12، همه‌ی نقاط پایانی) — جمع functions 145 و web 64 تست؛ lint/typecheck/format سبز.
+
+**کلیدها:** `GEMINI_API_KEY` و `GROQ_API_KEY` (هر دو رایگان). بدون آن‌ها منتور خاموش نمی‌شود، فقط به حالت قاعده‌محور/متن برمی‌گردد.
+
 ## 2026-09-30 — Admin panel audit: 30 bugs found, all fixed (admin → marketer sync)
 
 **Ops note:** `[triggers] crons` in `wrangler.toml` is commented out until the plan is confirmed (see `docs/USER-TODO.md` §4). The `Workers Builds` check that fails instantly on this PR is unrelated: Cloudflare posts it in the same second it starts for every PR (it never builds pull requests on this project). Separately, `npm run typecheck` is red on `main` for a pre-existing reason: CI typechecks before `npm run build`, which is what generates `functions/lib/seed-snapshot.json`; the one-line `ci.yml` reorder is recorded as a patch in `docs/USER-TODO.md` §1 because workflow files could not be pushed from this environment. `deploy.yml` untouched.

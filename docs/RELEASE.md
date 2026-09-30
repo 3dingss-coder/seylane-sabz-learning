@@ -8,7 +8,8 @@
 | Service account JSON per project (roles: Firebase Admin, Cloud Functions Admin, Service Account User, **Service Account Token Creator**, Datastore Import Export Admin if backups) | GitHub secret `FIREBASE_SERVICE_ACCOUNT_DEV` / `_PROD` | `deploy.yml` |
 | Project ids | secrets `FIREBASE_PROJECT_DEV` / `_PROD` | `deploy.yml` |
 | Web API key (Project settings → General) | secret `FIREBASE_WEB_API_KEY` | API sign-in (D35) |
-| Gemini key (optional) | secret `GEMINI_API_KEY` | mentor chat; without it the mentor answers from rules only |
+| Gemini key (optional, free tier) | secret `GEMINI_API_KEY` | mentor: grounded chat, image/PDF/video/audio understanding, embeddings, Persian TTS, Live voice — see [`MENTOR-AI.md`](./MENTOR-AI.md) |
+| Groq key (optional, free tier) | secret `GROQ_API_KEY` | Persian speech-to-text (Whisper) + the fast answer lane for voice calls |
 | Backup bucket (optional) | secret `BACKUP_BUCKET` (`gs://…`) | `dailyBackup` job |
 | Cloudflare Pages project + API token (Pages:Edit) + account id | secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_PAGES_PROJECT` | PWA deploy |
 | API origin | repo variable `VITE_API_BASE` = `https://europe-west1-<project>.cloudfunctions.net/api` | PWA + APK builds |
@@ -53,8 +54,12 @@
 | Images missing | Storage rules deployed? `brands/`, `products/` objects exist? | `firebase deploy --only storage`; re-run seed |
 | Heartbeats rejected (429) | per-user rate limit 20/min (in-memory per instance) | expected under abuse; see Cloud Logging `rate_limited` |
 | Mentor answers only from rules | `GEMINI_API_KEY` missing/quota; Gemini blocked from region | set key; fallback is by design |
+| Voice call has no transcript | `GROQ_API_KEY` missing/quota | set key (Whisper free tier); typed input still works |
+| Voice call has no audio | Gemini TTS preview quota is tiny; `mentor_voice_tts_failed` event | expected — the client falls back to the device voice; upgrade TTS or add a Persian provider (`MENTOR-AI.md` §۹) |
+| Mentor «نمی‌دانم» too often | knowledge index empty (run `POST /v1/admin/jobs/knowledge-reindex`) or content lacks transcripts | reindex; upload media/transcripts; check `GET /v1/admin/knowledge` coverage |
+| Mentor knowledge stale after an edit | incremental reindex runs daily 08:30 Tehran | `POST /v1/admin/knowledge/rebuild` (superadmin) |
 | No push on Android | `GOOGLE_SERVICES_JSON_BASE64` set? `VITE_PUSH_ENABLED` is set automatically when it is | add secret, rebuild APK; in-app notifications still work |
-| Scheduled jobs not running | Cloud Scheduler enabled (Blaze)? | Console → Cloud Scheduler; manual trigger: `POST /v1/admin/jobs/:name` (superadmin) |
+| Scheduled jobs not running | Cloud Scheduler enabled (Blaze)? | Console → Cloud Scheduler; manual trigger: `POST /v1/admin/jobs/:name` (superadmin). Job list: `flush-push`, `deadline-sweep`, `weekly-digest`, `daily-reminders`, `mentor-daily`, `knowledge-reindex` |
 | Client errors | Cloud Logging / `analytics_events` where `name == client_error`; Sentry if DSN set | — |
 | Restore data | daily export in `BACKUP_BUCKET` | `gcloud firestore import gs://<bucket>/<date>` |
 

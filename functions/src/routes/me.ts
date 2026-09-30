@@ -6,6 +6,10 @@ import { parse } from '../http/validate';
 import { track, type Deps } from '../services/context';
 import * as learning from '../services/learning';
 import * as mentor from '../services/mentor';
+import * as mentorAi from '../services/mentor-ai';
+import * as behavior from '../services/behavior';
+import * as voice from '../services/voice';
+import { ApiError } from '../http/errors';
 import { myNudges } from '../services/mentor-rules';
 import * as notify from '../services/notify';
 import * as reports from '../services/reports';
@@ -19,6 +23,8 @@ const CLIENT_EVENTS = [
   'next_item_cta_clicked',
   'notification_cta_clicked',
   'mentor_chat_opened',
+  'mentor_voice_opened',
+  'mentor_voice_turn_sent',
   'playback_error',
   'manager_digest_opened',
   'report_filtered',
@@ -207,6 +213,79 @@ export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
   r.post(
     '/me/mentor/feedback',
     h(async (req) => mentor.feedback(d, me(req), parse(mentor.feedbackSchema, req.body))),
+  );
+
+  // ── Multi-provider mentor (Gemini ⇄ Groq) ───────────────────────────────────
+  // The answer pipeline: guardrail → hybrid retrieval → grounding envelope → routed LLM →
+  // output guard. Quota is shared with the legacy chat endpoint so limits cannot be bypassed.
+  r.post(
+    '/me/mentor/ask',
+    rateLimit(limiter, 'mentor', 10, 60_000, uid, 'کمی آهسته‌تر! چند ثانیه صبر کن و دوباره بپرس.'),
+    h(async (req) => {
+      const user = me(req);
+      const quota = await mentor.consumeQuota(d, user.id);
+      if (quota === 'user' || quota === 'global')
+        throw new ApiError(
+          'RATE_LIMIT',
+          quota === 'user'
+            ? 'سقف پیام‌های امروز تمام شد. فردا دوباره بپرس.'
+            : 'منتور امروز خیلی شلوغ بوده. سؤالت را از مدیر بپرس.',
+        );
+      const input = parse(mentorAi.askSchema, req.body);
+      return mentorAi.answerQuestion(d, user, {
+        question: input.text,
+        packageId: input.packageId ?? null,
+        spoken: input.spoken ?? false,
+      });
+    }),
+  );
+  // Behaviour management: the "what should I do now" brief the mentor card shows.
+  r.get(
+    '/me/mentor/behavior',
+    h(async (req) => behavior.myBehavior(d, me(req))),
+  );
+
+  // ── Voice call (تماس صوتی) ──────────────────────────────────────────────────
+  r.post(
+    '/me/mentor/voice/session',
+    rateLimit(limiter, 'voice', 6, 60_000, uid, 'کمی صبر کن و دوباره تماس بگیر.'),
+    h(async (req) =>
+      voice.createVoiceSession(d, me(req), parse(voice.voiceSessionSchema, req.body)),
+    ),
+  );
+  r.post(
+    '/me/mentor/voice/turn',
+    rateLimit(limiter, 'voice', 20, 60_000, uid, 'کمی آهسته‌تر صحبت کن!'),
+    h(async (req) => voice.voiceTurn(d, me(req), parse(voice.voiceTurnSchema, req.body))),
+  );
+  // Grounding tool used by the duplex Live session: the model gets product facts only from here.
+  r.post(
+    '/me/mentor/voice/ground',
+    rateLimit(limiter, 'voice', 40, 60_000, uid),
+    h(async (req) => mentorAi.groundForVoice(d, me(req), parse(mentorAi.groundSchema, req.body))),
+  );
+  r.post(
+    '/me/mentor/voice/transcript',
+    h(async (req) =>
+      voice.finalizeVoiceSession(d, me(req), parse(voice.voiceTranscriptSchema, req.body)),
+    ),
+  );
+
+  // ── Sales coaching practice (نقش‌آفرینی فروش) ────────────────────────────────
+  r.post(
+    '/me/mentor/coach/start',
+    h(async (req) => mentorAi.pickPersona(d, me(req), parse(mentorAi.coachStartSchema, req.body))),
+  );
+  r.post(
+    '/me/mentor/coach/turn',
+    rateLimit(limiter, 'mentor', 12, 60_000, uid, 'کمی آهسته‌تر! چند ثانیه صبر کن.'),
+    h(async (req) => mentorAi.coachTurn(d, me(req), parse(mentorAi.coachTurnSchema, req.body))),
+  );
+  r.post(
+    '/me/mentor/coach/debrief',
+    h(async (req) =>
+      mentorAi.coachDebrief(d, me(req), parse(mentorAi.coachDebriefSchema, req.body)),
+    ),
   );
   return r;
 }

@@ -16,6 +16,25 @@ export interface AppConfig {
   storageBucket: string;
   geminiApiKey: string;
   geminiModel: string;
+  /** Chat/answer model (long context, best Persian instruction-following). */
+  geminiChatModel: string;
+  /** Multimodal extraction model (images, PDF, audio, video) for the knowledge pipeline. */
+  geminiVisionModel: string;
+  /** Persian-capable speech synthesis model (voice replies). */
+  geminiTtsModel: string;
+  /** Embedding model for the hybrid retriever. */
+  geminiEmbedModel: string;
+  /** Duplex (Live API) speech-to-speech model — enables real phone-style calls. */
+  geminiLiveModel: string;
+  /** Groq: Persian speech-to-text + the fast lane for classification and short answers. */
+  groqApiKey: string;
+  groqChatModel: string;
+  groqFastModel: string;
+  groqSttModel: string;
+  /** When off, the voice feature falls back to the turn-based pipeline (STT → answer → TTS). */
+  mentorVoiceRealtime: boolean;
+  /** Hard cap for one knowledge-index rebuild (protects the free tiers). */
+  knowledgeRebuildLimit: number;
   dataDir: string;
   /**
    * Wall-clock playback budget (anti-cheat). Can only be disabled on the in-memory backend
@@ -61,6 +80,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     storageBucket: env.STORAGE_BUCKET ?? '',
     geminiApiKey: env.GEMINI_API_KEY ?? '',
     geminiModel: env.GEMINI_MODEL ?? 'gemini-2.5-flash-lite',
+    geminiChatModel: env.GEMINI_CHAT_MODEL ?? env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+    geminiVisionModel: env.GEMINI_VISION_MODEL ?? env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+    geminiTtsModel: env.GEMINI_TTS_MODEL ?? 'gemini-2.5-flash-preview-tts',
+    geminiEmbedModel: env.GEMINI_EMBED_MODEL ?? 'gemini-embedding-001',
+    geminiLiveModel: env.GEMINI_LIVE_MODEL ?? 'gemini-2.5-flash-native-audio-preview-12-2025',
+    groqApiKey: env.GROQ_API_KEY ?? '',
+    groqChatModel: env.GROQ_CHAT_MODEL ?? 'openai/gpt-oss-120b',
+    groqFastModel: env.GROQ_FAST_MODEL ?? 'openai/gpt-oss-20b',
+    groqSttModel: env.GROQ_STT_MODEL ?? 'whisper-large-v3-turbo',
+    mentorVoiceRealtime: (env.MENTOR_VOICE_REALTIME ?? 'on') !== 'off',
+    knowledgeRebuildLimit: Math.max(
+      50,
+      Math.min(5000, Number.parseInt(env.KNOWLEDGE_REBUILD_LIMIT ?? '1200', 10) || 1200),
+    ),
     dataDir: env.LOCAL_DATA_DIR ?? '.local-data',
     playbackBudget: !((backend === 'memory' || backend === 'd1') && env.PLAYBACK_BUDGET === 'off'),
     trustProxyHops: Math.max(0, Math.min(5, Number.parseInt(env.TRUST_PROXY_HOPS ?? '1', 10) || 0)),

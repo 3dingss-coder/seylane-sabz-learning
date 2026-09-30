@@ -266,6 +266,39 @@ function PolicyForm({ initial }: { initial: PolicyData }) {
           hint="برای ماندن در سهمیه رایگان"
         />
       </Card>
+      <Card className="flex flex-col gap-3 p-4">
+        <h2 className="font-bold">تماس صوتی با منتور</h2>
+        <label className="flex min-h-12 items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-5 accent-primary"
+            checked={p.mentorVoiceEnabled}
+            onChange={(e) => update((x) => ({ ...x, mentorVoiceEnabled: e.target.checked }))}
+          />
+          تماس صوتی فعال باشد
+        </label>
+        <Input
+          label="سقف دقیقه صوتی روزانه هر کاربر"
+          type="number"
+          ltr
+          min={1}
+          max={120}
+          value={p.mentorVoiceMinutesPerUser}
+          onChange={num('mentorVoiceMinutesPerUser')}
+          error={errors.mentorVoiceMinutesPerUser}
+        />
+        <Input
+          label="سقف دقیقه صوتی روزانه کل سیستم"
+          type="number"
+          ltr
+          min={1}
+          max={5000}
+          value={p.mentorVoiceMinutesGlobal}
+          onChange={num('mentorVoiceMinutesGlobal')}
+          error={errors.mentorVoiceMinutesGlobal}
+          hint="تبدیل گفتار به متن رایگان است؛ سقف را برای کنترل هزینه نگه دارید"
+        />
+      </Card>
       <div className="flex flex-col gap-1 lg:col-span-2">
         <Button
           type="submit"

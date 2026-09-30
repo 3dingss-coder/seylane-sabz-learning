@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { AppConfig } from './config';
 import { MemoryAuthProvider } from './auth/memory';
 import { LocalBlobStore } from './blob/local';
+import { buildAiHub, type AiHub } from './ai/hub';
 import { GeminiClient } from './llm/gemini';
 import type { LlmClient } from './llm/types';
 import { RecordingPushSender } from './push/types';
@@ -20,10 +21,24 @@ function llmFrom(config: AppConfig): LlmClient | null {
   return config.geminiApiKey ? new GeminiClient(config.geminiApiKey, config.geminiModel) : null;
 }
 
+/**
+ * Multi-provider hub (Gemini ⇄ Groq ⇄ legacy). Built once per deps object — the providers are
+ * stateless HTTP clients, so a single instance is both cheap and cache-friendly.
+ */
+function aiFrom(config: AppConfig, llm: LlmClient | null): AiHub {
+  return buildAiHub({ config, llm });
+}
+
 /** In-memory backend (tests + local server without emulator/Java — D37). */
 export function buildMemoryDeps(
   config: AppConfig,
-  opts: { persist?: boolean; blobRoot?: string; clock?: Clock; llm?: LlmClient | null } = {},
+  opts: {
+    persist?: boolean;
+    blobRoot?: string;
+    clock?: Clock;
+    llm?: LlmClient | null;
+    ai?: AiHub;
+  } = {},
 ): Deps & {
   store: MemoryStore;
   blob: LocalBlobStore;
@@ -33,6 +48,7 @@ export function buildMemoryDeps(
   const store = new MemoryStore(opts.persist ? path.join(config.dataDir, 'db.json') : undefined);
   const clock = opts.clock ?? systemClock;
   const blobRoot = opts.blobRoot ?? path.join(config.dataDir, 'blobs');
+  const llm = opts.llm !== undefined ? opts.llm : llmFrom(config);
   return {
     config,
     store,
@@ -40,7 +56,8 @@ export function buildMemoryDeps(
     blob: new LocalBlobStore(blobRoot, config.localSecret, () => clock().getTime()),
     push: new RecordingPushSender(),
     mail: new RecordingMailer(),
-    llm: opts.llm !== undefined ? opts.llm : llmFrom(config),
+    llm,
+    ai: opts.ai ?? aiFrom(config, llm),
     clock,
   };
 }
@@ -60,6 +77,7 @@ export async function buildFirebaseDeps(config: AppConfig): Promise<Deps> {
     initializeApp(config.storageBucket ? { storageBucket: config.storageBucket } : undefined);
   const db = getFirestore();
   db.settings({ ignoreUndefinedProperties: true });
+  const llm = llmFrom(config);
   return {
     config,
     store: new FirestoreStore(db),
@@ -67,7 +85,8 @@ export async function buildFirebaseDeps(config: AppConfig): Promise<Deps> {
     blob: new FirebaseBlobStore(getStorage().bucket()),
     push: new FcmPushSender(getMessaging(), config.appUrl),
     mail: await mailerFrom(config),
-    llm: llmFrom(config),
+    llm,
+    ai: aiFrom(config, llm),
     clock: systemClock,
   };
 }

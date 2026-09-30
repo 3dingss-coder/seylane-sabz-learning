@@ -236,20 +236,199 @@ export interface Nudge {
   actionRef: string | null;
   createdAt: string;
 }
+export type ChatSourceType =
+  | 'package'
+  | 'section'
+  | 'product'
+  | 'brand'
+  | 'faq'
+  | 'play'
+  | 'policy'
+  | 'media';
+export type ChatMode = 'text' | 'voice' | 'coach';
+export type ChatOutcome = 'answered' | 'unknown' | 'blocked' | 'fallback';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
-  sources: Array<{ type: string; id: string; title: string }>;
-  outcome: 'answered' | 'unknown' | 'blocked' | 'fallback' | null;
+  sources: Array<{ type: ChatSourceType | string; id: string; title: string }>;
+  outcome: ChatOutcome | null;
   feedback: 'up' | 'down' | null;
+  /** Which surface produced the turn (text chat, voice call or the sales role-play). */
+  mode?: ChatMode | null;
+  /** `gemini:…`, `groq:…`, `retrieval`, `voice-session` … — shown in the QA screens. */
+  provider?: string | null;
+  latencyMs?: number | null;
   createdAt: string;
 }
 export interface ChatReply {
   messageId: string;
   reply: string;
   sources: ChatMessage['sources'];
-  outcome: 'answered' | 'unknown' | 'blocked' | 'fallback';
+  outcome: ChatOutcome;
+  provider?: string;
+  latencyMs?: number;
+  nextAction?: { label: string; actionRef: string | null } | null;
+}
+
+// ─── Mentor voice calls ─────────────────────────────────────────────────────
+export interface VoiceSessionOffer {
+  transport: 'live' | 'turn';
+  sessionId: string;
+  systemInstruction: string;
+  live?: {
+    url: string;
+    token: string;
+    model: string;
+    expiresAt: string;
+    input: { mime: string; sampleRate: number };
+    output: { mime: string; sampleRate: number };
+  };
+  fallback?: { transcribe: string; ground: string; finalize: string };
+}
+
+export interface VoiceTurnReply {
+  transcript: string;
+  reply: string;
+  /** Null when server TTS is unavailable → speak with the browser voice instead. */
+  audio: { base64: string; mime: string; provider: string } | null;
+  sources: ChatMessage['sources'];
+  outcome: ChatOutcome;
+  nextAction?: { label: string; actionRef: string | null } | null;
+  provider: string;
+  latency: { sttMs: number; answerMs: number; ttsMs: number; totalMs: number };
+}
+
+export interface VoiceTurnInput {
+  audio: string;
+  mime: string;
+  durationSec: number;
+  packageId?: string | null;
+}
+
+// ─── Behaviour brief (GET /me/mentor/behavior) ──────────────────────────────
+export type Momentum = 'new' | 'excelling' | 'on_track' | 'slowing' | 'at_risk' | 'stalled';
+
+export type InterventionRuleId =
+  | 'B1'
+  | 'B2'
+  | 'B3'
+  | 'B4'
+  | 'B5'
+  | 'B6'
+  | 'B7'
+  | 'B8'
+  | 'B9'
+  | 'B10'
+  | 'B11'
+  | 'B12';
+
+export interface MentorBrief {
+  state: {
+    momentum: Momentum;
+    /** 0–100 — deadline pressure the marketer is under. */
+    pressure: number;
+    /** 0–100 — how well they are progressing. */
+    health: number;
+    /** 0–100 — heuristic risk of missing the next deadline. */
+    risk: number;
+    reason: string;
+    streakDays: number;
+  };
+  signals: {
+    activePackages: number;
+    overduePackages: number;
+    dueSoon72h: number;
+    incompleteNearDeadline: number;
+    stalledSections: Array<{ packageId: string; sectionId: string; title: string; percent: number }>;
+    nearCompletion: Array<{
+      packageId: string;
+      title: string;
+      percent: number;
+      deadlineAt: string | null;
+    }>;
+    failedQuizzes: Array<{ packageId: string; sectionId: string; score: number; attempts: number }>;
+    inactiveDays: number | null;
+    completedLast7d: number;
+    startedLast7d: number;
+    streakDays: number;
+    onTimeRate: number | null;
+    avgQuizScore: number | null;
+    mastery: Array<{ key: string; label: string; percent: number; quizAvg: number | null }>;
+    momentumHint?: Momentum;
+  };
+  interventions: Array<{
+    ruleId: InterventionRuleId;
+    priority: 1 | 2 | 3 | 4 | 5;
+    channel: 'card' | 'chat' | 'voice' | 'push' | 'manager_note';
+    message: string;
+    actionRef: string | null;
+    refKey: string;
+    coach?: { objection: string; productName: string; mood: string };
+    cooldownHours: number;
+    reason: string;
+  }>;
+  /** The single action the mentor recommends right now (also used by the voice assistant). */
+  nextAction: { label: string; actionRef: string | null; reason: string } | null;
+  /** True when the marketer should also get a manager nudge (escalation ladder). */
+  escalateToManager: boolean;
+}
+
+// ─── Admin: AI quality + knowledge index ────────────────────────────────────
+export interface MentorQuality {
+  days: number;
+  answers: {
+    total: number;
+    answered: number;
+    unknown: number;
+    blocked: number;
+    fallback: number;
+    unknownRate: number | null;
+    avgLatencyMs: number | null;
+    spoken: number;
+  };
+  providers: Array<{
+    provider: string;
+    calls: number;
+    failovers: number;
+    avgLatencyMs: number | null;
+  }>;
+  voice: {
+    turns: number;
+    sessions: number;
+    minutes: number;
+    avgSttMs: number | null;
+    avgAnswerMs: number | null;
+    avgTtsMs: number | null;
+    ttsFallback: number;
+  };
+  behavior: { interventions: number; byRule: Record<string, number>; escalations: number };
+  satisfaction: { up: number; down: number; score: number | null };
+  knowledge: {
+    live: number;
+    embedded: number;
+    builtAt: string | null;
+    embeddingProvider: string | null;
+  };
+  health: Array<{ provider: string; model: string; labelFa: string; tasks: string[] }>;
+}
+
+export interface KnowledgeStats {
+  builtAt: string | null;
+  itemCount: number;
+  embeddingProvider: string | null;
+  byKind: Record<string, number>;
+  extractorVersion: string;
+  live: number;
+  embedded: number;
+  archived: number;
+  media: {
+    sections: { total: number; withTranscript: number; extracted: number };
+    products: { total: number; withImage: number; extracted: number };
+    failing: number;
+    lastExtractAt: string | null;
+  };
 }
 
 // ─── Manager ────────────────────────────────────────────────────────────────
@@ -506,6 +685,9 @@ export interface PolicyData {
   mentorChatEnabled: boolean;
   mentorDailyLimitPerUser: number;
   mentorDailyLimitGlobal: number;
+  mentorVoiceEnabled: boolean;
+  mentorVoiceMinutesPerUser: number;
+  mentorVoiceMinutesGlobal: number;
   updatedAt?: string;
   updatedBy?: string | null;
 }

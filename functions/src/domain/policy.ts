@@ -17,4 +17,7 @@ export const DEFAULT_POLICY: Omit<Policy, 'updatedAt' | 'updatedBy'> = {
   mentorChatEnabled: true,
   mentorDailyLimitPerUser: 20,
   mentorDailyLimitGlobal: 2000,
+  mentorVoiceEnabled: true,
+  mentorVoiceMinutesPerUser: 15,
+  mentorVoiceMinutesGlobal: 300,
 };
