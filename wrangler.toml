@@ -23,11 +23,13 @@ RATE_LIMIT_SCALE = "20"
 # These expressions must match CRON_JOBS in functions/src/services/cron.ts. Times are UTC
 # (Tehran has no DST).
 #
-# NOTE: kept commented out on purpose. Cron triggers are not available on the current Cloudflare
-# Workers plan, and an unsupported `[triggers]` block makes the whole deploy fail — which would
-# leave the live site stuck on the previous version. Either move the worker to a plan that allows
-# cron triggers and uncomment these two lines, or point an external scheduler at
-# `POST /v1/admin/jobs/<name>` (see docs/USER-TODO.md).
+# NOTE: kept commented out on purpose, for two reasons that this environment could not settle:
+# (1) Cloudflare enforces the cron-trigger plan limit at deploy time, and `wrangler deploy --dry-run` accepts the
+#     block locally, so the plan cannot be checked from here; (2) a deploy that Cloudflare rejects leaves the live
+#     site pinned to the previous version — strictly worse than a schedule that has not been enabled yet. So the
+#     handlers stay wired and only the declaration is dormant. Owner action: confirm the plan supports Cron
+#     Triggers, uncomment the two lines below, and check that the four schedules appear on the worker's Triggers
+#     page. Until then, an external scheduler should call `POST /v1/admin/jobs/<name>` (see docs/USER-TODO.md §4).
 # [triggers]
 # crons = ["*/15 * * * *", "0 * * * *", "30 4 * * *", "30 6 * * *"]
 
