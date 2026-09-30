@@ -8,9 +8,20 @@ import {
   PartyPopper,
   RotateCcw,
   Send,
+  Sparkles,
   XCircle,
 } from 'lucide-react';
-import { Button, Card, EmptyState, Modal, ProgressBar, Skeleton, useToast } from '@/components/ui';
+import {
+  Button,
+  Card,
+  Confetti,
+  EmptyState,
+  Modal,
+  ProgressBar,
+  ProgressRing,
+  Skeleton,
+  useToast,
+} from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { ApiError, api } from '@/lib/api';
@@ -98,6 +109,12 @@ function QuizFlow({
     }
   });
   const [idx, setIdx] = useState(0);
+  // slide direction of the question transition (next → enters from the forward side)
+  const [dir, setDir] = useState<'next' | 'prev'>('next');
+  const go = (to: number) => {
+    setDir(to > idx ? 'next' : 'prev');
+    setIdx(to);
+  };
   const [confirm, setConfirm] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
   const questions = d.questions;
@@ -169,25 +186,37 @@ function QuizFlow({
         {header}
         <Card
           tone={result.passed ? 'brand' : 'default'}
-          className="flex flex-col items-center gap-2 py-6 text-center"
+          className="relative flex flex-col items-center gap-2 overflow-hidden py-6 text-center"
           data-testid="quiz-result"
         >
-          {result.passed ? (
-            <PartyPopper className="size-12 text-primary" aria-hidden />
-          ) : (
-            <XCircle className="size-12 text-danger" aria-hidden />
-          )}
-          <h2 className="text-xl font-bold text-text">
+          {result.passed && <Confetti />}
+          <ProgressRing
+            value={result.score}
+            size={120}
+            stroke={10}
+            label="نمره آزمون"
+            tone={result.passed ? 'success' : 'danger'}
+            center={
+              <span className="absolute flex flex-col items-center leading-tight">
+                {result.passed ? (
+                  <PartyPopper className="animate-pop size-7 text-primary" aria-hidden />
+                ) : (
+                  <XCircle className="animate-shake size-7 text-danger" aria-hidden />
+                )}
+                <span className="text-xl font-extrabold text-text">{faPercent(result.score)}</span>
+              </span>
+            }
+          />
+          <h2 className="mt-1 text-xl font-bold text-text">
             {result.passed ? 'قبول شدی! 🎉' : 'این بار قبول نشدی'}
           </h2>
-          <p className="text-3xl font-bold text-text">{faPercent(result.score)}</p>
           <p className="text-sm text-text-secondary">
             {toPersianDigits(result.correctCount)} پاسخ درست از {toPersianDigits(result.total)} •
             نمره قبولی {faPercent(result.passScore)}
           </p>
           {result.pointsEarned > 0 && (
-            <p className="text-sm font-bold text-primary">
-              +{faNumber(result.pointsEarned)} امتیاز
+            <p className="animate-pop inline-flex items-center gap-1 rounded-full bg-accent-light px-3 py-1 text-sm font-bold text-accent-fg">
+              <Sparkles className="size-4" aria-hidden />+{faNumber(result.pointsEarned)} امتیاز
             </p>
           )}
           {!result.passed && result.remainingAttempts > 0 && (
@@ -200,26 +229,40 @@ function QuizFlow({
           <h3 id="review" className="text-base font-bold">
             مرور پاسخ‌ها
           </h3>
-          {result.review.map((r, i) => {
-            const qq = questions.find((x) => x.id === r.questionId);
-            return (
-              <Card key={r.questionId} className="flex gap-3">
-                {r.correct ? (
-                  <CheckCircle2 className="size-5 shrink-0 text-success" aria-label="درست" />
-                ) : (
-                  <XCircle className="size-5 shrink-0 text-danger" aria-label="نادرست" />
-                )}
-                <div className="text-sm">
-                  <p className="font-bold text-text">
-                    {toPersianDigits(i + 1)}. {qq?.stem}
-                  </p>
-                  {r.explanation && (
-                    <p className="mt-1 leading-7 text-text-secondary">{r.explanation}</p>
+          <div className="stagger flex flex-col gap-2">
+            {result.review.map((r, i) => {
+              const qq = questions.find((x) => x.id === r.questionId);
+              return (
+                <Card
+                  key={r.questionId}
+                  className={cn(
+                    'flex gap-3 border-s-4',
+                    r.correct ? 'border-s-success' : 'border-s-danger',
                   )}
-                </div>
-              </Card>
-            );
-          })}
+                >
+                  {r.correct ? (
+                    <CheckCircle2
+                      className="animate-pop size-5 shrink-0 text-success"
+                      aria-label="درست"
+                    />
+                  ) : (
+                    <XCircle
+                      className="animate-shake size-5 shrink-0 text-danger"
+                      aria-label="نادرست"
+                    />
+                  )}
+                  <div className="text-sm">
+                    <p className="font-bold text-text">
+                      {toPersianDigits(i + 1)}. {qq?.stem}
+                    </p>
+                    {r.explanation && (
+                      <p className="mt-1 leading-7 text-text-secondary">{r.explanation}</p>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
         </section>
         {result.nextAction === 'next_section' && nextSectionId ? (
           <Button size="lg" block onClick={() => nav(`/sections/${nextSectionId}`)}>
@@ -358,46 +401,57 @@ function QuizFlow({
           سؤال {toPersianDigits(idx + 1)} از {toPersianDigits(questions.length)}
         </span>
       </div>
-      <fieldset className="flex flex-col gap-3">
-        <legend className="mb-3 text-lg font-bold leading-8 text-text">{q.stem}</legend>
-        {q.options.map((o) => {
-          const checked = answers[q.id] === o.key;
-          return (
-            <label
-              key={o.key}
-              className={cn(
-                'flex min-h-14 cursor-pointer items-center gap-3 rounded-card border-2 bg-surface p-3 text-base transition-colors',
-                checked
-                  ? 'border-primary bg-primary-light'
-                  : 'border-border hover:border-primary/40',
-              )}
-            >
-              <input
-                type="radio"
-                name={q.id}
-                value={o.key}
-                checked={checked}
-                onChange={() => setAnswers((a) => ({ ...a, [q.id]: o.key }))}
-                className="sr-only"
-              />
-              <span
+      <div
+        key={q.id}
+        className={dir === 'next' ? 'animate-slide-in-end' : 'animate-slide-in-start'}
+      >
+        <fieldset className="stagger flex flex-col gap-3">
+          <legend className="mb-3 text-lg font-bold leading-8 text-text">{q.stem}</legend>
+          {q.options.map((o) => {
+            const checked = answers[q.id] === o.key;
+            return (
+              <label
+                key={o.key}
                 className={cn(
-                  'flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold',
-                  checked ? 'bg-primary text-white' : 'bg-background text-text-secondary',
+                  'pressable flex min-h-14 cursor-pointer items-center gap-3 rounded-card border-2 bg-surface p-3 text-base',
+                  'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-info',
+                  checked
+                    ? 'border-primary bg-primary-light shadow-sm'
+                    : 'border-border hover:border-primary/40 hover:shadow-xs',
                 )}
               >
-                {OPTION_LABEL[o.key] ?? o.key}
-              </span>
-              <span className="text-text">{o.text}</span>
-            </label>
-          );
-        })}
-      </fieldset>
+                <input
+                  type="radio"
+                  name={q.id}
+                  value={o.key}
+                  checked={checked}
+                  onChange={() => setAnswers((a) => ({ ...a, [q.id]: o.key }))}
+                  className="sr-only"
+                />
+                <span
+                  className={cn(
+                    'flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-[transform,background-color] duration-200 ease-spring',
+                    checked
+                      ? 'scale-110 bg-primary text-on-primary'
+                      : 'bg-surface-2 text-text-secondary',
+                  )}
+                >
+                  {OPTION_LABEL[o.key] ?? o.key}
+                </span>
+                <span className="flex-1 text-text">{o.text}</span>
+                {checked && (
+                  <CheckCircle2 className="animate-pop size-5 text-primary" aria-hidden />
+                )}
+              </label>
+            );
+          })}
+        </fieldset>
+      </div>
       <div className="flex gap-2">
         <Button
           variant="secondary"
           disabled={idx === 0}
-          onClick={() => setIdx(idx - 1)}
+          onClick={() => go(idx - 1)}
           icon={<ChevronRight className="size-5" aria-hidden />}
         >
           قبلی
@@ -418,9 +472,12 @@ function QuizFlow({
             className="flex-1"
             size="lg"
             disabled={!answers[q.id]}
-            onClick={() => setIdx(idx + 1)}
+            onClick={() => go(idx + 1)}
           >
-            بعدی <ChevronLeft className="size-5" aria-hidden />
+            <span className="inline-flex items-center gap-1">
+              بعدی
+              <ChevronLeft className="size-5" aria-hidden />
+            </span>
           </Button>
         )}
       </div>

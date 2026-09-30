@@ -67,7 +67,7 @@ export function MessagesPage() {
           empty={<EmptyState title="اعلانی نداری" icon={<Bell className="size-8" />} />}
         >
           {(d) => (
-            <ul className="flex flex-col gap-2">
+            <ul className="stagger flex flex-col gap-2">
               {d.items.map((it) => (
                 <li key={it.id}>
                   <button
@@ -80,7 +80,7 @@ export function MessagesPage() {
                       }
                     }}
                     className={cn(
-                      'flex w-full items-start gap-3 rounded-card border p-3 text-start',
+                      'pressable flex w-full items-start gap-3 rounded-card border p-3 text-start shadow-xs hover:shadow-sm',
                       it.readAt ? 'border-border bg-surface' : 'border-primary/30 bg-primary-light',
                     )}
                   >
@@ -97,10 +97,13 @@ export function MessagesPage() {
                       <p className="mt-1 text-xs text-muted-fg">{faRelative(it.createdAt)}</p>
                     </div>
                     {!it.readAt && (
-                      <span
-                        className="mt-2 size-2 shrink-0 rounded-full bg-primary"
-                        aria-label="خوانده نشده"
-                      />
+                      <span className="relative mt-2 flex size-2 shrink-0" aria-label="خوانده نشده">
+                        <span
+                          aria-hidden
+                          className="animate-pulse-dot absolute inset-0 rounded-full bg-primary"
+                        />
+                        <span className="relative size-2 rounded-full bg-primary" />
+                      </span>
                     )}
                   </button>
                 </li>
@@ -121,7 +124,7 @@ export function MessagesPage() {
           }
         >
           {(list) => (
-            <ul className="flex flex-col gap-2">
+            <ul className="stagger flex flex-col gap-2">
               {list.map((it) => (
                 <li key={it.id}>
                   <button

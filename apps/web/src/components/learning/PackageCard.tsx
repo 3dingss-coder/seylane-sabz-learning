@@ -12,13 +12,13 @@ export function PackageCard({ p }: { p: PackageSummary }) {
   return (
     <Link
       to={`/packages/${p.id}`}
-      className="flex gap-3 rounded-card border border-border bg-surface p-3 shadow-sm transition-colors hover:border-primary/40 focus-visible:border-primary"
+      className="pressable group flex gap-3 rounded-card border border-border bg-surface p-3 shadow-sm hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md focus-visible:border-primary"
       data-testid="package-card"
     >
       <ProductImage
         src={image}
         alt={p.product?.name ?? p.brand?.name ?? p.title}
-        className="size-20"
+        className="size-20 transition-transform duration-300 ease-soft group-hover:scale-[1.03]"
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <p className="text-xs font-bold text-primary">

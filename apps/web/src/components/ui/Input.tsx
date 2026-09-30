@@ -21,7 +21,7 @@ export function Input({ label, error, hint, icon, ltr, id, className, ...rest }:
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-medium text-text">
+      <label htmlFor={inputId} className="text-sm font-semibold text-text">
         {label}
       </label>
       <div className="relative">
@@ -36,10 +36,10 @@ export function Input({ label, error, hint, icon, ltr, id, className, ...rest }:
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
           className={cn(
-            'min-h-12 w-full rounded-input border bg-surface px-3 text-base text-text placeholder:text-muted-fg',
-            'transition-colors focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30',
+            'min-h-12 w-full rounded-input border bg-surface px-3.5 text-base text-text placeholder:text-muted-fg',
+            'shadow-xs transition-[border-color,box-shadow] duration-150 hover:border-muted focus:border-info focus:outline-none focus:ring-4 focus:ring-info/15',
             'disabled:cursor-not-allowed disabled:opacity-40',
-            error ? 'border-danger' : 'border-border',
+            error ? 'animate-shake border-danger' : 'border-border',
             icon ? 'ps-10' : null,
             ltr && 'text-left',
             className,
@@ -52,7 +52,7 @@ export function Input({ label, error, hint, icon, ltr, id, className, ...rest }:
           {hint}
         </p>
       )}
-      <p id={errorId} aria-live="polite" className="min-h-0 text-xs font-medium text-danger">
+      <p id={errorId} aria-live="polite" className="min-h-0 text-xs font-medium text-danger-fg">
         {error}
       </p>
     </div>

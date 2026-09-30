@@ -55,15 +55,27 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
     }
   };
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
+    <div className="stagger mx-auto flex w-full max-w-xl flex-col gap-4">
       {!embedded && <PageHeader title="پروفایل" />}
-      <Card className="flex flex-col gap-1 text-sm">
-        <p className="text-lg font-bold text-text">{user.name}</p>
-        <p className="text-text-secondary">
-          {ROLE_LABEL[user.role]} •{' '}
-          <span dir="ltr">{toPersianDigits(user.phone ?? user.email ?? '')}</span>
-        </p>
-        <p className="text-xs text-muted-fg">عضو از {faDate(user.createdAt)}</p>
+      <Card tone="hero" className="relative flex items-center gap-4 overflow-hidden p-5 text-sm">
+        <div
+          aria-hidden
+          className="bg-dots pointer-events-none absolute inset-0 text-white/10 [mask-image:radial-gradient(70%_80%_at_100%_0%,#000,transparent)]"
+        />
+        <span
+          aria-hidden
+          className="relative flex size-16 shrink-0 items-center justify-center rounded-full bg-white/15 text-2xl font-extrabold text-white [box-shadow:0_0_0_4px_rgb(255_255_255/0.15)]"
+        >
+          {user.name.trim().charAt(0)}
+        </span>
+        <div className="relative min-w-0">
+          <p className="text-lg font-bold text-white">{user.name}</p>
+          <p className="text-white/85">
+            {ROLE_LABEL[user.role]} •{' '}
+            <span dir="ltr">{toPersianDigits(user.phone ?? user.email ?? '')}</span>
+          </p>
+          <p className="text-xs text-white/75">عضو از {faDate(user.createdAt)}</p>
+        </div>
       </Card>
       <Card>
         <form onSubmit={saveName} className="flex flex-col gap-3">

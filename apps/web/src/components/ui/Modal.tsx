@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { usePresence } from '@/lib/motion';
 
 export interface ModalProps {
   open: boolean;
@@ -17,11 +18,15 @@ const SIZES = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' } as const;
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
-/** Accessible modal (§16.5 radius 16, max 2 levels). Esc closes, focus is trapped & restored. */
+/**
+ * Accessible modal (§16.5 radius 16, max 2 levels). Esc closes, focus is trapped & restored.
+ * Mobile: bottom sheet that slides up · desktop: centred card that scales in · blurred backdrop.
+ */
 export function Modal({ open, onClose, title, children, footer, size = 'md' }: ModalProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+  const { mounted, closing } = usePresence(open, 200);
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
@@ -62,11 +67,22 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
-      <div aria-hidden className="absolute inset-0 bg-text/50" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
+      aria-hidden={closing || undefined}
+      inert={closing || undefined}
+    >
+      <div
+        aria-hidden
+        className={cn(
+          'absolute inset-0 bg-scrim backdrop-blur-sm',
+          closing ? 'animate-fade-out' : 'animate-fade-in',
+        )}
+        onClick={onClose}
+      />
       <div
         ref={panelRef}
         role="dialog"
@@ -74,10 +90,15 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          'relative flex max-h-[90dvh] w-full flex-col rounded-t-modal bg-surface shadow-lg sm:rounded-modal',
+          'relative flex max-h-[90dvh] w-full flex-col rounded-t-modal border border-border/70 bg-surface shadow-lg sm:rounded-modal',
+          closing
+            ? 'animate-sheet-out sm:animate-scale-out'
+            : 'animate-sheet-in sm:animate-scale-in',
           SIZES[size],
         )}
       >
+        {/* grab handle — a visual cue that the sheet can be dismissed (mobile only) */}
+        <span aria-hidden className="mx-auto mt-2 h-1 w-10 rounded-full bg-border sm:hidden" />
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2">
           <h2 id={titleId} className="text-lg font-bold text-text">
             {title}
@@ -86,7 +107,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
             type="button"
             onClick={onClose}
             aria-label="بستن"
-            className="flex size-12 items-center justify-center rounded-input text-muted hover:bg-background hover:text-text"
+            className="pressable flex size-12 items-center justify-center rounded-input text-muted-fg hover:bg-background hover:text-text"
           >
             <X className="size-5" aria-hidden />
           </button>

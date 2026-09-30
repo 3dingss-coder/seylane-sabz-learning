@@ -45,7 +45,7 @@ export function AdminDashboard() {
       <QueryState
         query={q}
         loading={
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
             {Array.from({ length: 8 }, (_, i) => (
               <Skeleton key={i} className="h-28" />
             ))}
@@ -54,7 +54,7 @@ export function AdminDashboard() {
       >
         {(d) => (
           <>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
               <KpiCard
                 title="بازاریاب‌ها"
                 value={faNumber(d.kpis.marketers)}

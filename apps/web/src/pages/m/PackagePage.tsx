@@ -52,7 +52,7 @@ export function PackagePage() {
                       : undefined
                 }
               />
-              <Card className="flex gap-4">
+              <Card className="flex gap-4 bg-soft-brand">
                 <ProductImage
                   src={p.product?.imageUrl ?? p.brand?.logoUrl}
                   alt={p.product?.name ?? p.brand?.name ?? p.title}
@@ -123,7 +123,7 @@ export function PackagePage() {
                   description="به مدیر اطلاع داده شد."
                 />
               ) : (
-                <ol className="flex flex-col gap-2">
+                <ol className="stagger flex flex-col gap-2">
                   {live.map((s) => (
                     <SectionRow key={s.id} s={s} />
                   ))}
@@ -144,14 +144,16 @@ function SectionRow({ s }: { s: SectionView }) {
   const body = (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-card border bg-surface p-3',
-        locked ? 'border-border opacity-70' : 'border-border hover:border-primary/40',
+        'pressable flex items-center gap-3 rounded-card border bg-surface p-3 shadow-xs',
+        locked
+          ? 'border-dashed border-border opacity-70'
+          : 'border-border hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md',
       )}
     >
       <span
         className={cn(
           'flex size-11 shrink-0 items-center justify-center rounded-card',
-          locked ? 'bg-background text-muted-fg' : 'bg-primary-light text-primary',
+          locked ? 'bg-surface-2 text-muted-fg' : 'bg-primary-light text-primary',
         )}
       >
         <Icon className="size-5" aria-hidden />
@@ -187,7 +189,7 @@ function SectionRow({ s }: { s: SectionView }) {
       {!s.quizPassed && s.quizId && (
         <Link
           to={`/quiz/${s.id}`}
-          className="flex min-h-12 items-center justify-center gap-2 rounded-card border border-info/30 bg-info-light text-sm font-bold text-info-fg"
+          className="pressable flex min-h-12 items-center justify-center gap-2 rounded-card border border-info/30 bg-info-light text-sm font-bold text-info-fg hover:shadow-sm"
         >
           <ClipboardCheck className="size-4" aria-hidden /> آزمون این قسمت
         </Link>

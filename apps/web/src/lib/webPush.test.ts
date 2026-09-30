@@ -48,7 +48,10 @@ describe('web push', () => {
     const { enableWebPush, webPushState } = await import('./webPush');
     expect(webPushState()).toBe('default');
     expect(await enableWebPush()).toBe('granted');
-    expect(post).toHaveBeenCalledWith('/me/devices', { token: 'web-token-123456', platform: 'web' });
+    expect(post).toHaveBeenCalledWith('/me/devices', {
+      token: 'web-token-123456',
+      platform: 'web',
+    });
   });
 
   it('does not register when the user blocks notifications', async () => {

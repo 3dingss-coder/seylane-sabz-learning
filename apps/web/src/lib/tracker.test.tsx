@@ -9,7 +9,11 @@ afterEach(() => vi.unstubAllGlobals());
 describe('usePlaybackTracker (anti-cheat, 28.2 #3)', () => {
   it('counts only continuous playback; seeks and paused time add nothing', async () => {
     session.setAccess('t', 3600);
-    const { calls } = mockApi({ 'POST /v1/me/sections/s1/progress': () => ({ data: { percent: 5, completed: false, lastPositionSec: 0 } }) });
+    const { calls } = mockApi({
+      'POST /v1/me/sections/s1/progress': () => ({
+        data: { percent: 5, completed: false, lastPositionSec: 0 },
+      }),
+    });
     const { result } = renderHook(() => usePlaybackTracker('s1', () => {}));
     act(() => {
       result.current.seeked(0);
@@ -39,7 +43,10 @@ describe('usePlaybackTracker (anti-cheat, 28.2 #3)', () => {
     await act(async () => {
       await result.current.flush('pause');
     });
-    const q = JSON.parse(localStorage.getItem('ssl.beats') ?? '[]') as Array<{ key: string; body: { playedDeltaSec: number } }>;
+    const q = JSON.parse(localStorage.getItem('ssl.beats') ?? '[]') as Array<{
+      key: string;
+      body: { playedDeltaSec: number };
+    }>;
     expect(q).toHaveLength(1);
     expect(q[0]?.body.playedDeltaSec).toBe(3);
     expect(q[0]?.key).toBeTruthy();

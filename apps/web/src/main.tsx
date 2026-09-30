@@ -6,12 +6,14 @@ import './styles/index.css';
 import { initNativeSession } from './lib/session';
 import { initBackButton, isNative } from './lib/native';
 import { initMonitoring } from './lib/telemetry';
+import { armMotionOnInteraction } from './lib/motion';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root not found');
 const el = root;
 
 initMonitoring();
+armMotionOnInteraction();
 if (!isNative() && 'serviceWorker' in navigator && import.meta.env.PROD) {
   void import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true }));
 }

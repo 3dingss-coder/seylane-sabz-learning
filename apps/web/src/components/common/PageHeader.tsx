@@ -21,13 +21,13 @@ export function PageHeader({
           <Link
             to={back}
             aria-label="بازگشت"
-            className="-ms-3 flex size-12 shrink-0 items-center justify-center rounded-card text-text-secondary hover:bg-surface"
+            className="pressable -ms-3 flex size-12 shrink-0 items-center justify-center rounded-card text-text-secondary hover:bg-surface hover:text-primary"
           >
             <ArrowRight className="size-5" aria-hidden />
           </Link>
         )}
         <div className="min-w-0 pt-2">
-          <h1 className="text-xl font-bold break-words text-text">{title}</h1>
+          <h1 className="text-xl font-extrabold break-words text-text sm:text-2xl">{title}</h1>
           {subtitle && <div className="mt-1 text-sm text-text-secondary">{subtitle}</div>}
         </div>
       </div>

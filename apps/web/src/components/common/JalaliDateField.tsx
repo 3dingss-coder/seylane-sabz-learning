@@ -199,7 +199,7 @@ export function JalaliDateField({
                   className={cn(
                     'flex aspect-square min-h-10 items-center justify-center rounded-input text-sm font-bold transition-colors',
                     selected
-                      ? 'bg-primary text-white'
+                      ? 'bg-primary text-on-primary'
                       : disabled
                         ? 'cursor-not-allowed text-muted opacity-40'
                         : isToday

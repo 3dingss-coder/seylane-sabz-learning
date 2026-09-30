@@ -15,9 +15,16 @@ export function MentorLauncher({ packageId }: { packageId: string }) {
           setOpen(true);
           track('mentor_chat_opened', { context: 'package' });
         }}
-        className="fixed bottom-24 start-4 z-30 flex min-h-12 items-center gap-2 rounded-full border border-primary/30 bg-surface px-4 text-sm font-bold text-primary shadow-md md:bottom-6"
+        className="pressable glass fixed bottom-28 start-4 z-30 flex min-h-12 items-center gap-2 rounded-full border border-primary/30 px-4 text-sm font-bold text-primary shadow-lg hover:-translate-y-0.5 md:bottom-6"
       >
-        <Bot className="size-5" aria-hidden /> از منتور بپرس
+        <span className="relative flex">
+          <span
+            aria-hidden
+            className="animate-pulse-dot absolute inset-0 rounded-full bg-primary"
+          />
+          <Bot className="relative size-5" aria-hidden />
+        </span>
+        از منتور بپرس
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="منتور" size="lg">
         <MentorChat packageId={packageId} className="h-[60dvh]" />

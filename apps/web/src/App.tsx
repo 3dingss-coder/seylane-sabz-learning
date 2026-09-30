@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ToastProvider } from '@/components/ui';
+import { ErrorBoundary, ToastProvider } from '@/components/ui';
 import { ApiError } from '@/lib/api';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { isNative, registerPush } from '@/lib/native';
@@ -100,6 +100,16 @@ export function AppRoutes() {
   );
 }
 
+/** Error boundary that recovers automatically when the user navigates elsewhere. */
+function RouteGuard() {
+  const { pathname } = useLocation();
+  return (
+    <ErrorBoundary resetKey={pathname}>
+      <AppRoutes />
+    </ErrorBoundary>
+  );
+}
+
 function makeClient() {
   return new QueryClient({
     defaultOptions: {
@@ -125,7 +135,7 @@ export default function App() {
         <BrowserRouter>
           <AuthProvider>
             <NativeBridge />
-            <AppRoutes />
+            <RouteGuard />
           </AuthProvider>
         </BrowserRouter>
       </ToastProvider>
