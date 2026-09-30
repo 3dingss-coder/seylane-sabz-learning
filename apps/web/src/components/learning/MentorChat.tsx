@@ -136,9 +136,9 @@ export function MentorChat({
               {m.mode === 'voice' && (
                 <span className="mt-1 block text-xs text-text-secondary">تماس صوتی</span>
               )}
-              {m.sources.length > 0 && (
+              {(m.sources?.length ?? 0) > 0 && (
                 <p className="mt-1 text-xs text-text-secondary">
-                  منبع: {m.sources.map((s) => s.title).join('، ')}
+                  منبع: {(m.sources ?? []).map((s) => s.title).join('، ')}
                 </p>
               )}
             </div>
