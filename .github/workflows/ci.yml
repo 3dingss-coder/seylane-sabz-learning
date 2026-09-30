@@ -22,11 +22,13 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
+      # Build first: functions/src/cloudflare-worker.ts imports the generated
+      # functions/lib/seed-snapshot.json, so typecheck fails on a clean checkout without it.
+      - run: npm run build
       - run: npm run typecheck
       - run: npm test
       - name: Composite index coverage (query shapes vs firestore.indexes.json)
         run: npm run check:indexes -w functions
-      - run: npm run build
       - name: Verify Cloudflare Worker + Assets bundle
         run: npx --yes wrangler@4 deploy --dry-run
 
