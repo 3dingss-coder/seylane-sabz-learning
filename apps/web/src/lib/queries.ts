@@ -22,6 +22,7 @@ export const qk = {
   badges: ['me', 'badges'] as const,
   nudges: ['me', 'nudges'] as const,
   chat: (pkg: string | null) => ['me', 'chat', pkg ?? 'all'] as const,
+  behavior: ['me', 'behavior'] as const,
 };
 
 /** Home («کار بعدی») with a per-user last-known copy so errors/offline still show state (F9). */

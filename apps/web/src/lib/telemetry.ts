@@ -9,6 +9,8 @@ export type ClientEvent =
   | 'next_item_cta_clicked'
   | 'notification_cta_clicked'
   | 'mentor_chat_opened'
+  | 'mentor_voice_opened'
+  | 'mentor_voice_turn_sent'
   | 'playback_error'
   | 'manager_digest_opened'
   | 'report_filtered'

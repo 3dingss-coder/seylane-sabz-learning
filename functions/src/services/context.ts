@@ -1,4 +1,5 @@
 import type { Mailer } from '../mail/types';
+import type { AiHub } from '../ai/hub';
 import type { AppConfig } from '../config';
 import type { AuthProvider } from '../auth/types';
 import type { BlobStore } from '../blob/types';
@@ -19,6 +20,12 @@ export interface Deps {
   push: PushSender;
   mail: Mailer;
   llm: LlmClient | null;
+  /**
+   * Multi-provider AI hub (Gemini + Groq + legacy). Optional: when absent it is built lazily from
+   * `config` (see ai/hub.ts), so every existing Deps builder keeps working unchanged. Tests inject
+   * a hub here to pin providers deterministically.
+   */
+  ai?: AiHub;
   clock: Clock;
 }
 

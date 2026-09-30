@@ -53,6 +53,9 @@ export const policySchema = z.object({
   mentorChatEnabled: z.boolean(),
   mentorDailyLimitPerUser: z.number().int().min(1).max(200),
   mentorDailyLimitGlobal: z.number().int().min(1).max(100000),
+  mentorVoiceEnabled: z.boolean(),
+  mentorVoiceMinutesPerUser: z.number().int().min(1).max(120),
+  mentorVoiceMinutesGlobal: z.number().int().min(1).max(5000),
 });
 
 export async function readPolicy(d: Deps) {

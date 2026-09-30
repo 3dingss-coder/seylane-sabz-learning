@@ -19,6 +19,7 @@ What is still open needs accounts, keys or devices the owner has to provide. See
 | 012 | Points, badges, manager messages | ✅ | `pages/m/{Cards,Messages}Page.tsx` |
 | 013 | Manager panel (team scope), reports + CSV, retake approvals | ✅ | `pages/manager/*`, `components/reports/*` |
 | 014 | AI mentor: rules R1–R6 + Gemini RAG chat with guardrails and fallback | ✅ | `services/mentor.ts`, `llm/*`, `components/learning/Mentor*` |
+| 014+ | **منتور هوشمند نسخه‌ی کامل** (F14-V): دانش‌نامه‌ی همه‌ی محتوا (متن/تصویر/صدا/ویدیو/PDF)، بازیابی ترکیبی، مسیریابی Gemini⇄Groq، **تماس صوتی**، مربی فروش، موتور رفتاری B1–B12 | ✅ | `ai/*`, `services/{knowledge,retrieval,mentor-ai,voice,behavior,media-ingest,mentor-quality}.ts`, `components/learning/{MentorBriefCard,VoiceCallSheet}.tsx` — سند: [`MENTOR-AI.md`](./MENTOR-AI.md) |
 | 015 | Analytics events, monitoring, PWA, Capacitor Android + APK CI, release docs | ✅ | `lib/telemetry.ts`, `lib/native.ts`, `apps/web/android`, `.github/workflows/android.yml`, `docs/RELEASE.md` |
 | 16 | Beta with a real team (30–50 people) | ⏳ owner | needs the deployed dev environment |
 
@@ -26,8 +27,8 @@ What is still open needs accounts, keys or devices the owner has to provide. See
 
 | Suite | Count | Runs |
 |---|---|---|
-| Functions unit + API (Vitest + supertest, memory backend) | 97 | local + CI |
-| Web unit/integration (Vitest + Testing Library, mocked API, axe structural checks) | 53 | local + CI |
+| Functions unit + API (Vitest + supertest, memory backend) — includes 28 mentor-AI tests | 146 | local + CI |
+| Web unit/integration (Vitest + Testing Library, mocked API, axe structural checks) | 64 | local + CI |
 | Emulator: security rules + the API suite on Firestore + Storage adapter (`functions/test-emulator/*`) | 6 rules + 3 storage + API suite | CI only (no JDK in the dev sandbox) |
 | E2E Playwright: foundation (5, on Chromium desktop/mobile + WebKit iPhone) + §28.2 journeys (5) + axe WCAG AA (4) | 14 specs | CI only |
 | Lighthouse CI: `/login` + signed-in Home, perf/a11y/best-practices ≥ 90, LCP < 3 s | 2 URLs × 3 runs | CI only |
@@ -46,7 +47,7 @@ What is still open needs accounts, keys or devices the owner has to provide. See
 | 7 | Offline sync | `learning.test.ts` «28.2 #7», `tracker.test.tsx` offline queue |
 | 8 | Question versioning | `learning.test.ts` «28.2 #8» |
 | 9 | Assignment union | `assignments.test.ts` «28.2 #9» |
-| 10 | Mentor «نمی‌دانم» | `mentor.test.ts` «28.2 #10» |
+| 10 | Mentor «نمی‌دانم» | `mentor.test.ts` «28.2 #10» + `mentor-ai.test.ts` (پاسخ بدون هیچ فراخوانی مدل) |
 | 11 | Quiet hours | `notify.test.ts` «quiet hours» |
 | 12 | Duplicate registration | `auth.test.ts` «28.2 #12» |
 
@@ -60,6 +61,18 @@ What is still open needs accounts, keys or devices the owner has to provide. See
 ## Decisions recorded (§36)
 
 D27–D40. The latest are D38 (Android appId + push gated on `google-services.json`), D39 (refresh-token grace window in the local backend) and D40 (primary darkened to #177A50 + text-only `*-fg` tones for WCAG AA — client decision).
+
+## Mentor AI layer (this branch, after PROMPT 015)
+
+- **Knowledge fabric** (`services/knowledge.ts`): brands, products, packages, sections (long transcripts split ~900 chars), quizzes (never answer keys), policies, FAQ/sales plays and media extractions → one incrementally rebuilt index; vanished items are archived, embeddings are reused only within the same provider.
+- **Hybrid retrieval** (`services/retrieval.ts`): BM25-lite ⊕ embeddings with Persian synonym expansion, per-package diversity and a **raw-signal confidence gate** so an off-topic question becomes «نمی‌دانم» instead of a guess.
+- **Multi-provider routing** (`ai/hub.ts` + `ai/{gemini,groq,local}.ts`): chat/vision/TTS/embeddings on Gemini, Persian speech-to-text and the fast lane on Groq, offline embeddings as a last resort; every call emits `AiCall` telemetry and every answer is verified against sealed grounding (`ai/handoff.ts`).
+- **Voice calls** (`services/voice.ts`): turn transport (MediaRecorder → Whisper → grounded answer → Gemini TTS wrapped as WAV) and a duplex Live transport with server-minted ephemeral tokens; double quota (per user + global) from policy; transcript stored only with consent.
+- **Behaviour engine** (`services/behavior.ts`): deterministic signals → momentum/pressure/health/risk → B1–B12 interventions (dedupe per user/rule/day, ≤2/day) → manager escalation through the existing notify pipeline.
+- **Multimodal ingest** (`services/media-ingest.ts`): video/audio/image/PDF/YouTube → structured facts cached per extractor version; coverage reported on the admin knowledge screen.
+- **First-run self-healing**: an empty knowledge index is built by the first question that needs it (once per 10 min, no parallelism), so a fresh deploy never answers «نمی‌دانم» to everything until the cron slot.
+- **Surfaces**: `POST /me/mentor/ask`, `GET /me/mentor/behavior`, `POST /me/mentor/voice/*`, `POST /me/mentor/coach/*`, `GET /admin/reports/mentor-quality`, `GET /admin/knowledge`, `POST /admin/knowledge/{extract,rebuild}`; cron jobs `mentor-daily` (nudges + behaviour sweep) and `knowledge-reindex` (media + incremental reindex); the marketer UI gets a voice call sheet and a behaviour brief card, the admin reports page gains AI-quality + knowledge panels (with manual extract/reindex), and the voice policy fields are editable in `/admin/policies`.
+- **Keys**: Gemini + Groq (both free tier). Procurement checklist: [`USER-TODO.md`](./USER-TODO.md) §۳.۵.
 
 ## Completion pass (PROMPT 015, after the gap review)
 

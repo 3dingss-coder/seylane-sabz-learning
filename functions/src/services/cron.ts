@@ -1,10 +1,19 @@
 import { runDeadlineSweep, runDailyReminders, runWeeklyDigest } from './jobs';
 import { runMentorDaily } from './mentor-rules';
+import { runBehaviorSweep } from './behavior';
+import { rebuildKnowledgeIndex } from './knowledge';
+import { extractPendingMedia } from './media-ingest';
+import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
 import type { Deps } from './context';
 
 export type JobName =
-  'flush-push' | 'deadline-sweep' | 'weekly-digest' | 'daily-reminders' | 'mentor-daily';
+  | 'flush-push'
+  | 'deadline-sweep'
+  | 'weekly-digest'
+  | 'daily-reminders'
+  | 'mentor-daily'
+  | 'knowledge-reindex';
 
 export interface JobOptions {
   /** Manual triggers ignore the "only at this weekday/hour" gates (the weekly digest). */
@@ -17,7 +26,21 @@ export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>
   'deadline-sweep': (d) => runDeadlineSweep(d),
   'weekly-digest': (d, o) => runWeeklyDigest(d, Boolean(o?.force)),
   'daily-reminders': (d) => runDailyReminders(d),
-  'mentor-daily': async (d) => ({ nudges: await runMentorDaily(d) }),
+  // Rule-based nudges (legacy path) + the behaviour engine sweep (R1–R6 / B1–B12 interplay).
+  'mentor-daily': async (d) => ({
+    nudges: await runMentorDaily(d),
+    interventions: await runBehaviorSweep(d),
+  }),
+  // Incremental knowledge index rebuild — only changed items are re-embedded, so on a normal day
+  // this costs one embedding batch (or none at all) even on a free tier.
+  'knowledge-reindex': async (d) => {
+    // 1) Read any media that is new or was produced by an older extractor (bounded per run).
+    const extraction = await extractPendingMedia(d);
+    // 2) Re-index changed knowledge items (only new/changed ones are embedded).
+    const result = await rebuildKnowledgeIndex(d);
+    invalidateIndexCache(d);
+    return { ...result, extraction };
+  },
 };
 
 export const JOB_NAMES = Object.keys(JOBS) as JobName[];
@@ -32,7 +55,7 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 // year), so the Tehran wall-clock times of spec §26 are converted here:
 //   every 15 min   → web push deferred by quiet hours
 //   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot)
-//   08:00 Tehran   → mentor daily nudges
+//   08:00 Tehran   → mentor daily nudges + behaviour sweep + knowledge reindex
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
