@@ -1,11 +1,22 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CRON_JOBS, CRON_SCHEDULES, runCron } from '../src/services/cron';
 import { createCtx } from './support/ctx';
 
+/** Walks up from the test's cwd — avoids `import.meta` (the functions project compiles to CJS). */
+function findUp(name: string, from = process.cwd()): string {
+  let dir = from;
+  for (let i = 0; i < 6; i++) {
+    const p = path.join(dir, name);
+    if (existsSync(p)) return p;
+    dir = path.dirname(dir);
+  }
+  throw new Error(`${name} not found above ${from}`);
+}
+
 describe('cron wiring on the deployed worker', () => {
-  const WRANGLER = fileURLToPath(new URL('../../wrangler.toml', import.meta.url));
+  const WRANGLER = findUp('wrangler.toml');
 
   it('every schedule the code dispatches is declared in wrangler.toml', () => {
     const toml = readFileSync(WRANGLER, 'utf8');

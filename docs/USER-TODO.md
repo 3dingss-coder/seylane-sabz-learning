@@ -17,6 +17,7 @@
 - [ ] ثبت Variableها: `VITE_API_BASE` (آدرس API)، `ALLOWED_ORIGINS` (دامنه وب + `https://localhost` برای اپ اندروید)، `APP_URL` (آدرس عمومی وب — برای لینک ایمیل و Push وب)، `VITE_SENTRY_DSN` (اختیاری)، `TRUST_PROXY_HOPS` (اختیاری؛ پیش‌فرض ۱ — اگر API را پشت Cloudflare Proxy گذاشتید ۲)
 - [ ] ایمیل گزارش هفتگی مدیر (اختیاری): Secret `SMTP_URL` به شکل `smtps://user:pass@smtp.example.com:465` و `MAIL_FROM` (مثلاً `سیلانه‌سبز لرنینگ <no-reply@دامنه‌شما>`). سرویس رایگان مثل Brevo (۳۰۰ ایمیل/روز) کافی است. مدیرانی که ایمیل دارند شنبه‌ها گزارش افراد عقب‌مانده را می‌گیرند؛ بدون SMTP فقط نوتیف داخل اپ ارسال می‌شود
 - [ ] اولین استقرار: `firebase deploy --only functions,firestore,storage` (به‌صورت خودکار بعد از merge به main انجام می‌شود)
+- [ ] پس از اولین استقرار روی Cloudflare: `wrangler deployments status` / `npm run deploy -w functions` (اگر با CLI می‌کنید) و تأیید اینکه `[triggers] crons` در صفحه Triggers کنسول ثبت شده باشد؛ سپس با `POST /v1/admin/jobs/deadline-sweep` اجرای دستی را امتحان کنید
 - [ ] اجرای Seed روی پروژه واقعی با ساخت حساب مدیر ارشد (دستور در RELEASE.md §2) — **بدون `--demo`**
 
 ## ۲. اپ اندروید و انتشار
@@ -42,7 +43,8 @@
 - [ ] کد دعوت (V1) — ثبت‌نام فعلاً باز است (D18)
 - [ ] Rate limiter درون‌حافظه‌ای است (به‌ازای هر instance)؛ برای مقیاس بالا → Redis/Firestore counter (V1)
 - [ ] بازیابی رمز با شماره موبایل: از طریق «بازنشانی رمز» توسط ادمین (ارسال SMS هزینه دارد)
-- [ ] صفحه مدیریت Jobها در پنل ادمین ساخته نشده (اجرای دستی: `POST /v1/admin/jobs/:name`)
+- [ ] **فعال‌سازی Cron Triggers روی Cloudflare** (یادآوری‌ها، هشدار مهلت‌ها، خلاصهٔ هفتگی، flush Push): چهار cron در `wrangler.toml → [triggers] crons` اعلام شده و `functions/src/services/cron.ts` آن‌ها را dispatch می‌کند. Cron Triggers روی طرح **رایگان Cloudflare در دسترس نیست** — اگر ارتقای پلن ممکن نیست، یک زمان‌بند بیرونی (GitHub Actions `schedule` یا cron-job.org) باید هر ساعت `POST /v1/admin/jobs/<name>` را با توکن superadmin صدا بزند: `deadline-sweep`، `daily-reminders`، `weekly-digest`، `mentor-daily`، `flush-push`. تا زمانی که هیچ‌کدام اجرا نشود، تنظیمات «سیاست‌ها → یادآوری‌ها و مهلت‌ها» روی موبایل بازاریاب اثری ندارد.
+- [ ] صفحه مدیریت Jobها در پنل ادمین ساخته نشده (اجرای دستی: `POST /v1/admin/jobs/:name`؛ همان جدولی که cron از آن استفاده می‌کند)
 
 ## ۵. تست‌هایی که فقط در CI اجرا می‌شوند
 
