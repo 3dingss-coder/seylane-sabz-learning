@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { isoDate, text } from '../http/validate';
-import { DAY, HOUR } from '../lib/time';
+import { DAY, HOUR, endOfZonedDay } from '../lib/time';
 import type { Doc } from '../store/types';
 import type {
   Assignment,
@@ -12,7 +12,7 @@ import type {
   Team,
   User,
 } from '../domain/types';
-import { audit, nowIso, track, type Actor, type Deps } from './context';
+import { audit, getPolicy, nowIso, track, type Actor, type Deps } from './context';
 import { assignmentApplies } from './learning-state';
 import { notifyTemplate } from './notify';
 
@@ -107,7 +107,18 @@ export async function createAssignment(
     else if (p.deadlineAt && Date.parse(p.deadlineAt) - now.getTime() < 72 * HOUR)
       warnings.push(`مهلت «${p.title}» کمتر از ۷۲ ساعت دیگر است.`);
   }
-  if (same) return { assignment: same, created: false, warnings, notified: 0 };
+  if (same) {
+    const recipients = (await usersForAssignment(d, same)).length;
+    return {
+      assignment: same,
+      created: false,
+      warnings: recipients
+        ? warnings
+        : [...warnings, 'برای این مخاطب هیچ بازاریاب فعالی پیدا نشد؛ کسی آموزش را نمی‌بیند.'],
+      notified: 0,
+      recipients,
+    };
+  }
   const id = d.store.newId();
   const a: Assignment = {
     type: input.type,
@@ -122,6 +133,8 @@ export async function createAssignment(
   await d.store.set(`assignments/${id}`, a as unknown as Record<string, unknown>);
   await audit(d, actor, 'assignment.created', 'assignments', id, null, a);
   const users = await usersForAssignment(d, a);
+  if (!users.length)
+    warnings.push('برای این مخاطب هیچ بازاریاب فعالی پیدا نشد؛ کسی آموزش را نمی‌بیند.');
   let notified = 0;
   for (const p of pkgs) {
     if (!p || p.status !== 'published') continue;
@@ -139,7 +152,7 @@ export async function createAssignment(
     );
   }
   await track(d, 'admin_assignment_created', actor.id, { type: input.type, count: users.length });
-  return { assignment: { id, ...a }, created: true, warnings, notified };
+  return { assignment: { id, ...a }, created: true, warnings, notified, recipients: users.length };
 }
 
 /** Revoke keeps progress; started users keep access (edge case). */
@@ -160,13 +173,16 @@ export async function notifyAssignedUsers(d: Deps, packageIds: string[]) {
     collection: 'assignments',
     where: [['revokedAt', '==', null]],
   });
+  let notified = 0;
+  let recipients = 0;
   for (const pid of packageIds) {
     const pkg = await d.store.get<Package>(`packages/${pid}`);
     if (!pkg || pkg.status !== 'published') continue;
     const userIds = new Set<string>();
     for (const a of assignments.filter((x) => x.packageIds.includes(pid)))
       for (const u of await usersForAssignment(d, a)) userIds.add(u.id);
-    await notifyTemplate(
+    recipients += userIds.size;
+    notified += await notifyTemplate(
       d,
       [...userIds],
       'new_assignment',
@@ -179,6 +195,7 @@ export async function notifyAssignedUsers(d: Deps, packageIds: string[]) {
       },
     );
   }
+  return { notified, recipients };
 }
 
 // ─── Learning paths (F12.4) ────────────────────────────────────────────────
@@ -201,6 +218,7 @@ export const pathSchema = z.object({
           .optional(),
       }),
     )
+    .min(1, 'حداقل یک آموزش برای مسیر انتخاب کنید.')
     .max(100),
 });
 
@@ -219,6 +237,13 @@ async function normalizePath(d: Deps, input: z.infer<typeof pathSchema>) {
   await validateTarget(d, input.scope, targetId);
   const pkgs = await d.store.getMany<Package>(input.items.map((i) => `packages/${i.packageId}`));
   if (pkgs.some((p) => !p)) throw new ApiError('VALIDATION', 'یکی از بسته‌های مسیر پیدا نشد.');
+  // Checked here (before any write) so a saved path never ends up half-applied: createAssignment
+  // below would reject the same thing after the path document was already updated.
+  if (pkgs.some((p) => p?.status === 'archived'))
+    throw new ApiError(
+      'VALIDATION',
+      'یکی از آموزش‌های مسیر بایگانی شده است؛ آن را از مسیر حذف کنید تا مسیر ذخیره شود.',
+    );
   const seen = new Set<string>();
   for (const i of input.items) {
     if (seen.has(i.packageId)) throw new ApiError('VALIDATION', 'یک بسته دو بار در مسیر آمده است.');
@@ -254,6 +279,7 @@ async function syncPath(d: Deps, actor: Actor, id: string, path: LearningPath) {
   const pkgIds = path.items.map((i) => i.packageId);
   let notified = 0;
   let warnings: string[] = [];
+  let recipients = 0;
   let keepId: string | null = null;
   if (!path.archived && pkgIds.length) {
     const r = await createAssignment(
@@ -265,12 +291,16 @@ async function syncPath(d: Deps, actor: Actor, id: string, path: LearningPath) {
     keepId = r.assignment.id;
     notified = r.notified;
     warnings = r.warnings;
+    recipients = r.recipients;
   }
   for (const a of active) if (a.id !== keepId) await revokeAssignment(d, actor, a.id);
   let deadlinesUpdated = 0;
-  if (!path.archived && path.startAt && path.items.some((i) => i.deadlineOffsetDays !== null))
-    deadlinesUpdated = (await applyPathDeadlines(d, actor, id)).updated.length;
-  return { notified, warnings, deadlinesUpdated };
+  if (!path.archived && path.startAt) {
+    const r = await applyPathDeadlines(d, actor, id);
+    deadlinesUpdated = r.updated.length;
+    warnings = [...warnings, ...r.warnings];
+  }
+  return { notified, warnings, deadlinesUpdated, recipients };
 }
 
 export async function createPath(d: Deps, actor: Actor, input: z.infer<typeof pathSchema>) {
@@ -308,24 +338,42 @@ export async function archivePath(d: Deps, actor: Actor, id: string) {
 }
 
 /**
- * Applies step deadlines: package.deadlineAt = startAt + offset days (end of that day, Tehran),
- * keeping D16 (one deadline per package, same for everyone).
+ * Applies step deadlines: package.deadlineAt = end (23:59) of the Tehran day that is
+ * `deadlineOffsetDays` after the path start — so «روز ۳» really means "until the end of that day".
+ * Keeps D16 (one deadline per package, the same for everyone) and reports what it did NOT apply,
+ * so the admin is never left believing a deadline was changed when it wasn't.
  */
 export async function applyPathDeadlines(d: Deps, actor: Actor, id: string) {
   const path = await d.store.get<LearningPath>(`learning_paths/${id}`);
   if (!path) throw new ApiError('NOT_FOUND', 'مسیر پیدا نشد.');
   if (!path.startAt)
     throw new ApiError('VALIDATION', 'برای محاسبه مهلت‌ها، تاریخ شروع مسیر را تعیین کنید.');
+  const policy = await getPolicy(d);
+  const now = d.clock();
   const updated: Array<{ packageId: string; deadlineAt: string }> = [];
+  const skipped: Array<{ packageId: string; title: string; reason: 'past' | 'kept' }> = [];
   for (const it of path.items) {
-    if (it.deadlineOffsetDays === null) continue;
-    const deadlineAt = new Date(
-      Date.parse(path.startAt) + it.deadlineOffsetDays * DAY,
-    ).toISOString();
-    if (deadlineAt <= d.clock().toISOString()) continue;
+    const title = (await d.store.get<Package>(`packages/${it.packageId}`))?.title ?? it.packageId;
+    if (it.deadlineOffsetDays === null) {
+      // No step deadline: whatever the package already has stays (a published package must keep one).
+      skipped.push({ packageId: it.packageId, title, reason: 'kept' });
+      continue;
+    }
+    const day = new Date(Date.parse(path.startAt) + it.deadlineOffsetDays * DAY);
+    const deadlineAt = endOfZonedDay(day, policy.timezone).toISOString();
+    if (deadlineAt <= now.toISOString()) {
+      skipped.push({ packageId: it.packageId, title, reason: 'past' });
+      continue;
+    }
     await d.store.update(`packages/${it.packageId}`, { deadlineAt, updatedAt: nowIso(d) });
     updated.push({ packageId: it.packageId, deadlineAt });
   }
-  await audit(d, actor, 'path.deadlines_applied', 'learning_paths', id, null, updated);
-  return { updated };
+  const warnings = skipped
+    .filter((s) => s.reason === 'past')
+    .map((s) => `مهلت «${s.title}» در گذشته بود و تنظیم نشد؛ مهلت فعلی همان است.`);
+  await audit(d, actor, 'path.deadlines_applied', 'learning_paths', id, null, {
+    updated,
+    skipped,
+  });
+  return { updated, skipped, warnings };
 }

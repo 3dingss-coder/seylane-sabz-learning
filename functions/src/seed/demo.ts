@@ -104,7 +104,7 @@ export async function seedDemo(d: Deps) {
       await d.store.set('messages/demo-msg-sara-1', {
         fromUserId: managerId,
         toUserId: sara[0].id,
-        type: 'manager_note',
+        type: 'note',
         body: 'سارا جان، دوره‌های آموزشی جدید محصولات فورمی و آیس بابل منتشر شده است. لطفاً پیش از پایان مهلت ویدیوها را مشاهده کن و آزمون را بده.',
         packageId: 'seed-pkg-formi',
         readAt: null,
@@ -117,7 +117,7 @@ export async function seedDemo(d: Deps) {
       await d.store.set('messages/demo-msg-ali-1', {
         fromUserId: managerId,
         toUserId: ali[0].id,
-        type: 'manager_note',
+        type: 'note',
         body: 'علی عزیز، خسته نباشی. پیشرفت خوبی در بسته فورمی داشتی، آزمون را هم به زودی ثبت کن.',
         packageId: 'seed-pkg-formi',
         readAt: null,

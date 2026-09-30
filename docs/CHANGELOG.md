@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-09-30 — Admin panel audit: 30 bugs found, all fixed (admin → marketer sync)
+
+**Ops note:** `[triggers] crons` in `wrangler.toml` is commented out until the plan is confirmed (see `docs/USER-TODO.md` §4). The `Workers Builds` check that fails instantly on this PR is unrelated: Cloudflare posts it in the same second it starts for every PR (it never builds pull requests on this project). Separately, `npm run typecheck` is red on `main` for a pre-existing reason: CI typechecks before `npm run build`, which is what generates `functions/lib/seed-snapshot.json`; the one-line `ci.yml` reorder is recorded as a patch in `docs/USER-TODO.md` §1 because workflow files could not be pushed from this environment. `deploy.yml` untouched.
+
+**Why:** the admin section had accumulated behaviour that either did nothing on the deployed target
+or said "done" when it wasn't. Full pass over every admin screen + its API, verified against a live
+seeded instance and against the marketer panel. Details: [`docs/AUDIT-ADMIN-FA.md`](./AUDIT-ADMIN-FA.md).
+
+**Headline fixes:**
+
+| Area | Fix |
+|---|---|
+| Scheduled jobs | `scheduled()` entrypoint + one job table in `functions/src/services/cron.ts` — on Cloudflare/Netlify **no** reminder/deadline/digest job ever ran, so every policy setting was inert; Firebase `onSchedule` and `POST /admin/jobs/:name` now dispatch through the same table. The `[triggers] crons` block ships **commented out**: Cloudflare validates cron plans at deploy time (a local `deploy --dry-run` accepts it), and a rejected deploy pins the live site to the previous version — re-enable it after confirming the plan and that the schedules show up in the console |
+| Reminders | `runDailyReminders` honours `policy.reminderInactiveDays` (was a hard-coded 20 h) |
+| Path deadlines | step deadline = 23:59 of the target day in the policy timezone, skipped past deadlines are reported as Persian warnings, path edits validate before writing (no half-applied path), an empty path is rejected, `recipients` is returned so a 0-audience target warns instead of lying |
+| Content | section reorder works with archived sections, restoring a section appends it, `POST /admin/packages/:id/unarchive` + a «بایگانی» tab (archived packages used to be unreachable forever), publish returns the fresh doc + `notified/recipients`, `needsReview` clears when a question is edited |
+| Users/teams | team↔manager relations are fixed on both sides (clearing, moving, demoting, archiving) and the API's `warnings` are shown in the dialogs |
+| Notifications | push/message `actionRef` now points at `/messages` (`/notifications` had no route → marketer 404); admin panel got a «صندوق من» inbox; seeded demo notes use the valid `note` type |
+| Web (time zones) | date/time fields read and write the Asia/Tehran wall clock (`toZonedInput`/`fromZonedInput`) instead of the browser's zone — an admin outside Iran no longer shifts deadlines by hours on every save |
+| Web (components) | Modal Esc stack (nested confirm no longer closes the parent dialog and discards a one-time password), `StatusBadge` fallback for unknown statuses, `SectionEditor` no longer round-trips seconds through a minutes field, `PoliciesPage` keeps unsaved edits and re-syncs after save |
+| Reports | audit `from`/`to` validated (bad date → 400 instead of 500) with a real upper bound; completion-report range uses Tehran days |
+
+**Tests:** `functions/test/admin-sync.test.ts` (11) + `functions/test/cron.test.ts` (2) +
+`apps/web/src/lib/dates.test.ts` (4) added; `functions/test/assignments.test.ts` deadline expectation
+updated to the documented end-of-day rule. Gate green: format, lint, build, typecheck, 118 functions +
+64 web tests, `check:indexes` (67 query shapes, 0 missing indexes).
+
+**Needs an owner action:** Cloudflare Cron Triggers are not on the free plan — see `docs/USER-TODO.md` §1/§4 for the external-scheduler fallback.
+
+---
+
 ## 2026-09-29 — Performance pass: removed legacy-browser machinery (perf, no behavior change on modern browsers)
 
 **Why:** the production build was paying for browsers from ~2017 (browserslist floor: iOS 12 / Chrome 64 /

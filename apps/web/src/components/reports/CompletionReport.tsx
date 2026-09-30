@@ -5,6 +5,7 @@ import { Button, Card, EmptyState, ProgressBar } from '@/components/ui';
 import { DataTable } from '@/components/admin/DataTable';
 import { Select } from '@/components/common/Field';
 import { downloadCsv, toCsv } from '@/lib/csv';
+import { fromZonedInput } from '@/lib/dates';
 import { JalaliDateField } from '@/components/common/JalaliDateField';
 import { track } from '@/lib/telemetry';
 import { toPersianDigits } from '@/lib/digits';
@@ -49,8 +50,11 @@ export function CompletionReport({
   }, [rows]);
 
   const filtered = useMemo(() => {
-    const from = f('from') ? Date.parse(f('from')) : null;
-    const to = f('to') ? Date.parse(f('to')) + 86_399_999 : null;
+    // Range ends are Tehran days, matching how the dates are displayed in the table.
+    const fromStart = fromZonedInput(f('from'));
+    const toStart = fromZonedInput(f('to'));
+    const from = fromStart ? Date.parse(fromStart) : null;
+    const to = toStart ? Date.parse(toStart) + 86_400_000 - 1 : null;
     return rows.filter((r) => {
       if (f('brand') && r.brandId !== f('brand')) return false;
       if (f('product') && r.productId !== f('product')) return false;

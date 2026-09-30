@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { zonedParts } from '../src/lib/time';
 import { buildFixture, createCtx, type TestCtx } from './support/ctx';
 
 let ctx: TestCtx;
@@ -95,8 +96,14 @@ describe('learning paths assign their audience (one place for «who / order / wh
     expect(created.body.data.deadlinesUpdated).toBe(2);
     expect(await ids(m1.token)).toEqual([a.packageId, b.packageId].sort());
     expect(await ids(m2.token)).toEqual([]);
+    // «روز ۳» = until the END of that day in the policy timezone, not exactly 72 h after the start.
     const pkgA = await ctx.deps.store.get<{ deadlineAt: string }>(`packages/${a.packageId}`);
-    expect(Date.parse(pkgA?.deadlineAt ?? '')).toBe(Date.parse(start) + 3 * 86_400_000);
+    const due = zonedParts(new Date(pkgA?.deadlineAt ?? ''), 'Asia/Tehran');
+    const wanted = zonedParts(new Date(Date.parse(start) + 3 * 86_400_000), 'Asia/Tehran');
+    expect(`${due.year}-${due.month}-${due.day}`).toBe(
+      `${wanted.year}-${wanted.month}-${wanted.day}`,
+    );
+    expect(`${due.hour}:${due.minute}`).toBe('23:59');
 
     // Editing the path (drop step 2, move to team 2) re-syncs the managed assignment.
     const pathId = created.body.data.id as string;

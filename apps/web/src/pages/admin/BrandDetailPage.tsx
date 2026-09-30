@@ -74,10 +74,14 @@ export function BrandDetailPage() {
   const list = (products.data ?? []).filter((p) => showArchived || !p.archived);
   const publishedIds = (items: AdminPackage[]) =>
     items.filter((x) => x.status === 'published').map((x) => x.id);
-  // Brand path: brand-level trainings first, then each product's trainings.
+  // Brand path: brand-level trainings first, then each product's trainings. Built from the
+  // products themselves — not from `list`, which the «نمایش بایگانی» toggle filters: ticking a
+  // checkbox while reading must never change what a generated path contains.
   const brandPathIds = [
     ...publishedIds(byProduct(null)),
-    ...list.flatMap((p) => publishedIds(byProduct(p.id))),
+    ...(products.data ?? [])
+      .filter((p) => !p.archived)
+      .flatMap((p) => publishedIds(byProduct(p.id))),
   ];
 
   return (

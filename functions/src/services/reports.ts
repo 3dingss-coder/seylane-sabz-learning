@@ -293,7 +293,7 @@ export async function sendMessage(
     'manager_message',
     { manager: manager.name, snippet: input.body.slice(0, 80) },
     {
-      actionRef: msg.packageId ? `/packages/${msg.packageId}` : '/notifications',
+      actionRef: msg.packageId ? `/packages/${msg.packageId}` : '/messages',
       priority: 'high',
     },
   );
@@ -513,19 +513,28 @@ export async function adminDashboard(d: Deps) {
   };
 }
 
+/** Accepts only a real timestamp; anything else is a 400 instead of a 500 from `toISOString()`. */
+const auditDate = z
+  .string()
+  .max(40)
+  .optional()
+  .refine((v) => v === undefined || !Number.isNaN(Date.parse(v)), 'تاریخ نامعتبر است.');
+
 export const auditQuery = z.object({
   actor: z.string().max(80).optional(),
   action: z.string().max(80).optional(),
-  from: z.string().max(40).optional(),
   entity: z.string().max(60).optional(),
+  from: auditDate,
+  to: auditDate,
 });
 
 export async function listAudit(d: Deps, f: z.infer<typeof auditQuery>) {
-  const where: Array<[string, '==' | '>=', unknown]> = [];
+  const where: Array<[string, '==' | '>=' | '<=', unknown]> = [];
   if (f.actor) where.push(['actorId', '==', f.actor]);
   if (f.action) where.push(['action', '==', f.action]);
   if (f.entity) where.push(['entity', '==', f.entity]);
   if (f.from) where.push(['createdAt', '>=', new Date(f.from).toISOString()]);
+  if (f.to) where.push(['createdAt', '<=', new Date(f.to).toISOString()]);
   const list = await d.store.query<Record<string, unknown> & { createdAt: string }>({
     collection: 'audit_logs',
     where,

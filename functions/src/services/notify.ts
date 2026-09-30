@@ -206,7 +206,7 @@ async function sendPush(
       {
         title: g?.title ?? n.title,
         body: g?.body ?? n.body,
-        data: { notificationId: n.id, link: n.actionRef ?? '/notifications', type },
+        data: { notificationId: n.id, link: n.actionRef ?? '/messages', type },
       },
     );
     for (const bad of res.invalidTokens) await d.store.delete(`device_tokens/${ids.hash(bad)}`);

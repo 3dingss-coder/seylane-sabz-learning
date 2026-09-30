@@ -17,7 +17,9 @@
 - [ ] ثبت Variableها: `VITE_API_BASE` (آدرس API)، `ALLOWED_ORIGINS` (دامنه وب + `https://localhost` برای اپ اندروید)، `APP_URL` (آدرس عمومی وب — برای لینک ایمیل و Push وب)، `VITE_SENTRY_DSN` (اختیاری)، `TRUST_PROXY_HOPS` (اختیاری؛ پیش‌فرض ۱ — اگر API را پشت Cloudflare Proxy گذاشتید ۲)
 - [ ] ایمیل گزارش هفتگی مدیر (اختیاری): Secret `SMTP_URL` به شکل `smtps://user:pass@smtp.example.com:465` و `MAIL_FROM` (مثلاً `سیلانه‌سبز لرنینگ <no-reply@دامنه‌شما>`). سرویس رایگان مثل Brevo (۳۰۰ ایمیل/روز) کافی است. مدیرانی که ایمیل دارند شنبه‌ها گزارش افراد عقب‌مانده را می‌گیرند؛ بدون SMTP فقط نوتیف داخل اپ ارسال می‌شود
 - [ ] اولین استقرار: `firebase deploy --only functions,firestore,storage` (به‌صورت خودکار بعد از merge به main انجام می‌شود)
+- [ ] پس از اولین استقرار روی Cloudflare: `wrangler deployments status` / `npm run deploy -w functions` (اگر با CLI می‌کنید)؛ سپس با `POST /v1/admin/jobs/deadline-sweep` اجرای دستی را امتحان کنید. (تأیید `[triggers] crons` در صفحه Triggers فقط بعد از باز کردن کامنت این بلوک — بند §۴ را ببینید)
 - [ ] اجرای Seed روی پروژه واقعی با ساخت حساب مدیر ارشد (دستور در RELEASE.md §2) — **بدون `--demo`**
+- [ ] اصلاح CSS‌به‌عمل CI (اختیاری، ولی چک main را سبز می‌کند): در `.github/workflows/ci.yml` خط `- run: npm run build` را بالای `- run: npm run typecheck` بیاورید. دلیل قرمزی فعلی: `functions/src/cloudflare-worker.ts` فایل تولیدیِ `functions/lib/seed-snapshot.json` را import می‌کند که فقط با build ساخته می‌شود (`TS2307`)؛ این ایراد از قبل روی `main` وجود داشت و ربطی به ممیزی ادمین ندارد. در این محیط workflow قابل تغییر نبود (توکن App اجازهٔ نوشتن روی `.github/workflows/*` ندارد)
 
 ## ۲. اپ اندروید و انتشار
 
@@ -42,7 +44,8 @@
 - [ ] کد دعوت (V1) — ثبت‌نام فعلاً باز است (D18)
 - [ ] Rate limiter درون‌حافظه‌ای است (به‌ازای هر instance)؛ برای مقیاس بالا → Redis/Firestore counter (V1)
 - [ ] بازیابی رمز با شماره موبایل: از طریق «بازنشانی رمز» توسط ادمین (ارسال SMS هزینه دارد)
-- [ ] صفحه مدیریت Jobها در پنل ادمین ساخته نشده (اجرای دستی: `POST /v1/admin/jobs/:name`)
+- [ ] **فعال‌سازی Cron Triggers روی Cloudflare** (یادآوری‌ها، هشدار مهلت‌ها، خلاصهٔ هفتگی، flush Push): `functions/src/services/cron.ts` چهار schedule را dispatch می‌کند، اما بلوک `[triggers] crons` در `wrangler.toml` **کامنت شده** است: دلیل کامنت: محدودیت پلنِ Cron Triggers هنگام deploy واقعی و سمت API بررسی می‌شود و `wrangler deploy --dry-run` محلی آن را نمی‌گیرد؛ چون deploy ناموفق سایت را روی نسخهٔ قبلی می‌خواباند، اعلام schedule تا تأیید پلن خاموش می‌ماند (هندلرها فعال‌اند). برای فعال‌سازی: پلن را تأیید کنید، سپس همین دو خط را از کامنت خارج کنید: `# [triggers]` و `# crons = [...]` — تست `functions/test/cron.test.ts` نگهبان هم‌سانی لیست cron با کد است. اگر ارتقای پلن ممکن نیست، یک زمان‌بند بیرونی (GitHub Actions `schedule` یا cron-job.org) باید هر ساعت `POST /v1/admin/jobs/<name>` را با توکن superadmin صدا بزند: `deadline-sweep`، `daily-reminders`، `weekly-digest`، `mentor-daily`، `flush-push`. تا زمانی که هیچ‌کدام اجرا نشود، تنظیمات «سیاست‌ها → یادآوری‌ها و مهلت‌ها» روی موبایل بازاریاب اثری ندارد.
+- [ ] صفحه مدیریت Jobها در پنل ادمین ساخته نشده (اجرای دستی: `POST /v1/admin/jobs/:name`؛ همان جدولی که cron از آن استفاده می‌کند)
 
 ## ۵. تست‌هایی که فقط در CI اجرا می‌شوند
 
