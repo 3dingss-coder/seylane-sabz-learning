@@ -78,7 +78,12 @@ export function createRecorder(): Recorder {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
       const mime = pickMime();
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      // 24 kbps is plenty for speech and keeps a 2-minute utterance well under the API's 1 MB JSON
+      // body limit (base64 inflates audio by a third).
+      const rec = new MediaRecorder(stream, {
+        ...(mime ? { mimeType: mime } : {}),
+        audioBitsPerSecond: 24_000,
+      });
       recorder = rec;
       chunks = [];
       startedAt = Date.now();

@@ -26,8 +26,18 @@ interface GeminiOptions {
   timeoutMs?: number;
 }
 
+const EMBED_DIMS = 768;
+
+function unitVector(v: number[]): number[] {
+  let norm = 0;
+  for (const x of v) norm += x * x;
+  norm = Math.sqrt(norm);
+  if (!norm) return v;
+  return v.map((x) => Number((x / norm).toFixed(6)));
+}
+
 export const GEMINI_LIVE_WS =
-  'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent';
+  'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained';
 
 /**
  * Google Gemini client (REST — no SDK).
@@ -230,11 +240,15 @@ export class GeminiProvider implements AiProvider {
         requests: texts.map((text) => ({
           model: `models/${model}`,
           content: { parts: [{ text: text.slice(0, 8000) }] },
+          // 768 dims keeps the stored index ~4x smaller than the 3072 default with negligible
+          // quality loss (Matryoshka embeddings). Truncated vectors are NOT unit length, so they
+          // are normalised below -- retrieval scores with a plain dot product.
+          outputDimensionality: EMBED_DIMS,
         })),
       },
       'embed',
     );
-    const out = (body.embeddings ?? []).map((e) => e.values ?? []);
+    const out = (body.embeddings ?? []).map((e) => unitVector(e.values ?? []));
     if (out.length !== texts.length)
       throw new AiError('Gemini embedding mismatch', this.id, 'embed');
     return out;
