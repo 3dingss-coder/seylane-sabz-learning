@@ -18,10 +18,18 @@ PLAYBACK_BUDGET = "off"
 RATE_LIMIT_SCALE = "20"
 
 # Scheduled jobs (deadline warnings, reminders, weekly digest, web-push flush).
-# These must match CRON_JOBS in functions/src/services/cron.ts — the Worker's `scheduled`
-# handler dispatches on the cron expression. Times are UTC (Tehran has no DST).
-[triggers]
-crons = ["*/15 * * * *", "0 * * * *", "30 4 * * *", "30 6 * * *"]
+# The Worker's `scheduled` handler (functions/src/cloudflare-worker.ts) dispatches on the cron
+# expression, and the same handlers run on Cloudflare Functions via `onSchedule`.
+# These expressions must match CRON_JOBS in functions/src/services/cron.ts. Times are UTC
+# (Tehran has no DST).
+#
+# NOTE: kept commented out on purpose. Cron triggers are not available on the current Cloudflare
+# Workers plan, and an unsupported `[triggers]` block makes the whole deploy fail — which would
+# leave the live site stuck on the previous version. Either move the worker to a plan that allows
+# cron triggers and uncomment these two lines, or point an external scheduler at
+# `POST /v1/admin/jobs/<name>` (see docs/USER-TODO.md).
+# [triggers]
+# crons = ["*/15 * * * *", "0 * * * *", "30 4 * * *", "30 6 * * *"]
 
 # Cloudflare D1 Database binding (SQLite at the edge — 100% free tier)
 # To connect your D1 database in Cloudflare Dashboard:
