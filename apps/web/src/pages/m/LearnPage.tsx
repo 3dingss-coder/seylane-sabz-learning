@@ -57,10 +57,10 @@ export function LearnPage() {
               aria-pressed={brand === b.id}
               onClick={() => setBrand(brand === b.id ? null : b.id)}
               className={cn(
-                'flex min-h-12 shrink-0 items-center gap-2 rounded-card border bg-surface px-2 pe-3 text-sm font-bold',
+                'pressable flex min-h-12 shrink-0 items-center gap-2 rounded-full border bg-surface px-2 pe-4 text-sm font-bold shadow-xs',
                 brand === b.id
-                  ? 'border-primary text-primary'
-                  : 'border-border text-text-secondary',
+                  ? 'border-primary bg-primary-light text-primary'
+                  : 'border-border text-text-secondary hover:border-primary/40',
               )}
             >
               <BrandLogo name={b.name} logoUrl={b.logoUrl} size="sm" className="size-9 p-1" />
@@ -85,7 +85,10 @@ export function LearnPage() {
           return items.length === 0 ? (
             <EmptyState title={EMPTY[tab]} />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <div
+              key={`${tab}-${brand}`}
+              className="stagger grid gap-3 md:grid-cols-2 lg:grid-cols-3"
+            >
               {items.map((p) => (
                 <PackageCard key={p.id} p={p} />
               ))}

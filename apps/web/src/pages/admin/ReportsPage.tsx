@@ -85,7 +85,7 @@ function Mentor() {
             آمار {toPersianDigits(d.days)} روز اخیر. متن گفتگوها برای حفظ حریم خصوصی نمایش داده
             نمی‌شود.
           </p>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard title="پاسخ‌ها" value={faNumber(d.replies)} icon={Bot} />
             <KpiCard title="کاربران" value={faNumber(d.users)} icon={Users} tone="info" />
             <KpiCard

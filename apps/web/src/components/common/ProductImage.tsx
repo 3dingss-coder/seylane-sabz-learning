@@ -15,12 +15,14 @@ export function ProductImage({
   contain?: boolean;
 }) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const url = fileUrl(src);
   const failed = Boolean(url && failedSrc === url);
+  const loaded = Boolean(url && loadedSrc === url);
   return (
     <span
       className={cn(
-        'flex shrink-0 items-center justify-center overflow-hidden rounded-card border border-border bg-surface',
+        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-card border border-border bg-white shadow-xs',
         className,
       )}
     >
@@ -29,14 +31,24 @@ export function ProductImage({
           {alt}
         </span>
       ) : (
-        <img
-          src={url}
-          alt={alt}
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailedSrc(url)}
-          className={cn('size-full', contain ? 'object-contain p-1' : 'object-cover')}
-        />
+        <>
+          {!loaded && <span aria-hidden className="absolute inset-0 bg-surface-2" />}
+          <img
+            src={url}
+            alt={alt}
+            width={160}
+            height={160}
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setLoadedSrc(url)}
+            onError={() => setFailedSrc(url)}
+            className={cn(
+              'relative size-full',
+              loaded ? 'opacity-100' : 'opacity-0',
+              contain ? 'object-contain p-1.5' : 'object-cover',
+            )}
+          />
+        </>
       )}
     </span>
   );

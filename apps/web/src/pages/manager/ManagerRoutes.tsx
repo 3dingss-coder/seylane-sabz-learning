@@ -10,7 +10,7 @@ import { ManagerMember } from './ManagerMember';
 import { ManagerReports } from './ManagerReports';
 
 const NAV = [
-  { to: '/manager', label: 'داشبورد', icon: LayoutDashboard },
+  { to: '/manager', label: 'داشبورد', icon: LayoutDashboard, match: ['/manager/members'] },
   { to: '/manager/reports', label: 'گزارش تکمیل', icon: BarChart3 },
   { to: '/manager/retakes', label: 'آزمون مجدد', icon: ClipboardList },
   { to: '/manager/profile', label: 'پروفایل', icon: UserRound },

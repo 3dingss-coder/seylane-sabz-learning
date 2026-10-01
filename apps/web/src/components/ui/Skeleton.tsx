@@ -1,11 +1,12 @@
 // Adapted from helper kit: «اپ بازاریاب/کامپوننت‌ها/common/Skeleton.tsx»
 // (Order/Customer/Product skeletons → generic Skeleton + learning-domain presets).
+// Design refresh: shimmer highlight (transform only) instead of a pulsing fade.
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Card } from './Card';
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cn('animate-pulse rounded-input bg-border', className)} />;
+  return <div aria-hidden className={cn('skeleton rounded-input', className)} />;
 }
 
 /** Package card placeholder (§15.1 M3/M4 loading). */
@@ -13,17 +14,14 @@ export function PackageCardSkeleton() {
   return (
     <Card className="space-y-3" aria-hidden>
       <div className="flex items-center gap-3">
-        <Skeleton className="size-12 rounded-card" />
+        <Skeleton className="size-20 rounded-card" />
         <div className="flex-1 space-y-2">
+          <Skeleton className="h-3 w-1/4" />
           <Skeleton className="h-4 w-3/4" />
           <Skeleton className="h-3 w-1/2" />
         </div>
       </div>
       <Skeleton className="h-2 w-full rounded-full" />
-      <div className="flex justify-between">
-        <Skeleton className="h-6 w-20 rounded-full" />
-        <Skeleton className="h-6 w-16 rounded-full" />
-      </div>
     </Card>
   );
 }

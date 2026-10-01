@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Spinner } from './Spinner';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'light';
 export type ButtonSize = 'md' | 'lg';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -15,12 +15,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 // §16.5 Buttons + §16.6 States: hover ≈8% darker, focus ring (global), disabled 40% opacity.
+// Design refresh: soft brand gradient + top highlight, lift on hover, scale(0.98) on press.
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-white shadow-sm hover:bg-primary-hover active:bg-primary-hover',
+  primary:
+    'bg-primary bg-brand-gradient text-on-primary [box-shadow:var(--shadow-sm),var(--shadow-inset-top)] hover:bg-primary-hover hover:[box-shadow:var(--shadow-brand),var(--shadow-inset-top)] active:bg-primary-hover',
   secondary:
-    'bg-surface text-primary border border-primary hover:bg-primary-light active:bg-primary-light',
+    'bg-surface text-primary border border-primary/70 hover:bg-primary-light active:bg-primary-light',
+  /** white button for dark brand surfaces (hero cards) — same look in light and dark mode */
+  light: 'bg-white text-primary-800 shadow-md hover:bg-primary-50 active:bg-primary-100',
   ghost: 'bg-transparent text-text-secondary hover:bg-border/60 active:bg-border',
-  danger: 'bg-danger text-white shadow-sm hover:brightness-[0.92] active:brightness-90',
+  danger:
+    'bg-danger text-on-danger shadow-sm hover:brightness-[0.92] active:brightness-90 hover:shadow-md',
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -47,8 +52,8 @@ export function Button({
       disabled={isDisabled}
       aria-busy={loading || undefined}
       className={cn(
-        'inline-flex select-none items-center justify-center gap-2 rounded-card font-bold transition-colors duration-150',
-        'disabled:cursor-not-allowed disabled:opacity-40',
+        'pressable inline-flex select-none items-center justify-center gap-2 rounded-card font-bold',
+        'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
         VARIANTS[variant],
         SIZES[size],
         block && 'w-full',

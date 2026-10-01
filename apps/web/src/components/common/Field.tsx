@@ -7,7 +7,7 @@ import {
 import { cn } from '@/lib/cn';
 
 const base =
-  'w-full rounded-input border bg-surface px-3 text-base text-text placeholder:text-muted transition-colors focus:border-info focus:outline-none focus:ring-2 focus:ring-info/30 disabled:cursor-not-allowed disabled:opacity-40';
+  'w-full rounded-input border bg-surface px-3 text-base text-text placeholder:text-muted-fg shadow-xs transition-[border-color,box-shadow] duration-150 hover:border-muted focus:border-info focus:outline-none focus:ring-4 focus:ring-info/15 disabled:cursor-not-allowed disabled:opacity-40';
 
 function Wrap({
   id,
@@ -24,12 +24,12 @@ function Wrap({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-sm font-medium text-text">
+      <label htmlFor={id} className="text-sm font-semibold text-text">
         {label}
       </label>
       {children}
       {hint && !error && <p className="text-xs text-text-secondary">{hint}</p>}
-      <p aria-live="polite" className="text-xs font-medium text-danger">
+      <p aria-live="polite" className="text-xs font-medium text-danger-fg">
         {error}
       </p>
     </div>
@@ -105,10 +105,10 @@ export function Tabs<T extends string>({
           aria-selected={value === it.value}
           onClick={() => onChange(it.value)}
           className={cn(
-            'flex min-h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-input px-3 text-sm font-bold transition-colors',
+            'pressable flex min-h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-input px-3 text-sm font-bold',
             value === it.value
-              ? 'bg-primary text-white'
-              : 'text-text-secondary hover:bg-background',
+              ? 'bg-primary bg-brand-gradient text-on-primary shadow-sm'
+              : 'text-text-secondary hover:bg-surface-2',
           )}
         >
           {it.label}
@@ -116,7 +116,7 @@ export function Tabs<T extends string>({
             <span
               className={cn(
                 'rounded-full px-1.5 text-xs',
-                value === it.value ? 'bg-white/20' : 'bg-background',
+                value === it.value ? 'bg-on-primary/20' : 'bg-surface-2',
               )}
             >
               {it.count.toLocaleString('fa-IR')}

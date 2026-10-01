@@ -1,5 +1,6 @@
-import { WifiOff } from 'lucide-react';
+import { RotateCw } from 'lucide-react';
 import { Button } from './Button';
+import { ErrorIllustration } from './illustrations';
 
 export interface ErrorStateProps {
   /** Simple Persian message + next action — never an error code (§15.0 rule 3). */
@@ -14,12 +15,17 @@ export function ErrorState({
   return (
     <div
       role="alert"
-      className="flex flex-col items-center gap-3 rounded-card border border-danger/30 bg-danger-light px-6 py-8 text-center"
+      className="animate-fade-up flex flex-col items-center gap-2 rounded-card border border-danger/30 bg-danger-light px-6 py-7 text-center"
     >
-      <WifiOff className="size-8 text-danger" aria-hidden />
+      <ErrorIllustration className="h-24" />
       <p className="text-sm font-medium text-text">{message}</p>
       {onRetry && (
-        <Button variant="secondary" onClick={onRetry}>
+        <Button
+          variant="secondary"
+          className="mt-1"
+          icon={<RotateCw className="size-4" aria-hidden />}
+          onClick={onRetry}
+        >
           تلاش مجدد
         </Button>
       )}

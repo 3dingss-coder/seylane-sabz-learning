@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
-import { Link, NavLink, Outlet } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Bell, BookOpen, Bot, Home, Mail, Trophy, UserRound, WifiOff } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppLogo } from '@/components/brand/AppLogo';
 import { BottomNav } from '@/components/layout/BottomNav';
+import { PageTransition } from '@/components/layout/PageTransition';
+import { CountBadge } from '@/components/ui/CountBadge';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { flushBeats } from '@/lib/offline-queue';
@@ -12,7 +14,7 @@ import { useMessages, useNotifications } from '@/lib/queries';
 
 const DESKTOP_NAV = [
   { to: '/', label: 'خانه', icon: Home },
-  { to: '/learn', label: 'آموزش‌ها', icon: BookOpen },
+  { to: '/learn', label: 'آموزش‌ها', icon: BookOpen, match: ['/packages', '/sections', '/quiz'] },
   { to: '/messages', label: 'پیام‌ها', icon: Mail },
   { to: '/cards', label: 'کارت‌ها', icon: Trophy },
   { to: '/mentor', label: 'منتور', icon: Bot },
@@ -20,6 +22,7 @@ const DESKTOP_NAV = [
 
 /** Marketer shell: header (logo, bell, profile) + bottom nav on mobile, top nav on desktop. */
 export function MarketerLayout() {
+  const { pathname } = useLocation();
   const notifications = useNotifications();
   const messages = useMessages();
   const qc = useQueryClient();
@@ -38,22 +41,22 @@ export function MarketerLayout() {
   }, [qc]);
 
   return (
-    <div className="min-h-dvh bg-background pb-24 lg:pb-8">
-      <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
+    <div className="min-h-dvh bg-background pb-28 lg:pb-8">
+      <header className="sticky top-0 z-30 glass border-b border-border">
         <div className="mx-auto flex h-16 max-w-[960px] items-center justify-between gap-2 px-4">
           <Link to="/" aria-label="خانه">
             <AppLogo />
           </Link>
           <nav aria-label="ناوبری اصلی" className="hidden items-center gap-1 lg:flex">
-            {DESKTOP_NAV.map(({ to, label, icon: Icon }) => (
+            {DESKTOP_NAV.map(({ to, label, icon: Icon, match }) => (
               <NavLink
                 key={to}
                 to={to}
                 end={to === '/'}
                 className={({ isActive }) =>
                   cn(
-                    'flex min-h-12 items-center gap-1.5 rounded-card px-3 text-sm font-bold',
-                    isActive
+                    'pressable flex min-h-12 items-center gap-1.5 rounded-card px-3 text-sm font-bold transition-colors',
+                    isActive || match?.some((p) => pathname.startsWith(p))
                       ? 'bg-primary-light text-primary'
                       : 'text-text-secondary hover:bg-background',
                   )
@@ -75,11 +78,7 @@ export function MarketerLayout() {
               className="relative flex size-12 items-center justify-center rounded-card text-text-secondary hover:bg-background"
             >
               <Bell className="size-6" aria-hidden />
-              {unread > 0 && (
-                <span className="absolute end-2 top-2 flex min-w-[18px] items-center justify-center rounded-full border-2 border-surface bg-danger px-1 text-[10px] font-bold text-white">
-                  {toPersianDigits(unread > 99 ? 99 : unread)}
-                </span>
-              )}
+              <CountBadge count={unread} className="end-2 top-2" />
             </Link>
             <Link
               to="/profile"
@@ -101,7 +100,9 @@ export function MarketerLayout() {
         </div>
       )}
       <main className="mx-auto max-w-[960px] px-4 py-4">
-        <Outlet />
+        <PageTransition>
+          <Outlet />
+        </PageTransition>
       </main>
       <BottomNav
         items={[

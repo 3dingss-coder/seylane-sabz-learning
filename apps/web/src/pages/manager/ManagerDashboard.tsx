@@ -26,7 +26,7 @@ export function ManagerDashboard() {
         query={q}
         loading={
           <>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
               {[0, 1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-28" />
               ))}
@@ -48,7 +48,7 @@ export function ManagerDashboard() {
               />
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <KpiCard
                     title="نرخ تکمیل"
                     value={faPercent(d.kpis.completionRate)}

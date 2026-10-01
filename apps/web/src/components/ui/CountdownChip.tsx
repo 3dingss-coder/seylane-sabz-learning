@@ -16,7 +16,7 @@ const STYLES: Record<CountdownTone, string> = {
   normal: 'bg-background text-text-secondary border-border',
   warning: 'bg-warning-light text-warning-fg border-warning/30',
   danger: 'bg-danger-light text-danger-fg border-danger/30',
-  overdue: 'bg-danger text-white border-danger',
+  overdue: 'bg-danger text-on-danger border-danger',
 };
 
 const PREFIX: Record<CountdownTone, string> = {
@@ -48,7 +48,15 @@ export function CountdownChip({ deadline, warningHours, className, now }: Countd
         className,
       )}
     >
-      <Icon className="size-3.5" aria-hidden />
+      <span className="relative flex">
+        {(state.tone === 'danger' || state.tone === 'overdue') && (
+          <span
+            aria-hidden
+            className="animate-pulse-dot absolute inset-0 rounded-full bg-current"
+          />
+        )}
+        <Icon className="relative size-3.5" aria-hidden />
+      </span>
       <span>{PREFIX[state.tone]}</span>
       {state.tone !== 'overdue' && <span className="num-latin">{state.short}</span>}
     </span>

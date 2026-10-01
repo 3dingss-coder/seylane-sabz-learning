@@ -4,6 +4,7 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { exitDelay } from '@/lib/motion';
 import {
   DEFAULT_DURATION,
   ToastContext,
@@ -30,8 +31,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
 
+  const [leaving, setLeaving] = useState<number[]>([]);
+
+  // exit animation first (180ms), then remove
   const dismiss = useCallback((id: number) => {
-    setToasts((list) => list.filter((t) => t.id !== id));
+    const remove = () => {
+      setToasts((list) => list.filter((t) => t.id !== id));
+      setLeaving((l) => l.filter((x) => x !== id));
+    };
+    const wait = exitDelay(180);
+    if (wait === 0) return remove();
+    setLeaving((l) => (l.includes(id) ? l : [...l, id]));
+    window.setTimeout(remove, wait);
   }, []);
 
   const show = useCallback<ToastApi['show']>(
@@ -58,7 +69,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role={t.type === 'error' ? 'alert' : 'status'}
             className={cn(
-              'pointer-events-auto flex items-center gap-3 rounded-card border bg-surface p-3 shadow-lg',
+              'glass pointer-events-auto flex items-center gap-3 rounded-card border bg-surface p-3 shadow-lg',
+              leaving.includes(t.id) ? 'animate-toast-out' : 'animate-toast-in',
               BORDERS[t.type],
             )}
           >
@@ -71,7 +83,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   t.action?.onClick();
                   dismiss(t.id);
                 }}
-                className="min-h-12 rounded-input px-3 text-sm font-bold text-primary hover:bg-primary-light"
+                className="min-h-12 rounded-input px-3 text-sm font-bold text-primary hover:bg-primary-light pressable"
               >
                 {t.action.label}
               </button>
@@ -80,7 +92,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               type="button"
               onClick={() => dismiss(t.id)}
               aria-label="بستن پیام"
-              className="flex size-12 items-center justify-center rounded-input text-muted hover:bg-background hover:text-text"
+              className="flex size-12 items-center justify-center rounded-input text-muted-fg hover:bg-background hover:text-text"
             >
               <X className="size-4" aria-hidden />
             </button>

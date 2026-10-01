@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { useMountedFlag } from '@/lib/motion';
 
 export interface ProgressRingProps {
   /** 0–100 (clamped). */
@@ -8,13 +10,16 @@ export interface ProgressRingProps {
   label: string;
   className?: string;
   /** Color by meaning (§16.1): primary for progress, success when complete. */
-  tone?: 'primary' | 'success' | 'warning';
+  tone?: 'primary' | 'success' | 'warning' | 'danger';
+  /** Replaces the default «NN%» centre label. */
+  center?: ReactNode;
 }
 
 const TONES = {
   primary: 'text-primary',
   success: 'text-success',
   warning: 'text-warning',
+  danger: 'text-danger',
 } as const;
 
 export function ProgressRing({
@@ -24,11 +29,15 @@ export function ProgressRing({
   label,
   className,
   tone,
+  center,
 }: ProgressRingProps) {
   const pct = Math.max(0, Math.min(100, Math.round(value)));
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const resolvedTone = tone ?? (pct >= 100 ? 'success' : 'primary');
+  // the arc fills from empty on first paint (CSS transition), then follows later changes
+  const ready = useMountedFlag();
+  const shownPct = ready ? pct : 0;
   return (
     <div
       role="progressbar"
@@ -46,7 +55,7 @@ export function ProgressRing({
           r={r}
           fill="none"
           strokeWidth={stroke}
-          className="stroke-border"
+          className="stroke-border/80"
         />
         <circle
           cx={size / 2}
@@ -57,16 +66,19 @@ export function ProgressRing({
           strokeLinecap="round"
           stroke="currentColor"
           strokeDasharray={c}
-          strokeDashoffset={c - (pct / 100) * c}
-          className={cn('transition-[stroke-dashoffset] duration-500', TONES[resolvedTone])}
+          strokeDashoffset={c - (shownPct / 100) * c}
+          className={cn(
+            'transition-[stroke-dashoffset] duration-[900ms] ease-soft',
+            TONES[resolvedTone],
+          )}
         />
       </svg>
-      <span className="num-latin absolute text-sm font-bold text-text">{pct}%</span>
+      {center ?? <span className="num-latin absolute text-sm font-bold text-text">{pct}%</span>}
     </div>
   );
 }
 
-/** Linear bar — package cards / table cells (§16.5). */
+/** Linear bar — package cards / table cells (§16.5). The fill slides in with transform only. */
 export function ProgressBar({
   value,
   label,
@@ -77,6 +89,8 @@ export function ProgressBar({
   className?: string;
 }) {
   const pct = Math.max(0, Math.min(100, Math.round(value)));
+  const ready = useMountedFlag();
+  const rest = 100 - (ready ? pct : 0);
   return (
     <div
       role="progressbar"
@@ -84,14 +98,15 @@ export function ProgressBar({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={pct}
-      className={cn('h-2 w-full overflow-hidden rounded-full bg-border', className)}
+      className={cn('h-2 w-full overflow-hidden rounded-full bg-border/80', className)}
     >
       <div
         className={cn(
-          'h-full rounded-full transition-[width] duration-500',
-          pct >= 100 ? 'bg-success' : 'bg-primary',
+          'h-full w-full rounded-full transition-transform duration-700 ease-soft',
+          pct >= 100 ? 'bg-success' : 'bg-primary bg-brand-gradient',
         )}
-        style={{ width: `${pct}%` }}
+        // RTL: the fill is anchored to the right edge, so the unfilled part slides out to the right
+        style={{ transform: `translateX(${document.dir === 'ltr' ? -rest : rest}%)` }}
       />
     </div>
   );

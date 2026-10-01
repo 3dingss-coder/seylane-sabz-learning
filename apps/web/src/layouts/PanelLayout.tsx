@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { LogOut, type LucideIcon } from 'lucide-react';
 import { AppLogo } from '@/components/brand/AppLogo';
+import { Breadcrumb } from '@/components/layout/Breadcrumb';
+import { PageTransition } from '@/components/layout/PageTransition';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
@@ -10,6 +12,8 @@ export interface PanelNavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /** Extra path prefixes that keep this entry highlighted (detail pages). */
+  match?: string[];
 }
 
 /** Manager/Admin web shell (§15.2/§15.3): sidebar on desktop, scrollable tab row on mobile. */
@@ -17,7 +21,7 @@ export function PanelLayout({ title, items }: { title: string; items: PanelNavIt
   const { user, logout } = useAuth();
   return (
     <div className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur">
+      <header className="sticky top-0 z-30 glass border-b border-border">
         <div className="flex h-16 items-center justify-between gap-3 px-4">
           <div className="flex items-center gap-3">
             <AppLogo />
@@ -26,7 +30,13 @@ export function PanelLayout({ title, items }: { title: string; items: PanelNavIt
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="hidden text-end sm:block">
+            <span
+              aria-hidden
+              className="hidden size-9 items-center justify-center rounded-full bg-primary-light text-sm font-extrabold text-primary sm:flex"
+            >
+              {user?.name.trim().charAt(0)}
+            </span>
+            <div className="hidden text-start sm:block">
               <p className="text-sm font-bold text-text">{user?.name}</p>
               <p className="text-xs text-text-secondary">{user ? ROLE_LABEL[user.role] : ''}</p>
             </div>
@@ -52,8 +62,8 @@ export function PanelLayout({ title, items }: { title: string; items: PanelNavIt
               end={to.split('/').length <= 2}
               className={({ isActive }) =>
                 cn(
-                  'flex min-h-11 shrink-0 items-center gap-1.5 rounded-input px-3 text-sm font-bold',
-                  isActive ? 'bg-primary text-white' : 'text-text-secondary',
+                  'pressable flex min-h-11 shrink-0 items-center gap-1.5 rounded-input px-3 text-sm font-bold transition-colors',
+                  isActive ? 'bg-primary text-on-primary' : 'text-text-secondary',
                 )
               }
             >
@@ -63,11 +73,14 @@ export function PanelLayout({ title, items }: { title: string; items: PanelNavIt
           ))}
         </nav>
       </header>
-      <div className="flex">
+      <div className="flex min-h-[calc(100dvh-4rem)]">
         <Sidebar title={title} items={items} />
         <main className="min-w-0 flex-1 px-4 py-5 lg:px-8">
           <div className="mx-auto max-w-6xl">
-            <Outlet />
+            <Breadcrumb title={title} items={items} />
+            <PageTransition>
+              <Outlet />
+            </PageTransition>
           </div>
         </main>
       </div>

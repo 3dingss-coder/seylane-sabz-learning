@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { KeyRound, Phone, UserRound } from 'lucide-react';
+import { BrandBackdrop } from '@/components/brand/BrandBackdrop';
 import { Button, Card, Input } from '@/components/ui';
 import { ApiError, api } from '@/lib/api';
 import { homePathFor, useAuth } from '@/lib/auth';
@@ -98,13 +99,25 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
 
   const title = mode === 'login' ? 'ورود' : mode === 'register' ? 'ثبت‌نام' : 'بازیابی رمز';
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-8">
-      <Card className="w-full max-w-[400px] p-6">
-        <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <img src="/icons/logo-full.png" alt="هلدینگ سیلانه‌سبز" className="h-16 w-auto" />
-          <h1 className="text-xl font-bold text-text">سیلانه‌سبز لرنینگ</h1>
-          <p className="text-sm text-text-secondary">{title}</p>
-        </div>
+    <div className="relative flex min-h-dvh flex-col items-center bg-background px-4 pb-8">
+      {/* brand hero behind the top of the form */}
+      <div className="absolute inset-x-0 top-0 h-72 overflow-hidden rounded-b-[36px] sm:h-80">
+        <BrandBackdrop />
+      </div>
+      <div className="relative mt-10 flex flex-col items-center gap-3 text-center sm:mt-14">
+        <span className="animate-pop rounded-hero bg-white p-3 shadow-lg">
+          <img
+            src="/icons/logo-full.png"
+            alt="هلدینگ سیلانه‌سبز"
+            width={160}
+            height={64}
+            className="h-14 w-auto"
+          />
+        </span>
+        <h1 className="text-2xl font-extrabold text-white">سیلانه‌سبز لرنینگ</h1>
+        <p className="text-sm text-white/85">{title}</p>
+      </div>
+      <Card className="animate-fade-up relative mt-6 w-full max-w-[400px] p-6 shadow-lg">
         <form onSubmit={submit} noValidate className="flex flex-col gap-3" aria-busy={busy}>
           {mode === 'register' && (
             <Input
@@ -182,14 +195,14 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
         </div>
       </Card>
       {mode === 'login' && (
-        <Card className="mt-4 w-full max-w-[400px]">
+        <Card className="animate-fade-up relative mt-4 w-full max-w-[400px] [animation-delay:120ms]">
           <p className="mb-2 text-sm font-bold text-text">ورود سریع آزمایشی</p>
           <div className="grid grid-cols-3 gap-2">
             {DEMO_ACCOUNTS.map((a) => (
               <button
                 key={a.phone}
                 type="button"
-                className="min-h-12 rounded-input border border-border px-2 text-sm text-text hover:border-primary/40"
+                className="pressable min-h-12 rounded-input border border-border px-2 text-sm text-text hover:border-primary/40 hover:bg-primary-light"
                 onClick={() => {
                   setIdentifier(a.phone);
                 }}

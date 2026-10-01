@@ -494,7 +494,7 @@ function PackageSteps({ steps }: { steps: Step[] }) {
             (next.action.to ? (
               <Link
                 to={next.action.to}
-                className="flex min-h-12 shrink-0 items-center justify-center rounded-input bg-primary px-4 text-sm font-bold text-white hover:bg-primary-hover"
+                className="flex min-h-12 shrink-0 items-center justify-center rounded-input bg-primary px-4 text-sm font-bold text-on-primary hover:bg-primary-hover"
               >
                 {next.action.text}
               </Link>

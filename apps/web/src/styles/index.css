@@ -33,6 +33,29 @@
   --color-danger-fg: #b91c1c;
   --color-info-fg: #1d4ed8;
 
+  /* ---- Design refresh: brand scale (600 = brand #177a50, everything derives from it) ---- */
+  --color-primary-50: #f0faf5;
+  --color-primary-100: #dcf2e6;
+  --color-primary-200: #b9e4cf;
+  --color-primary-300: #8ccfb0;
+  --color-primary-400: #4fb088;
+  --color-primary-500: #27946a;
+  --color-primary-600: #177a50;
+  --color-primary-700: #146c45;
+  --color-primary-800: #115638;
+  --color-primary-900: #0e4630;
+  --color-primary-950: #07291c;
+  /* Warm accent (rewards, streaks, medals) — amber, the complement of the brand green */
+  --color-accent: #f59e0b;
+  --color-accent-light: #fef3c7;
+  --color-accent-fg: #92400e;
+  /* text/icon colour ON solid fills (flips in dark mode so contrast stays ≥ 4.5:1) */
+  --color-on-primary: #ffffff;
+  --color-on-danger: #ffffff;
+  --color-scrim: rgb(15 23 42 / 0.5);
+  /* second surface level: inset wells, table headers, hovered rows */
+  --color-surface-2: #f1f5f9;
+
   /* §16.3 Typography — Vazirmatn self-hosted; system fallback if font fails to load */
   --font-sans:
     'Vazirmatn Variable', Vazirmatn, Tahoma, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -46,16 +69,195 @@
   --text-xl: 1.25rem;
   --text-2xl: 1.5rem;
   --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
 
   /* §16.4 Radius: 8 input / 12 card / 16 modal */
   --radius-input: 8px;
   --radius-card: 12px;
   --radius-modal: 16px;
+  --radius-hero: 20px;
 
-  /* §16.4 Shadow: sm / md / lg (soft) */
-  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05);
-  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08);
-  --shadow-lg: 0 12px 32px -8px rgb(15 23 42 / 0.16);
+  /* §16.4 Shadow: sm / md / lg (soft) — layered so elevation reads as depth, not as a dark halo */
+  --shadow-xs: 0 1px 1px rgb(15 23 42 / 0.04);
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 1px rgb(15 23 42 / 0.03);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
+  --shadow-lg: 0 12px 32px -8px rgb(15 23 42 / 0.16), 0 4px 8px -4px rgb(15 23 42 / 0.06);
+  --shadow-brand: 0 8px 20px -6px rgb(23 122 80 / 0.45);
+  --shadow-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.18);
+
+  /* ---- Motion tokens: 120–300ms for interaction, ≤ 600ms for page entry; only transform/opacity ---- */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 320ms;
+  --duration-enter: 480ms;
+
+  --animate-fade-in: fade-in var(--duration-base) var(--ease-soft) both;
+  --animate-fade-up: fade-up var(--duration-enter) var(--ease-soft) both;
+  --animate-fade-down: fade-down var(--duration-slow) var(--ease-soft) both;
+  --animate-scale-in: scale-in var(--duration-slow) var(--ease-soft) both;
+  --animate-sheet-in: sheet-in var(--duration-slow) var(--ease-soft) both;
+  --animate-toast-in: toast-in var(--duration-slow) var(--ease-spring) both;
+  --animate-slide-in-start: slide-in-start var(--duration-slow) var(--ease-soft) both;
+  --animate-slide-in-end: slide-in-end var(--duration-slow) var(--ease-soft) both;
+  --animate-fade-out: fade-out 160ms ease-in both;
+  --animate-scale-out: scale-out 160ms ease-in both;
+  --animate-sheet-out: sheet-out 200ms ease-in both;
+  --animate-toast-out: toast-out 180ms ease-in both;
+  --animate-pop: pop 420ms var(--ease-spring) both;
+  --animate-shake: shake 360ms var(--ease-soft) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-pulse-dot: pulse-dot 1.6s var(--ease-soft) 1;
+  --animate-blink: blink 1.2s ease-in-out infinite;
+  --animate-check: check-draw 420ms var(--ease-soft) 120ms both;
+  --animate-confetti: confetti-fall 1.8s var(--ease-soft) both;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes scale-out {
+    to {
+      opacity: 0;
+      transform: scale(0.97) translateY(6px);
+    }
+  }
+  @keyframes sheet-out {
+    to {
+      opacity: 0;
+      transform: translateY(48px);
+    }
+  }
+  @keyframes toast-out {
+    to {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.97);
+    }
+  }
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+  @keyframes fade-down {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(8px);
+    }
+  }
+  @keyframes sheet-in {
+    from {
+      opacity: 0.6;
+      transform: translateY(40px);
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(-16px) scale(0.96);
+    }
+  }
+  @keyframes slide-in-start {
+    from {
+      opacity: 0;
+      transform: translateX(24px);
+    }
+  }
+  @keyframes slide-in-end {
+    from {
+      opacity: 0;
+      transform: translateX(-24px);
+    }
+  }
+  @keyframes pop {
+    0% {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes shake {
+    20%,
+    60% {
+      transform: translateX(-5px);
+    }
+    40%,
+    80% {
+      transform: translateX(5px);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes float {
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+  @keyframes pulse-dot {
+    0% {
+      opacity: 0.4;
+      transform: scale(1);
+    }
+    70%,
+    100% {
+      opacity: 0;
+      transform: scale(1.8);
+    }
+  }
+  @keyframes blink {
+    0%,
+    80%,
+    100% {
+      opacity: 0.25;
+      transform: translateY(0);
+    }
+    40% {
+      opacity: 1;
+      transform: translateY(-3px);
+    }
+  }
+  @keyframes check-draw {
+    from {
+      stroke-dashoffset: 24;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes confetti-fall {
+    0% {
+      opacity: 1;
+      transform: translate3d(0, -10px, 0) rotate(0deg);
+    }
+    100% {
+      opacity: 0;
+      transform: translate3d(var(--dx, 0px), var(--dy, 240px), 0) rotate(var(--rot, 540deg));
+    }
+  }
 
   /* touch target (§16.8) */
   --spacing-touch: 48px;
@@ -65,14 +267,60 @@
   --breakpoint-xl: 1280px;
 }
 
+/* ---- Dark mode: same token names, re-mapped. Opt-in by the OS (prefers-color-scheme). ----
+   Contrast checked: text/surface 14:1, text-secondary/surface 7.6:1, primary(text)/surface 7.9:1,
+   on-primary/primary 8.3:1, each *-fg on its *-light ≥ 7:1. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-primary: #3ecf8e;
+    --color-primary-hover: #66dba6;
+    --color-primary-light: #12291f;
+    --color-on-primary: #04241a;
+    --color-on-danger: #2a0606;
+    --color-info: #60a5fa;
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+    --color-text: #e8f1ec;
+    --color-text-secondary: #a9bcb2;
+    --color-muted: #6f8479;
+    --color-muted-fg: #94a89e;
+    --color-border: #263730;
+    --color-background: #0a130f;
+    --color-surface: #111c17;
+    --color-surface-2: #182721;
+    --color-success-light: #0f2a1a;
+    --color-warning-light: #33250a;
+    --color-danger-light: #3a1616;
+    --color-info-light: #12254a;
+    --color-success-fg: #86efac;
+    --color-warning-fg: #fcd34d;
+    --color-danger-fg: #fca5a5;
+    --color-info-fg: #93c5fd;
+    --color-accent: #fbbf24;
+    --color-accent-light: #33250a;
+    --color-accent-fg: #fcd34d;
+    --color-scrim: rgb(2 8 5 / 0.62);
+    --shadow-xs: 0 1px 1px rgb(0 0 0 / 0.3);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+    --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 16px 36px -8px rgb(0 0 0 / 0.65);
+    --shadow-brand: 0 8px 20px -6px rgb(62 207 142 / 0.35);
+    --shadow-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.08);
+  }
+}
+
 @layer base {
   html {
     font-family: var(--font-sans);
     line-height: 1.8;
     color: var(--color-text);
     background-color: var(--color-background);
+    color-scheme: light dark;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
   }
   body {
     min-height: 100vh;
@@ -88,6 +336,13 @@
     padding-right: env(safe-area-inset-right, 0px);
     -webkit-tap-highlight-color: transparent;
   }
+  /* Persian headings: heavier weight, never negative letter-spacing (breaks letter joining) */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: 0;
+    text-wrap: balance;
+  }
   /* §16.6 Focus ring 2px info */
   :focus-visible {
     outline: 2px solid var(--color-info);
@@ -98,6 +353,10 @@
   select,
   textarea {
     font: inherit;
+  }
+  ::selection {
+    background: var(--color-primary-light);
+    color: var(--color-text);
   }
 }
 
@@ -131,6 +390,149 @@
     max-height: 100vh;
     max-height: 100dvh;
   }
+
+  /* ---- Surfaces ---- */
+  /* frosted glass: header, bottom-nav, toast chrome.
+     Mobile = translucent fill only: backdrop-filter re-blurs on every frame while the page
+     scrolls/animates beneath it and cost us >1s of main-thread time on throttled phones
+     (Lighthouse perf 97 -> 70). The real blur is enabled from the desktop breakpoint up. */
+  .glass {
+    background-color: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  }
+  @media (min-width: 1024px) and (hover: hover) {
+    .glass {
+      background-color: color-mix(in srgb, var(--color-surface) 78%, transparent);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+    }
+  }
+  /* brand hero: deep green gradient + faint light bloom (text on it is white ≥ 7:1) */
+  .bg-hero {
+    background-color: var(--color-primary-800);
+    background-image:
+      radial-gradient(120% 90% at 100% 0%, rgb(79 176 136 / 0.45) 0%, transparent 55%),
+      radial-gradient(90% 80% at 0% 100%, rgb(245 158 11 / 0.08) 0%, transparent 60%),
+      linear-gradient(135deg, var(--color-primary-700), var(--color-primary-900));
+    color: #fff;
+  }
+  /* primary button fill: subtle vertical gradient, same brand hue */
+  .bg-brand-gradient {
+    background-image: linear-gradient(
+      180deg,
+      var(--color-primary) 0%,
+      var(--color-primary-hover) 100%
+    );
+  }
+  /* minimal dot texture for heroes / empty states */
+  .bg-dots {
+    background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+    background-size: 14px 14px;
+  }
+  .bg-soft-brand {
+    background-image: linear-gradient(
+      160deg,
+      var(--color-primary-light) 0%,
+      color-mix(in srgb, var(--color-primary-light) 40%, var(--color-surface)) 100%
+    );
+  }
+
+  /* ---- Motion helpers ---- */
+  .page-enter {
+    animation: fade-in 220ms var(--ease-soft) both;
+  }
+  /* children fade up in sequence: give the parent `stagger` (max 12 steps, 50ms apart) */
+  .stagger > * {
+    animation: fade-up var(--duration-enter) var(--ease-soft) both;
+    animation-delay: calc(var(--i, 0) * 50ms);
+  }
+  .stagger > *:nth-child(1) {
+    --i: 0;
+  }
+  .stagger > *:nth-child(2) {
+    --i: 1;
+  }
+  .stagger > *:nth-child(3) {
+    --i: 2;
+  }
+  .stagger > *:nth-child(4) {
+    --i: 3;
+  }
+  .stagger > *:nth-child(5) {
+    --i: 4;
+  }
+  .stagger > *:nth-child(6) {
+    --i: 5;
+  }
+  .stagger > *:nth-child(7) {
+    --i: 6;
+  }
+  .stagger > *:nth-child(8) {
+    --i: 7;
+  }
+  .stagger > *:nth-child(9) {
+    --i: 8;
+  }
+  .stagger > *:nth-child(10) {
+    --i: 9;
+  }
+  .stagger > *:nth-child(11) {
+    --i: 10;
+  }
+  .stagger > *:nth-child(n + 12) {
+    --i: 11;
+  }
+  /* press feedback for anything tappable */
+  .pressable {
+    transition:
+      transform var(--duration-fast) var(--ease-soft),
+      box-shadow var(--duration-base) var(--ease-soft),
+      background-color var(--duration-fast) linear,
+      border-color var(--duration-fast) linear;
+  }
+  .pressable:active {
+    transform: scale(0.98);
+  }
+  /* shimmer skeleton: a moving highlight (transform only) over the base tone */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--color-border);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--color-surface) 65%, transparent),
+      transparent
+    );
+    animation: shimmer 1.6s linear infinite;
+  }
+  [dir='rtl'] .skeleton::after {
+    animation-direction: reverse;
+  }
+}
+
+/* Cold-load calm (see lib/motion.ts): until the first interaction sets <html data-motion>, entry
+   and attention animations are off, so first paint shows final content without extra raster work.
+   Unlayered on purpose: it must beat the `animate-*` utilities. */
+html:not([data-motion])
+  :is(
+    .page-enter,
+    .stagger > *,
+    .animate-fade-up,
+    .animate-fade-in,
+    .animate-fade-down,
+    .animate-scale-in,
+    .animate-slide-in-start,
+    .animate-slide-in-end,
+    .animate-pop,
+    .animate-pulse-dot,
+    .animate-float
+  ) {
+  animation: none;
 }
 
 /* iOS Safari zooms the whole page when a focused field is < 16px (layout jumps sideways).
@@ -143,11 +545,16 @@
   }
 }
 
+/* Reduced motion: no movement, no looping; entrance animations collapse to their end state
+   instantly so content is never hidden or delayed. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

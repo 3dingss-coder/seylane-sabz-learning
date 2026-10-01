@@ -26,7 +26,10 @@ function read<T>(key: string): Entry<T> | null {
 
 function write<T>(key: string, uid: string, data: T) {
   try {
-    localStorage.setItem(key, JSON.stringify({ uid, savedAt: Date.now(), data } satisfies Entry<T>));
+    localStorage.setItem(
+      key,
+      JSON.stringify({ uid, savedAt: Date.now(), data } satisfies Entry<T>),
+    );
   } catch {
     /* quota / private mode — the cache is best-effort */
   }
@@ -50,7 +53,8 @@ export const lastKnown = {
   },
   clear() {
     try {
-      for (const k of Object.keys(localStorage)) if (k.startsWith(PREFIX)) localStorage.removeItem(k);
+      for (const k of Object.keys(localStorage))
+        if (k.startsWith(PREFIX)) localStorage.removeItem(k);
     } catch {
       /* ignore */
     }

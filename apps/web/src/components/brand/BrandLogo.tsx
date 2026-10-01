@@ -22,7 +22,7 @@ export function BrandLogo({ name, logoUrl, size = 'md', className }: BrandLogoPr
   return (
     <span
       className={cn(
-        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-card border border-border bg-surface p-1.5',
+        'inline-flex shrink-0 items-center justify-center overflow-hidden rounded-card border border-border bg-white p-1.5',
         SIZES[size],
         className,
       )}

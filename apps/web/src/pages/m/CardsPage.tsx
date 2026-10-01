@@ -9,7 +9,7 @@ import {
   Star,
   type LucideIcon,
 } from 'lucide-react';
-import { Card, EmptyState, Skeleton } from '@/components/ui';
+import { Card, CountUp, EmptyState, Skeleton } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
@@ -49,12 +49,18 @@ export function CardsPage() {
       <PageHeader title="امتیاز و نشان‌ها" />
       <QueryState query={points} loading={<Skeleton className="h-24 w-full" />}>
         {(p) => (
-          <Card tone="brand" className="flex items-center gap-4">
-            <Award className="size-10 text-primary" aria-hidden />
-            <div>
-              <p className="text-sm text-text-secondary">امتیاز کل</p>
-              <p className="text-3xl font-bold text-text" data-testid="points-balance">
-                {faNumber(p.balance)}
+          <Card tone="hero" className="relative flex items-center gap-4 overflow-hidden p-5">
+            <div
+              aria-hidden
+              className="bg-dots pointer-events-none absolute inset-0 text-white/10 [mask-image:radial-gradient(70%_80%_at_100%_0%,#000,transparent)]"
+            />
+            <span className="animate-pop relative flex size-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg shadow-md [box-shadow:0_0_0_6px_rgb(255_255_255/0.12)]">
+              <Award className="size-9" aria-hidden />
+            </span>
+            <div className="relative">
+              <p className="text-sm text-white/85">امتیاز کل</p>
+              <p className="text-4xl font-extrabold text-white" data-testid="points-balance">
+                <CountUp value={p.balance} format={faNumber} />
               </p>
             </div>
           </Card>
@@ -66,7 +72,7 @@ export function CardsPage() {
         </h2>
         <QueryState query={badges} loading={<Skeleton className="h-32 w-full" />}>
           {(list) => (
-            <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <ul className="stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               {list.map((b) => {
                 const Icon = ICONS[b.icon] ?? Medal;
                 return (
@@ -74,15 +80,17 @@ export function CardsPage() {
                     <Card
                       className={cn(
                         'flex h-full flex-col items-center gap-2 text-center',
-                        !b.earned && 'opacity-60',
+                        b.earned
+                          ? 'border-accent/40 shadow-md'
+                          : 'border-dashed bg-transparent shadow-none',
                       )}
                     >
                       <span
                         className={cn(
                           'flex size-14 items-center justify-center rounded-full',
                           b.earned
-                            ? 'bg-primary-light text-primary'
-                            : 'bg-background text-muted-fg',
+                            ? 'bg-accent-light text-accent-fg [box-shadow:0_0_0_5px_color-mix(in_srgb,var(--color-accent)_18%,transparent)]'
+                            : 'bg-surface-2 text-muted-fg opacity-80',
                         )}
                       >
                         {b.earned ? (
@@ -118,7 +126,7 @@ export function CardsPage() {
           }
         >
           {(p) => (
-            <ul className="divide-y divide-border rounded-card border border-border bg-surface">
+            <ul className="stagger divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-sm">
               {p.ledger.map((l) => (
                 <li key={l.id} className="flex items-center justify-between p-3 text-sm">
                   <div>

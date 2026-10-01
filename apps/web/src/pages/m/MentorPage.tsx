@@ -22,7 +22,7 @@ export function MentorPage() {
         <Link
           key={n.id}
           to={n.actionRef ?? '/'}
-          className="mb-2 flex items-start gap-2 rounded-card border border-info/30 bg-info-light p-3 text-sm text-text"
+          className="pressable mb-2 flex items-start gap-2 rounded-card border border-info/30 bg-info-light p-3 text-sm text-text"
         >
           <Sparkles className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
           {n.message}

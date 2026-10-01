@@ -29,7 +29,12 @@ import { AdminUserDetail, UsersPage } from './UsersPage';
 
 const NAV = [
   { to: '/admin', label: 'داشبورد', icon: LayoutDashboard },
-  { to: '/admin/content', label: 'محتوای آموزشی', icon: FolderTree },
+  {
+    to: '/admin/content',
+    label: 'محتوای آموزشی',
+    icon: FolderTree,
+    match: ['/admin/packages', '/admin/quizzes'],
+  },
   { to: '/admin/assignments', label: 'مسیرها و مخاطبان', icon: Share2 },
   { to: '/admin/users', label: 'کاربران', icon: Users },
   { to: '/admin/teams', label: 'تیم‌ها', icon: UsersRound },
