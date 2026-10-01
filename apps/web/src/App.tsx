@@ -34,7 +34,9 @@ function NativeBridge() {
   const { status, user } = useAuth();
   const nav = useNavigate();
   const uid = user?.id ?? null;
-  useEffect(() => setCrashUser(uid), [uid]);
+  useEffect(() => {
+    setCrashUser(uid);
+  }, [uid]);
   useEffect(() => {
     if (status !== 'authenticated') return;
     track('app_opened', { native: isNative() });

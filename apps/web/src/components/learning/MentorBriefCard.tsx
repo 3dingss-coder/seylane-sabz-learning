@@ -38,12 +38,12 @@ export function MentorBriefCard({ packageId = null }: { packageId?: string | nul
         <Skeleton className="h-20 w-full" />
       </div>
     );
-  if (!brief.data) return null;
+  if (!brief.data?.state) return null;
 
   const b = brief.data;
   const meta = MOMENTUM[b.state.momentum] ?? MOMENTUM.on_track;
   const Icon = meta.icon;
-  const top = b.interventions.slice(0, 2);
+  const top = (b.interventions ?? []).slice(0, 2);
 
   return (
     <section
