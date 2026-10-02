@@ -5,6 +5,8 @@ import { cosine } from '../ai/local';
 import { tokenize } from './mentor';
 import {
   KNOWLEDGE_COLLECTION,
+  KNOWLEDGE_DIRTY,
+  KNOWLEDGE_META,
   rebuildKnowledgeIndex,
   type KnowledgeItem,
   type KnowledgeKind,
@@ -148,6 +150,31 @@ export function expandQuery(query: string): string[] {
   return [...out].filter((t) => t.length >= 2 && !STOP.has(t));
 }
 
+/** Damerau–Levenshtein ≤ 1 (substitution, insertion, deletion, adjacent swap): «کلامین» ≈ «کالمین». */
+export function withinOneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0;
+  while (i < la && i < lb && a[i] === b[i]) i++;
+  if (la === lb) {
+    if (a.slice(i + 1) === b.slice(i + 1)) return true; // one substitution
+    return a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2); // swap
+  }
+  return la > lb ? a.slice(i + 1) === b.slice(i) : b.slice(i + 1) === a.slice(i);
+}
+
+/** Adds the known brand/product/package vocabulary words that a (mis)spelled query word is one edit from. */
+export function fuzzyExpand(tokens: string[], vocab: Set<string>): string[] {
+  const out = new Set(tokens);
+  for (const t of tokens) {
+    if (t.length < 4 || vocab.has(t)) continue;
+    for (const v of vocab) if (v.length >= 4 && withinOneEdit(t, v)) out.add(v);
+  }
+  return [...out];
+}
+
 const indexCache = new WeakMap<Deps, { at: number; items: KnowledgeItem[] }>();
 
 /**
@@ -179,10 +206,40 @@ async function bootstrapIndex(d: Deps): Promise<void> {
   return state.running;
 }
 
+/** Re-index when an admin edit happened after the last build. Single-flight, 20 s cooldown. */
+const refreshState = new WeakMap<Deps, { at: number; running: Promise<void> | null }>();
+const REFRESH_COOLDOWN_MS = 20_000;
+
+async function refreshIfDirty(d: Deps): Promise<void> {
+  const state = refreshState.get(d) ?? { at: 0, running: null };
+  refreshState.set(d, state);
+  if (state.running) return state.running;
+  const now = d.clock().getTime();
+  if (now - state.at < REFRESH_COOLDOWN_MS) return;
+  const [dirty, meta] = await Promise.all([
+    d.store.get<{ at: string }>(KNOWLEDGE_DIRTY),
+    d.store.get<{ builtAt?: string }>(KNOWLEDGE_META),
+  ]);
+  if (!dirty?.at || (meta?.builtAt && meta.builtAt >= dirty.at)) return;
+  state.at = now;
+  state.running = rebuildKnowledgeIndex(d)
+    .then(() => {
+      indexCache.delete(d);
+    })
+    .catch((e: unknown) => {
+      console.warn('[retrieval] dirty re-index failed', (e as Error).message);
+    })
+    .finally(() => {
+      state.running = null;
+    });
+  return state.running;
+}
+
 export async function loadIndex(d: Deps, maxAgeMs = 60_000): Promise<KnowledgeItem[]> {
   const cached = indexCache.get(d);
   const now = d.clock().getTime();
   if (cached && now - cached.at < maxAgeMs) return cached.items;
+  await refreshIfDirty(d);
   const items = await d.store.query<KnowledgeItem>({ collection: KNOWLEDGE_COLLECTION });
   let live = items.filter((i) => !i.archived);
   if (!live.length && !items.length) {
@@ -288,8 +345,12 @@ export async function searchKnowledge(
   const started = Date.now();
   const k = Math.max(1, Math.min(opts.k ?? 5, 12));
   const scope = opts.scope ?? GLOBAL_SCOPE;
-  const queryTokens = expandQuery(opts.query);
   const all = await loadIndex(d);
+  const vocab = new Set<string>();
+  for (const i of all)
+    if (i.kind === 'brand' || i.kind === 'package' || i.kind === 'product')
+      for (const t of tokenize(`${i.title} ${i.keywords.join(' ')}`)) vocab.add(t);
+  const queryTokens = fuzzyExpand(expandQuery(opts.query), vocab);
   const items = all.filter((i) => visibleUnder(i, scope));
   if (!items.length || !queryTokens.length)
     return { chunks: [], strategy: 'keyword-only', confident: false, tookMs: Date.now() - started };

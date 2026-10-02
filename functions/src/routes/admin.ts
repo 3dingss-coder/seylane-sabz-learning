@@ -26,6 +26,14 @@ const id = (req: { params: Record<string, string | undefined> }, k = 'id') =>
 export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   const r = Router();
   r.use('/admin', requireRole('admin', 'superadmin'));
+  // Anything an admin changes may be something the mentor teaches from: flag the index as stale so
+  // the next mentor question re-indexes it (incremental — unchanged items cost nothing).
+  r.use('/admin', (req, _res, next) => {
+    const write =
+      req.method !== 'GET' && !/^\/admin\/(jobs|mentor|knowledge\/reindex)/.test(req.path ?? '');
+    if (!write) return next();
+    void knowledge.markKnowledgeDirty(d).finally(() => next());
+  });
 
   r.get(
     '/admin/dashboard',
@@ -196,7 +204,12 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   );
   r.post(
     '/admin/packages/:id/publish',
-    h(async (req) => content.publishPackage(d, actorOf(req), id(req))),
+    h(async (req) =>
+      content.publishPackage(d, actorOf(req), id(req), {
+        // Default: visible to all marketers. Send { "audience": "none" } to publish without an audience.
+        defaultAudience: (req.body as { audience?: string } | undefined)?.audience !== 'none',
+      }),
+    ),
   );
   r.post(
     '/admin/packages/:id/unpublish',
@@ -208,7 +221,7 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   );
   r.post(
     '/admin/packages/:id/unarchive',
-    h(async (req) => content.unarchivePackage(d, actorOf(req), id(req))),
+    h(async (req) => content.unarchivePackage(d, actorOf(req), id(req), { defaultAudience: true })),
   );
   r.post(
     '/admin/packages/:id/sections',
