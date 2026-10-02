@@ -357,13 +357,14 @@ export async function answerQuestion(
     const error = e instanceof AllProvidersFailed ? 'all-providers-failed' : (e as Error).message;
     console.warn('[mentor-ai] answer failed', error);
     reply = extractiveReply(packet);
-    if (persist)
-      await saveMessage(d, user, 'assistant', reply, {
-        outcome: 'fallback',
-        sources,
-        mode,
-        provider: 'fallback',
-      });
+    const fallbackId = persist
+      ? await saveMessage(d, user, 'assistant', reply, {
+          outcome: 'fallback',
+          sources,
+          mode,
+          provider: 'fallback',
+        })
+      : undefined;
     await track(d, 'mentor_ai_answer', user.id, { outcome: 'fallback', error, mode });
     return {
       reply,
@@ -372,6 +373,7 @@ export async function answerQuestion(
       provider: 'fallback',
       latencyMs: Date.now() - started,
       cited: [],
+      messageId: fallbackId,
       nextAction,
     };
   }
@@ -381,13 +383,14 @@ export async function answerQuestion(
   let finalText = guard.ok ? guard.text : '';
   if (!finalText || guard.unknown) {
     reply = guard.unknown ? unknownWithHint(sources) : extractiveReply(packet);
-    if (persist)
-      await saveMessage(d, user, 'assistant', reply, {
-        outcome: guard.unknown ? 'unknown' : 'fallback',
-        sources,
-        mode,
-        provider,
-      });
+    const guardedId = persist
+      ? await saveMessage(d, user, 'assistant', reply, {
+          outcome: guard.unknown ? 'unknown' : 'fallback',
+          sources,
+          mode,
+          provider,
+        })
+      : undefined;
     return {
       reply,
       sources: guard.unknown ? [] : sources,
@@ -395,6 +398,7 @@ export async function answerQuestion(
       provider,
       latencyMs: Date.now() - started,
       cited: [],
+      messageId: guardedId,
       nextAction,
     };
   }
