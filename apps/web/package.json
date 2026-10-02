@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "sync-assets": "node scripts/sync-assets.mjs",
-    "predev": "node scripts/prepare-ffmpeg.mjs",
+    "predev": "npm run sync-assets && node scripts/prepare-ffmpeg.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/prepare-ffmpeg.mjs",
+    "prebuild": "npm run sync-assets && node scripts/prepare-ffmpeg.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
