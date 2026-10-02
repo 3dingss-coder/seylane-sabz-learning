@@ -58,7 +58,11 @@ class ScriptedProvider implements AiProvider {
   calls = { chat: 0, transcribe: 0, synthesize: 0, embed: 0, vision: 0 };
 
   constructor(
-    private readonly opts: { reply?: (req: ChatRequest) => string; transcript?: string } = {},
+    private readonly opts: {
+      reply?: (req: ChatRequest) => string;
+      transcript?: string;
+      failChat?: boolean;
+    } = {},
   ) {}
 
   supports(task: AiTask): boolean {
@@ -88,6 +92,7 @@ class ScriptedProvider implements AiProvider {
 
   chat(req: ChatRequest): Promise<ChatResult> {
     this.calls.chat++;
+    if (this.opts.failChat) return Promise.reject(new Error('provider down'));
     const text = this.opts.reply
       ? this.opts.reply(req)
       : 'طبق آموزش، این کرم برای پوست خشک و حساس مناسب است [۱].';
@@ -310,15 +315,39 @@ describe('grounded answers', () => {
     expect(r.reply).toContain('[۱]');
   });
 
-  it('answers «نمی‌دانم» without calling any model when retrieval is weak', async () => {
-    const provider = new ScriptedProvider();
+  it('never invents facts when retrieval is weak (honest, natural "I do not have that")', async () => {
+    // The model is allowed to speak, but a numeric claim with no source must be dropped.
+    const provider = new ScriptedProvider({ reply: () => 'فردا دلار ۹۹۹ تومان می‌شود.' });
     const { ctx, marketer } = await setup(provider);
     await rebuildKnowledgeIndex(ctx.deps);
     const user = await loadUser(ctx, marketer.id);
     const r = await answerQuestion(ctx.deps, user, { question: 'قیمت دلار فردا چقدر می‌شود؟' });
     expect(r.outcome).toBe('unknown');
     expect(r.reply).toContain('نمی‌دانم');
-    expect(provider.calls.chat).toBe(0);
+    expect(r.reply).not.toContain('۹۹۹');
+    expect(r.sources).toEqual([]);
+  });
+
+  it('answers a greeting like a person, not with «نمی‌دانم»', async () => {
+    const provider = new ScriptedProvider({ reply: () => 'سلام! چه خبر؟ امروز چی تو ذهنته؟' });
+    const { ctx, marketer } = await setup(provider);
+    await rebuildKnowledgeIndex(ctx.deps);
+    const user = await loadUser(ctx, marketer.id);
+    const r = await answerQuestion(ctx.deps, user, { question: 'سلام' });
+    expect(r.outcome).toBe('answered');
+    expect(r.reply).not.toContain('نمی‌دانم');
+    expect(r.reply).toContain('سلام');
+    expect(provider.calls.chat).toBe(1);
+  });
+
+  it('still greets naturally when no model is reachable', async () => {
+    const { ctx, marketer } = await setup(new ScriptedProvider({ failChat: true }));
+    await rebuildKnowledgeIndex(ctx.deps);
+    const user = await loadUser(ctx, marketer.id);
+    const r = await answerQuestion(ctx.deps, user, { question: 'سلام' });
+    expect(r.outcome).toBe('answered');
+    expect(r.reply).not.toContain('نمی‌دانم');
+    expect(r.reply.length).toBeGreaterThan(5);
   });
 
   it('blocks prompt injection before retrieval', async () => {
