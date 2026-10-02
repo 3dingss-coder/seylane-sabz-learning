@@ -307,18 +307,22 @@ describe('grounded answers', () => {
     });
     expect(r.outcome).toBe('answered');
     expect(r.sources.length).toBeGreaterThan(0);
-    expect(r.reply).toContain('[۱]');
+    // The citation marker proves grounding (r.cited) but is not shown to the learner.
+    expect(r.cited.length).toBeGreaterThan(0);
+    expect(r.reply).not.toMatch(/\[[\d۰-۹]+\]/);
   });
 
-  it('answers «نمی‌دانم» without calling any model when retrieval is weak', async () => {
+  it('says it does not have the answer, naturally, when retrieval is weak', async () => {
     const provider = new ScriptedProvider();
     const { ctx, marketer } = await setup(provider);
     await rebuildKnowledgeIndex(ctx.deps);
     const user = await loadUser(ctx, marketer.id);
     const r = await answerQuestion(ctx.deps, user, { question: 'قیمت دلار فردا چقدر می‌شود؟' });
     expect(r.outcome).toBe('unknown');
-    expect(r.reply).toContain('نمی‌دانم');
-    expect(provider.calls.chat).toBe(0);
+    expect(r.sources).toEqual([]);
+    // Never the model's text for a question the knowledge base cannot answer.
+    expect(r.reply).not.toContain('طبق آموزش');
+    expect(r.reply).toMatch(/آموزش|مدیر/);
   });
 
   it('blocks prompt injection before retrieval', async () => {
@@ -377,6 +381,87 @@ describe('grounded answers', () => {
     });
     expect(reply).toMatch(/^طبق محتوای آموزش: /);
     expect(reply).toContain('پوست خشک و حساس');
+  });
+});
+
+describe('natural conversation', () => {
+  const askWith = async (
+    text: string,
+    reply: (req: ChatRequest) => string,
+    prior?: Array<{ role: 'user' | 'assistant'; text: string }>,
+  ) => {
+    const provider = new ScriptedProvider({ reply });
+    const { ctx, marketer } = await setup(provider);
+    await rebuildKnowledgeIndex(ctx.deps);
+    const user = await loadUser(ctx, marketer.id);
+    const seen: ChatRequest[] = [];
+    const spy = new ScriptedProvider({
+      reply: (req) => {
+        seen.push(req);
+        return reply(req);
+      },
+    });
+    const setup2 = await setup(spy);
+    await rebuildKnowledgeIndex(setup2.ctx.deps);
+    const user2 = await loadUser(setup2.ctx, setup2.marketer.id);
+    void provider;
+    void user;
+    const r = await answerQuestion(setup2.ctx.deps, user2, { question: text, history: prior });
+    return { r, seen, user: user2 };
+  };
+
+  it('answers a greeting like a person, without sources or a canned refusal', async () => {
+    const { r, seen, user } = await askWith('سلام', () => 'سلام! چه خبر؟ امروز چطوری؟');
+    expect(r.outcome).toBe('answered');
+    expect(r.sources).toEqual([]);
+    expect(r.reply).toBe('سلام! چه خبر؟ امروز چطوری؟');
+    expect(r.reply).not.toContain('نمی‌دانم');
+    // The model is told who it is talking to and that this is the first message.
+    const system = seen[0]?.system ?? '';
+    expect(system).toContain(user.name.split(' ')[0] ?? 'x');
+    expect(system).toContain('اولین پیام');
+  });
+
+  it('keeps the conversation going: no second hello, previous turns are passed along', async () => {
+    const { r, seen } = await askWith('ممنون', () => 'خواهش می‌کنم! کار دیگه‌ای هست؟', [
+      { role: 'user', text: 'سلام' },
+      { role: 'assistant', text: 'سلام! چه خبر؟' },
+    ]);
+    expect(r.outcome).toBe('answered');
+    expect(seen[0]?.system).toContain('دوباره سلام نکن');
+    expect(seen[0]?.messages?.map((m) => m.content)).toEqual(['سلام', 'سلام! چه خبر؟']);
+    expect(seen[0]?.messages?.[0]?.role).toBe('user');
+  });
+
+  it('never lets small talk invent numbers or percentages', async () => {
+    const { r } = await askWith('سلام', () => 'سلام! امروز ۹۹٪ پیشرفت کردی. چطوری؟');
+    expect(r.reply).not.toContain('۹۹');
+    expect(r.reply.length).toBeGreaterThan(0);
+  });
+
+  it('still greets warmly when no AI provider is reachable', async () => {
+    const failing = new ScriptedProvider({
+      reply: () => {
+        throw new Error('provider down');
+      },
+    });
+    const { ctx, marketer } = await setup(failing);
+    const user = await loadUser(ctx, marketer.id);
+    const r = await answerQuestion(ctx.deps, user, { question: 'سلام' });
+    expect(r.outcome).toBe('answered');
+    expect(r.provider).toBe('fallback-social');
+    expect(r.reply).not.toContain('نمی‌دانم');
+    expect(r.reply.length).toBeGreaterThan(8);
+  });
+
+  it('a product question after small talk is still grounded in sources', async () => {
+    const { r } = await askWith(
+      'این کرم برای چه پوستی مناسب است؟',
+      () => 'برای پوست خشک و حساس مناسبه [۱].',
+    );
+    expect(r.outcome).toBe('answered');
+    expect(r.cited.length).toBeGreaterThan(0);
+    expect(r.reply).toBe('برای پوست خشک و حساس مناسبه.');
   });
 });
 

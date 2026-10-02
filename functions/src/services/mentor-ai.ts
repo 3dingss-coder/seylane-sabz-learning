@@ -21,11 +21,24 @@ import {
   scrubPii,
 } from './mentor';
 import { GLOBAL_SCOPE, searchKnowledge, scopeForUser, type RetrievedChunk } from './retrieval';
+import type { KnowledgeKind } from './knowledge';
 import { getPolicy, track, type Deps } from './context';
 import type { ChatMessage, User } from '../domain/types';
 import type { Doc } from '../store/types';
 import { DAY, dayKey } from '../lib/time';
 import { evaluateBehavior } from './behavior';
+import {
+  PART_FA,
+  checkChatOutput,
+  classifySocial,
+  dropUnsupportedSentences,
+  firstName,
+  looksUnknown,
+  naturalUnknown,
+  partOfDay,
+  socialFallback,
+  type SocialKind,
+} from './mentor-persona';
 
 /**
  * Grounded mentor pipeline (the "answer" stage of the AI chain).
@@ -84,6 +97,16 @@ export const groundSchema = z.object({
 });
 
 const MAX_SOURCES = 4;
+const ANSWER_KINDS: KnowledgeKind[] = [
+  'brand',
+  'product',
+  'package',
+  'section',
+  'policy',
+  'play',
+  'faq',
+  'media',
+];
 
 function toFact(chunk: RetrievedChunk): GroundingFact {
   const item = chunk.item;
@@ -195,7 +218,9 @@ export async function buildGrounding(
     : baseScope;
   const result = await searchKnowledge(d, {
     query: opts.query,
-    scope: scope.packageIds ? scope : GLOBAL_SCOPE,
+    // Quiz stems and options are assessment material, not knowledge: quoting them back as an
+    // "answer" confuses learners and leaks quiz content, so they never ground a reply.
+    scope: { ...(scope.packageIds ? scope : GLOBAL_SCOPE), kinds: ANSWER_KINDS },
     k: opts.k ?? MAX_SOURCES,
   });
   const facts = result.chunks.map(toFact);
@@ -247,27 +272,130 @@ export async function answerQuestion(
     };
   }
 
+  const name = firstName(user.name);
+  const part = partOfDay(d.clock());
+  const seed = started + verdict.text.length;
+  // Read the recent turns *before* saving the new one so the model sees the conversation so far.
+  const turns = opts.history ?? (await recentTurns(d, user.id, 8));
   const brief = opts.behavior ?? (await evaluateBehavior(d, user));
-  const { packet, sources, confident } = await buildGrounding(d, user, {
-    query: verdict.text,
-    packageId: opts.packageId ?? null,
-  });
-  packet.user = behaviorContext(brief, user);
+  const userCtx = behaviorContext(brief, user);
   const nextAction = brief.nextAction
     ? { label: brief.nextAction.label, actionRef: brief.nextAction.actionRef }
     : null;
 
-  if (persist)
-    await saveMessage(d, user, 'user', scrubPii(verdict.text), {
-      packageId: opts.packageId ?? null,
-      mode,
+  /** Free conversation turn: no retrieval, no facts — a warm, attentive colleague. */
+  const converse = async (kind: SocialKind | null): Promise<AnswerResult> => {
+    let reply = '';
+    let provider = 'fallback-social';
+    try {
+      const hub = aiHub(d);
+      const run = await hub.chat(
+        {
+          system: prompts.chatSystem({
+            name,
+            partFa: PART_FA[part],
+            continuing: turns.length > 0,
+            spoken: !!opts.spoken,
+            progress: userCtx.progress,
+            nextAction: brief.nextAction?.label ?? '',
+          }),
+          messages: toMessages(turns),
+          prompt: verdict.text,
+          maxTokens: opts.spoken ? 140 : 260,
+          temperature: 0.8,
+        },
+        opts.spoken ? { prefer: ['groq' as const, 'gemini' as const, 'legacy' as const] } : {},
+      );
+      const checked = checkChatOutput(run.value.text, { spoken: !!opts.spoken });
+      if (checked.ok) {
+        // Only figures from the learner's own status may appear; drop any invented number.
+        const own: GroundingFact[] = [
+          {
+            id: 'self',
+            kind: 'user',
+            title: '',
+            text: `${userCtx.progress} ${nextAction?.label ?? ''}`,
+            ref: '',
+            score: 1,
+          },
+        ];
+        reply = dropUnsupportedSentences(checked.text, (sn) => unsupportedNumbers(sn, own));
+        provider = `${run.call.provider}:${run.call.model}`;
+        await track(d, 'mentor_ai_call', user.id, {
+          task: 'chat',
+          provider: run.call.provider,
+          model: run.call.model,
+          latencyMs: run.call.latencyMs,
+          approxTokens: run.value.approxTokens,
+          mode,
+          conversational: true,
+        });
+      }
+    } catch (e) {
+      console.warn('[mentor-ai] conversational reply failed', (e as Error).message);
+    }
+    if (!reply)
+      reply = socialFallback(kind ?? 'ack', {
+        name,
+        part,
+        seed,
+        nextActionLabel: nextAction?.label ?? null,
+      });
+    const messageId = persist
+      ? await saveMessage(d, user, 'assistant', reply, {
+          outcome: 'answered',
+          mode,
+          provider,
+          latencyMs: Date.now() - started,
+        })
+      : undefined;
+    await track(d, 'mentor_ai_answer', user.id, {
+      outcome: 'answered',
+      provider,
+      strategy: 'conversation',
+      latencyMs: Date.now() - started,
+      spoken: !!opts.spoken,
     });
-  await track(d, 'mentor_message_sent', user.id, { mode, packageId: opts.packageId ?? null });
+    return {
+      reply,
+      sources: [],
+      outcome: 'answered',
+      provider,
+      latencyMs: Date.now() - started,
+      cited: [],
+      messageId,
+      nextAction: kind === 'progress' ? nextAction : null,
+    };
+  };
 
-  // ── Below the confidence bar: say "I don't know" without spending a single token ──
+  const saveUserTurn = async () => {
+    if (persist)
+      await saveMessage(d, user, 'user', scrubPii(verdict.text), {
+        packageId: opts.packageId ?? null,
+        mode,
+      });
+    await track(d, 'mentor_message_sent', user.id, { mode, packageId: opts.packageId ?? null });
+  };
+
+  // ── Small talk (greeting, thanks, feelings, "what now?") never needs the knowledge base ──
+  const social = classifySocial(verdict.text);
+  if (social) {
+    await saveUserTurn();
+    return converse(social);
+  }
+
+  const { packet, sources, confident } = await buildGrounding(d, user, {
+    query: verdict.text,
+    packageId: opts.packageId ?? null,
+  });
+  packet.user = userCtx;
+  await saveUserTurn();
+
+  // ── Below the confidence bar: never guess. Chit-chat still gets a human answer; real
+  //    company questions get an honest, natural "I don't have that" without any model text. ──
   if (!confident) {
-    const hint = sources[0]?.title ? ` نزدیک‌ترین مطلب موجود: «${sources[0].title}».` : '';
-    const reply = `${UNKNOWN_REPLY}${hint}`;
+    if (await isChitChat(d, verdict.text)) return converse(null);
+    const reply = naturalUnknown({ name, hintTitle: sources[0]?.title, seed });
     const messageId = persist
       ? await saveMessage(d, user, 'assistant', reply, {
           outcome: 'unknown',
@@ -293,11 +421,11 @@ export async function answerQuestion(
   }
 
   const grounding = renderGrounding(packet);
-  const history = (opts.history ?? [])
-    .slice(-4)
+  const history = turns
+    .slice(-6)
     .map((h) => `${h.role === 'user' ? 'کاربر' : 'منتور'}: ${h.text.slice(0, 240)}`)
     .join('\n');
-  const constraints = { ...DEFAULT_CONSTRAINTS, spoken: !!opts.spoken };
+  const constraints = { ...DEFAULT_CONSTRAINTS, maxSentences: 4, spoken: !!opts.spoken };
   const envelope = seal({
     traceId: `${user.id}-${started}`,
     stage: 'answer',
@@ -337,8 +465,8 @@ export async function answerQuestion(
       {
         system,
         prompt,
-        maxTokens: opts.spoken ? 160 : 320,
-        temperature: opts.spoken ? 0.35 : 0.2,
+        maxTokens: opts.spoken ? 170 : 380,
+        temperature: opts.spoken ? 0.45 : 0.35,
       },
       runOptions,
     );
@@ -379,13 +507,17 @@ export async function answerQuestion(
   }
 
   // ── Output guardrails ─────────────────────────────────────────────────────
-  const guard = checkOutput(rawReply);
+  const guard = checkChatOutput(rawReply, { spoken: !!opts.spoken, keepCitations: true });
   let finalText = guard.ok ? guard.text : '';
-  if (!finalText || guard.unknown) {
-    reply = guard.unknown ? unknownWithHint(sources) : extractiveReply(packet);
+  const saidUnknown =
+    !!finalText && looksUnknown(finalText) && citedFactIds(finalText, packet.facts).length === 0;
+  if (!finalText || saidUnknown) {
+    reply = saidUnknown
+      ? naturalUnknown({ name, hintTitle: sources[0]?.title, seed })
+      : extractiveReply(packet);
     const guardedId = persist
       ? await saveMessage(d, user, 'assistant', reply, {
-          outcome: guard.unknown ? 'unknown' : 'fallback',
+          outcome: saidUnknown ? 'unknown' : 'fallback',
           sources,
           mode,
           provider,
@@ -393,8 +525,8 @@ export async function answerQuestion(
       : undefined;
     return {
       reply,
-      sources: guard.unknown ? [] : sources,
-      outcome: guard.unknown ? 'unknown' : 'fallback',
+      sources: saidUnknown ? [] : sources,
+      outcome: saidUnknown ? 'unknown' : 'fallback',
       provider,
       latencyMs: Date.now() - started,
       cited: [],
@@ -418,6 +550,8 @@ export async function answerQuestion(
   const usedSources = cited.length
     ? sources.filter((_, idx) => cited.includes(packet.facts[idx]?.id ?? ''))
     : sources.slice(0, 2);
+  // Citation markers are for the system; the learner sees sources as chips under the message.
+  finalText = finalText.replace(/\s*\[[\d۰-۹]+\]/g, '').trim();
 
   const messageId = persist
     ? await saveMessage(d, user, 'assistant', finalText, {
@@ -450,11 +584,6 @@ export async function answerQuestion(
     messageId,
     nextAction,
   };
-}
-
-function unknownWithHint(sources: AnswerResult['sources']): string {
-  const hint = sources[0]?.title ? ` نزدیک‌ترین مطلب موجود: «${sources[0].title}».` : '';
-  return `${UNKNOWN_REPLY}${hint}`;
 }
 
 /** Deterministic fallback built from approved text (never generated). */
@@ -826,4 +955,42 @@ export async function recentTurns(
     .slice()
     .reverse()
     .map((m) => ({ role: m.role, text: m.text }));
+}
+
+/** Conversation turns → provider messages (starts with a user turn, roles alternate). */
+function toMessages(
+  turns: Array<{ role: 'user' | 'assistant'; text: string }>,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  const out: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  for (const t of turns.slice(-8)) {
+    const content = t.text.slice(0, 400);
+    if (!content) continue;
+    const last = out[out.length - 1];
+    if (!out.length && t.role === 'assistant') continue;
+    if (last && last.role === t.role) last.content = `${last.content}\n${content}`;
+    else out.push({ role: t.role, content });
+  }
+  return out;
+}
+
+/** Cheap classifier: is this message small talk rather than a company-knowledge question? */
+async function isChitChat(d: Deps, text: string): Promise<boolean> {
+  try {
+    const run = await aiHub(d).classify(
+      {
+        system: prompts.CLASSIFY_SYSTEM,
+        prompt: `پیام کاربر: ${text}`,
+        maxTokens: 80,
+        temperature: 0,
+        json: true,
+      },
+      { prefer: ['groq', 'gemini', 'legacy'] },
+    );
+    const m = /\{[\s\S]*\}/.exec(run.value.text);
+    if (!m) return false;
+    const parsed = JSON.parse(m[0]) as { intent?: string };
+    return parsed.intent === 'smalltalk';
+  } catch {
+    return false;
+  }
 }
