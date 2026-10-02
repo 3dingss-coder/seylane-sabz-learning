@@ -351,9 +351,6 @@ export async function extractPendingMedia(
             sourceName: s.title,
             mime: s.mediaMime ?? stat.contentType,
             sizeBytes: stat.size,
-            ...(stat.size <= VISION_MAX_BYTES
-              ? { bytes: await d.blob.readRange(s.mediaPath, 0, stat.size - 1) }
-              : {}),
             link,
             hint,
           });
@@ -405,6 +402,12 @@ export async function extractPendingMedia(
       input.bytes = await d.blob.readRange(blobPath, 0, stat.size - 1);
       input.sizeBytes = stat.size;
       input.mime = stat.contentType;
+    }
+    // Bytes are read lazily, one asset at a time: loading every small file up front for the whole
+    // candidate list could exhaust a Worker's memory before the first provider call.
+    if (!input.bytes && input.sourceKind !== 'image' && !input.fileUri) {
+      if (input.sizeBytes !== null && input.sizeBytes <= VISION_MAX_BYTES)
+        input.bytes = await d.blob.readRange(input.path, 0, input.sizeBytes - 1);
     }
     const out = await extractAsset(d, input);
     const id = extractionId(input);
