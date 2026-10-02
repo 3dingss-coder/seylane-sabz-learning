@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.API_PROXY_TARGET ?? 'http://127.0.0.1:5001';
 
   return {
+    // ffmpeg.wasm ships its own worker/wasm loader; pre-bundling would break its relative URLs.
+    optimizeDeps: { exclude: ['@ffmpeg/ffmpeg'] },
     plugins: [
       react(),
       tailwindcss(),
@@ -42,7 +44,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           // Catalog images are large — cache at runtime instead of precaching.
-          globIgnores: ['**/catalog/**'],
+          globIgnores: ['**/catalog/**', '**/ffmpeg/**'],
           // Web Push handler (src/lib/webPush.ts) — self-hosted, no Firebase script in the worker.
           importScripts: ['push-sw.js'],
           navigateFallbackDenylist: [/^\/v1\//],

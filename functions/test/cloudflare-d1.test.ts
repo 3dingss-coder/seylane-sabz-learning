@@ -205,4 +205,40 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     expect(fallbackRes.status).toBe(302);
     expect(fallbackRes.headers.get('location')).toBe('/catalog/brands/dafi/logo.png');
   });
+
+  it('stores large blobs in small staged batches and leaves no staging rows behind', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'dev' }, seedSnapshot);
+
+    // 3 MB -> 12 chunks of 256 KB -> two staged batches + one atomic swap.
+    const big = Buffer.alloc(3 * 1024 * 1024);
+    for (let i = 0; i < big.length; i++) big[i] = (i * 31 + 7) & 0xff;
+    await deps.blob.put('media/video/big.mp4', big, 'video/mp4');
+
+    const stat = await deps.blob.stat('media/video/big.mp4');
+    expect(stat?.size).toBe(big.length);
+    const mid = await deps.blob.readRange('media/video/big.mp4', 1_000_000, 1_000_099);
+    expect(Buffer.compare(mid, big.subarray(1_000_000, 1_000_100))).toBe(0);
+
+    // Overwriting with a smaller file replaces every old chunk.
+    const small = Buffer.alloc(300 * 1024, 9);
+    await deps.blob.put('media/video/big.mp4', small, 'video/mp4');
+    expect((await deps.blob.stat('media/video/big.mp4'))?.size).toBe(small.length);
+    const tail = await deps.blob.readRange(
+      'media/video/big.mp4',
+      small.length - 10,
+      small.length - 1,
+    );
+    expect(Buffer.compare(tail, small.subarray(small.length - 10))).toBe(0);
+
+    const leftovers = await db
+      .prepare("SELECT COUNT(*) AS c FROM blob_chunks WHERE path LIKE '%__up-%'")
+      .first<{ c: number }>('c');
+    expect(Number(leftovers)).toBe(0);
+    const chunks = await db
+      .prepare('SELECT COUNT(*) AS c FROM blob_chunks WHERE path = ?1')
+      .bind('media/video/big.mp4')
+      .first<{ c: number }>('c');
+    expect(Number(chunks)).toBe(2);
+  });
 });

@@ -409,4 +409,12 @@ export interface MediaAsset {
   createdBy: string;
   createdAt: string;
   rejectReason: string | null;
+  /** Media library (resumable uploads + organisation). All optional: older docs lack them. */
+  library?: boolean;
+  title?: string;
+  brandId?: string | null;
+  productId?: string | null;
+  partSize?: number;
+  totalParts?: number;
+  archived?: boolean;
 }

@@ -122,29 +122,47 @@ export class CloudflareBlobStore implements BlobStore {
     }
     const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / CHUNK_BYTES));
     const nowIso = new Date(this.now()).toISOString();
-    const stmts: D1PreparedStatement[] = [
-      db.prepare('DELETE FROM blob_chunks WHERE path = ?1').bind(p),
-      db
-        .prepare(
-          `INSERT INTO blobs (path, content_type, size, chunk_count, updated_at)
-           VALUES (?1, ?2, ?3, ?4, ?5)
-           ON CONFLICT (path) DO UPDATE SET
-             content_type = excluded.content_type,
-             size = excluded.size,
-             chunk_count = excluded.chunk_count,
-             updated_at = excluded.updated_at`,
-        )
-        .bind(p, contentType, bytes.byteLength, chunkCount, nowIso),
-    ];
-    for (let idx = 0; idx < chunkCount; idx++) {
-      const slice = bytes.subarray(idx * CHUNK_BYTES, (idx + 1) * CHUNK_BYTES);
-      stmts.push(
+    // Large files used to go to D1 in ONE batch (tens of MB) and failed. Now: write chunks to a
+    // staging path in small batches, then swap atomically in a final batch, so a failure at any
+    // point never leaves a half-written file under the real path.
+    const stage = `${p}.__up-${Math.random().toString(36).slice(2, 10)}`;
+    const PER_BATCH = 8;
+    try {
+      for (let from = 0; from < chunkCount; from += PER_BATCH) {
+        const stmts: D1PreparedStatement[] = [];
+        for (let idx = from; idx < Math.min(chunkCount, from + PER_BATCH); idx++) {
+          const slice = bytes.subarray(idx * CHUNK_BYTES, (idx + 1) * CHUNK_BYTES);
+          stmts.push(
+            db
+              .prepare('INSERT INTO blob_chunks (path, idx, data) VALUES (?1, ?2, ?3)')
+              .bind(stage, idx, bytesToBase64(slice)),
+          );
+        }
+        await db.batch(stmts);
+      }
+      await db.batch([
+        db.prepare('DELETE FROM blob_chunks WHERE path = ?1').bind(p),
+        db.prepare('UPDATE blob_chunks SET path = ?1 WHERE path = ?2').bind(p, stage),
         db
-          .prepare('INSERT INTO blob_chunks (path, idx, data) VALUES (?1, ?2, ?3)')
-          .bind(p, idx, bytesToBase64(slice)),
-      );
+          .prepare(
+            `INSERT INTO blobs (path, content_type, size, chunk_count, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (path) DO UPDATE SET
+               content_type = excluded.content_type,
+               size = excluded.size,
+               chunk_count = excluded.chunk_count,
+               updated_at = excluded.updated_at`,
+          )
+          .bind(p, contentType, bytes.byteLength, chunkCount, nowIso),
+      ]);
+    } catch (e) {
+      await db
+        .prepare('DELETE FROM blob_chunks WHERE path = ?1')
+        .bind(stage)
+        .run()
+        .catch(() => {});
+      throw e;
     }
-    await db.batch(stmts);
   }
 
   async createUploadUrl(p: string, contentType: string, maxBytes: number): Promise<UploadTicket> {
