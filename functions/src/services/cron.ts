@@ -55,12 +55,13 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 // year), so the Tehran wall-clock times of spec §26 are converted here:
 //   every 15 min   → web push deferred by quiet hours
 //   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot)
+//                    + knowledge-reindex (reads new media, re-indexes only what changed)
 //   08:00 Tehran   → mentor daily nudges + behaviour sweep + knowledge reindex
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
   '*/15 * * * *': ['flush-push'],
-  '0 * * * *': ['deadline-sweep', 'weekly-digest'],
+  '0 * * * *': ['deadline-sweep', 'weekly-digest', 'knowledge-reindex'],
   '30 4 * * *': ['mentor-daily'],
   '30 6 * * *': ['daily-reminders'],
 };

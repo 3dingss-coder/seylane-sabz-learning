@@ -49,7 +49,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     const pk = await ctx.deps.store.query<Package>({ collection: 'packages' });
     expect(pk).toHaveLength(8);
     const byId = new Map(pk.map((p) => [p.id, p]));
-    expect(byId.get('seed-pkg-comeon-heel')?.productId).toBe('sb-300123101');
+    expect(byId.get('seed-pkg-comeon-heel')?.productId).toBe('sb-340122101');
     expect(byId.get('seed-pkg-pixel-stick')?.productId).toBe('sb-pixel-stick-sunscreen');
     expect(byId.get('seed-pkg-icebal')?.brandId).toBe('brand-sb-10');
     expect(byId.get('seed-pkg-icebal')?.productId).toBeNull();

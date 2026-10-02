@@ -59,6 +59,16 @@ export interface KnowledgeIndexMeta {
 
 export const KNOWLEDGE_COLLECTION = 'knowledge_items';
 export const KNOWLEDGE_META = 'knowledge_meta/index';
+export const KNOWLEDGE_DIRTY = 'knowledge_meta/dirty';
+
+/** Admin edited something the mentor learns from — the next mentor read re-indexes (incrementally). */
+export async function markKnowledgeDirty(d: Deps): Promise<void> {
+  try {
+    await d.store.set(KNOWLEDGE_DIRTY, { at: d.clock().toISOString() });
+  } catch (e) {
+    console.warn('[knowledge] could not mark dirty', (e as Error).message);
+  }
+}
 export const EXTRACTOR_VERSION = '2026-09-1';
 
 /** Stable, human-readable id — makes debugging the index a matter of reading ids. */
@@ -238,8 +248,9 @@ export async function buildKnowledgeItems(
         // Stems + explanations only. Answer keys are answer-key material and never indexed.
         const qa = questions
           .map((q) => {
-            const options = q.options.map((o) => `${o.key}) ${o.text}`).join(' | ');
-            return `سؤال: ${q.stem}\nگزینه‌ها: ${options}\nتوضیح آموزشی: ${q.explanation}`;
+            // Options are deliberately NOT indexed: they are distractors, and when they leaked into
+            // answers the mentor replied with raw «گزینه‌ها: a) … b) …» lists.
+            return `سؤال: ${q.stem}\nتوضیح آموزشی: ${q.explanation}`;
           })
           .join('\n\n');
         if (qa.trim())

@@ -520,7 +520,17 @@ export async function validatePublish(
   return issues;
 }
 
-export async function publishPackage(d: Deps, actor: Actor, id: string) {
+/**
+ * `defaultAudience` (admin UI default): if no active assignment covers the package, give it the
+ * global audience so «published» really means «visible to marketers». Internal callers keep the
+ * strict spec behaviour (published ∩ assigned) unless they opt in.
+ */
+export async function publishPackage(
+  d: Deps,
+  actor: Actor,
+  id: string,
+  opts: { defaultAudience?: boolean } = {},
+) {
   const pkg = await d.store.get<Package>(`packages/${id}`);
   if (!pkg) throw notFound('بسته');
   if (pkg.status === 'published') return pkg;
@@ -544,7 +554,8 @@ export async function publishPackage(d: Deps, actor: Actor, id: string) {
     { status: 'published' },
   );
   await track(d, 'admin_package_published', actor.id, { packageId: id });
-  const { notifyAssignedUsers } = await import('./assignments');
+  const { notifyAssignedUsers, ensureDefaultAudience } = await import('./assignments');
+  if (opts.defaultAudience) await ensureDefaultAudience(d, actor, id);
   const { notified, recipients } = await notifyAssignedUsers(d, [id]);
   // Return the stored document (not the pre-publish one) so callers can trust publishedAt/status.
   const fresh = await d.store.get<Package>(`packages/${id}`);
@@ -608,7 +619,12 @@ export async function archivePackage(d: Deps, actor: Actor, id: string) {
  * Restores an archived package. It goes back to `published` only when it still passes the publish
  * rules (a deadline that expired while it was archived must be fixed first) — otherwise to `draft`.
  */
-export async function unarchivePackage(d: Deps, actor: Actor, id: string) {
+export async function unarchivePackage(
+  d: Deps,
+  actor: Actor,
+  id: string,
+  opts: { defaultAudience?: boolean } = {},
+) {
   const pkg = await d.store.get<Package>(`packages/${id}`);
   if (!pkg) throw notFound('بسته');
   if (pkg.status !== 'archived') return { ...pkg, id, publishIssues: [] as string[] };
@@ -618,7 +634,8 @@ export async function unarchivePackage(d: Deps, actor: Actor, id: string) {
   await audit(d, actor, 'package.unarchived', 'packages', id, { status: pkg.status }, { status });
   await track(d, 'admin_package_unarchived', actor.id, { packageId: id, status });
   if (status === 'published') {
-    const { notifyAssignedUsers } = await import('./assignments');
+    const { notifyAssignedUsers, ensureDefaultAudience } = await import('./assignments');
+    if (opts.defaultAudience) await ensureDefaultAudience(d, actor, id);
     await notifyAssignedUsers(d, [id]);
   }
   const fresh = await d.store.get<Package>(`packages/${id}`);

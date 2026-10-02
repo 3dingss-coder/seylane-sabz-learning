@@ -167,6 +167,21 @@ export async function revokeAssignment(d: Deps, actor: Actor, id: string) {
   return { ...a, ...patch, id };
 }
 
+/**
+ * Publishing must make a package visible. If no active assignment covers the package yet, give it the
+ * default audience (global = every active marketer). Packages already targeted at a team / user /
+ * brand are left alone, so deliberately restricted audiences are never widened.
+ */
+export async function ensureDefaultAudience(d: Deps, actor: Actor, packageId: string) {
+  const active = await d.store.query<Assignment>({
+    collection: 'assignments',
+    where: [['revokedAt', '==', null]],
+  });
+  if (active.some((a) => a.packageIds.includes(packageId))) return false;
+  await createAssignment(d, actor, { type: 'global', targetId: null, packageIds: [packageId] });
+  return true;
+}
+
 /** When a package is published: notify every marketer it is already assigned to. */
 export async function notifyAssignedUsers(d: Deps, packageIds: string[]) {
   const assignments = await d.store.query<Assignment>({
