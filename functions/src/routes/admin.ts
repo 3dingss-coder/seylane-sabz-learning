@@ -13,6 +13,7 @@ import * as mentor from '../services/mentor';
 import * as aiQuality from '../services/mentor-quality';
 import * as knowledge from '../services/knowledge';
 import * as mediaIngest from '../services/media-ingest';
+import * as mediaLibrary from '../services/media-library';
 import * as notify from '../services/notify';
 import * as policies from '../services/policies';
 import * as reports from '../services/reports';
@@ -100,6 +101,75 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     h(async (req) =>
       content.finalizeMedia(d, actorOf(req), id(req), parse(content.finalizeSchema, req.body)),
     ),
+  );
+
+  // Media library: resumable uploads + organisation by brand / product
+  const libraryLimit = rateLimit(limiter, 'library', 600, 60_000, (req) => me(req).id);
+  r.get(
+    '/admin/media/library',
+    h(async (req) =>
+      mediaLibrary.listLibrary(d, parse(mediaLibrary.libraryQuerySchema, req.query)),
+    ),
+  );
+  r.post(
+    '/admin/media/library/uploads',
+    libraryLimit,
+    h(
+      async (req) =>
+        mediaLibrary.startLibraryUpload(
+          d,
+          actorOf(req),
+          parse(mediaLibrary.libraryUploadSchema, req.body),
+        ),
+      201,
+    ),
+  );
+  r.post(
+    '/admin/media/library/uploads/:id/parts',
+    libraryLimit,
+    h(async (req) =>
+      mediaLibrary.libraryPartUrls(
+        d,
+        actorOf(req),
+        id(req),
+        parse(mediaLibrary.partUrlsSchema, req.body),
+      ),
+    ),
+  );
+  r.post(
+    '/admin/media/library/uploads/:id/complete',
+    libraryLimit,
+    h(async (req) =>
+      mediaLibrary.completeLibraryUpload(
+        d,
+        actorOf(req),
+        id(req),
+        parse(mediaLibrary.libraryCompleteSchema, req.body),
+      ),
+    ),
+  );
+  r.delete(
+    '/admin/media/library/uploads/:id',
+    h(async (req) => mediaLibrary.abortLibraryUpload(d, actorOf(req), id(req))),
+  );
+  r.get(
+    '/admin/media/library/:id/preview-url',
+    h(async (req) => mediaLibrary.libraryPreviewUrl(d, id(req))),
+  );
+  r.patch(
+    '/admin/media/library/:id',
+    h(async (req) =>
+      mediaLibrary.updateLibraryItem(
+        d,
+        actorOf(req),
+        id(req),
+        parse(mediaLibrary.libraryPatchSchema, req.body),
+      ),
+    ),
+  );
+  r.delete(
+    '/admin/media/library/:id',
+    h(async (req) => mediaLibrary.deleteLibraryItem(d, actorOf(req), id(req))),
   );
 
   // Packages / sections

@@ -122,6 +122,25 @@ function Editor({ d }: { d: AdminPackageDetail }) {
       });
     },
   });
+  // One click: make a published package visible to every marketer (global assignment).
+  const assignAll = useMutation({
+    mutationFn: () =>
+      api.post<{ recipients?: number }>('/admin/assignments', {
+        type: 'global',
+        packageIds: [p.id],
+      }),
+    onSuccess: (r) => {
+      toast.show({
+        type: 'success',
+        message: r?.recipients
+          ? `برای همه بازاریاب‌ها فعال شد (${toPersianDigits(r.recipients)} نفر).`
+          : 'برای همه بازاریاب‌ها فعال شد.',
+      });
+      refresh();
+    },
+    onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
+  });
+
   const reorder = useMutation({
     mutationFn: (ids: string[]) => api.put(`/admin/packages/${p.id}/sections/order`, { ids }),
     onSuccess: refresh,
@@ -410,6 +429,8 @@ function Editor({ d }: { d: AdminPackageDetail }) {
             paths={paths.data ?? []}
             published={p.status === 'published'}
             onAssign={() => setAssign(true)}
+            onAssignAll={() => assignAll.mutate()}
+            assigningAll={assignAll.isPending}
           />
         </aside>
       </div>
@@ -518,11 +539,15 @@ function AudienceCard({
   paths,
   published,
   onAssign,
+  onAssignAll,
+  assigningAll,
 }: {
   audience: AdminAssignment[];
   paths: AdminPath[];
   published: boolean;
   onAssign: () => void;
+  onAssignAll: () => void;
+  assigningAll: boolean;
 }) {
   const teams = useTeams();
   const users = useUsers();
@@ -540,11 +565,25 @@ function AudienceCard({
         <Users className="size-4 text-primary" aria-hidden /> چه کسانی این آموزش را می‌بینند؟
       </h2>
       {audience.length === 0 ? (
-        <p className="text-text-secondary">
-          {published
-            ? 'هنوز هیچ‌کس. مخاطبان را انتخاب کنید یا آموزش را در یک مسیر یادگیری بگذارید.'
-            : 'بعد از انتشار، مخاطبان را انتخاب کنید.'}
-        </p>
+        published ? (
+          <div
+            role="alert"
+            className="flex flex-col gap-2 rounded-input border border-warning bg-warning/10 p-3"
+          >
+            <p className="font-bold text-text">
+              این آموزش منتشر شده، اما هیچ بازاریابی آن را نمی‌بیند.
+            </p>
+            <p className="text-text-secondary">
+              تا مخاطب انتخاب نشود یا آموزش در یک مسیر یادگیری نباشد، در پنل بازاریاب نمایش داده
+              نمی‌شود.
+            </p>
+            <Button onClick={onAssignAll} loading={assigningAll}>
+              نمایش برای همه بازاریاب‌ها
+            </Button>
+          </div>
+        ) : (
+          <p className="text-text-secondary">بعد از انتشار، مخاطبان را انتخاب کنید.</p>
+        )
       ) : (
         <ul className="flex flex-col gap-1">
           {audience.map((a) => (

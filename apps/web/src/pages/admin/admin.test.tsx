@@ -125,6 +125,33 @@ describe('admin: everything understandable at a glance', () => {
     expect(screen.getByTestId('audience-card')).toHaveTextContent('بعد از انتشار');
   });
 
+  it('published package nobody sees shows a warning and one click makes it visible to everyone', async () => {
+    const complete = [
+      section({ quiz: { id: 'q1', questionCount: 5, needsReview: false, version: 1 } }),
+    ];
+    let posted: unknown = null;
+    mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/packages/p1': () => ({ data: detail({ status: 'published' }, complete) }),
+      'GET /v1/admin/assignments': () => ({
+        data: posted
+          ? [{ id: 'as1', type: 'global', targetId: null, packageIds: ['p1'], revokedAt: null }]
+          : [],
+      }),
+      'POST /v1/admin/assignments': (body) => {
+        posted = body;
+        return { status: 201, data: { created: true, warnings: [], notified: 3, recipients: 3 } };
+      },
+    });
+    renderApp('/admin/packages/p1');
+    const card = await screen.findByTestId('audience-card');
+    expect(await within(card).findByText(/هیچ بازاریابی آن را نمی‌بیند/)).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole('button', { name: 'نمایش برای همه بازاریاب‌ها' }));
+    expect(await within(card).findByText('همه بازاریاب‌ها')).toBeInTheDocument();
+    expect(posted).toEqual({ type: 'global', packageIds: ['p1'] });
+    expect(within(card).queryByText(/هیچ بازاریابی آن را نمی‌بیند/)).not.toBeInTheDocument();
+  });
+
   it('published package without audience offers «انتخاب مخاطبان»; with one it shows who sees it', async () => {
     const complete = [
       section({ quiz: { id: 'q1', questionCount: 5, needsReview: false, version: 1 } }),
