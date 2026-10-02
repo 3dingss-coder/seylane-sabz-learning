@@ -61,7 +61,8 @@ export function MentorChat({
           createdAt: now,
         },
         {
-          id: r.messageId,
+          // Defensive: never let a reply without an id crash the list (m.id.startsWith).
+          id: r.messageId ?? `local-reply-${now}`,
           role: 'assistant',
           text: r.reply,
           sources: r.sources,
@@ -151,7 +152,7 @@ export function MentorChat({
                 </p>
               )}
             </div>
-            {m.role === 'assistant' && !m.id.startsWith('local-') && (
+            {m.role === 'assistant' && !(m.id ?? '').startsWith('local-') && (
               <div className="flex gap-1">
                 <button
                   type="button"
