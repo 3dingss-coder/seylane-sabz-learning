@@ -26,6 +26,16 @@ import type { ChatMessage, User } from '../domain/types';
 import type { Doc } from '../store/types';
 import { DAY, dayKey } from '../lib/time';
 import { evaluateBehavior } from './behavior';
+import type { AiMessage } from '../ai/types';
+import {
+  cleanConversational,
+  detectSmallTalk,
+  dayPart,
+  firstName,
+  offlineSmallTalk,
+  recentConversation,
+  userContextBlock,
+} from './mentor-converse';
 
 /**
  * Grounded mentor pipeline (the "answer" stage of the AI chain).
@@ -248,11 +258,28 @@ export async function answerQuestion(
   }
 
   const brief = opts.behavior ?? (await evaluateBehavior(d, user));
-  const { packet, sources, confident } = await buildGrounding(d, user, {
-    query: verdict.text,
-    packageId: opts.packageId ?? null,
-  });
+  // Read the conversation BEFORE saving this message so it is not duplicated in the history.
+  const convo = await recentConversation(d, user);
+  const smallTalk = detectSmallTalk(verdict.text);
+  const { packet, sources, confident } = smallTalk
+    ? {
+        packet: {
+          facts: [],
+          user: null,
+          strategy: 'keyword-only',
+          confident: false,
+        } satisfies GroundingPacket,
+        sources: [] as AnswerResult['sources'],
+        confident: false,
+      }
+    : await buildGrounding(d, user, {
+        query: verdict.text,
+        packageId: opts.packageId ?? null,
+      });
   packet.user = behaviorContext(brief, user);
+  const turns: AiMessage[] = opts.history?.length
+    ? opts.history.slice(-6).map((h) => ({ role: h.role, content: h.text.slice(0, 400) }))
+    : convo.turns;
   const nextAction = brief.nextAction
     ? { label: brief.nextAction.label, actionRef: brief.nextAction.actionRef }
     : null;
@@ -264,39 +291,90 @@ export async function answerQuestion(
     });
   await track(d, 'mentor_message_sent', user.id, { mode, packageId: opts.packageId ?? null });
 
-  // ── Below the confidence bar: say "I don't know" without spending a single token ──
-  if (!confident) {
-    const hint = sources[0]?.title ? ` نزدیک‌ترین مطلب موجود: «${sources[0].title}».` : '';
-    const reply = `${UNKNOWN_REPLY}${hint}`;
+  // ── Small talk, or nothing in the knowledge base matches ───────────────────────────────
+  // Greetings/thanks/feelings get a natural reply. Unanswerable knowledge questions get an honest,
+  // human "I don't have that" — never invented facts (the prompt forbids it and numbers are checked).
+  if (smallTalk !== null || !confident) {
+    const userCtx = userContextBlock({ user, now: d.clock(), brief, fresh: convo.fresh });
+    const weak = smallTalk === null && packet.facts.length > 0;
+    const hub0 = aiHub(d);
+    let text = '';
+    let provider0 = 'none';
+    try {
+      const run = await hub0.chat(
+        {
+          system: prompts.converseSystem({ spoken: !!opts.spoken }),
+          prompt: prompts.conversePrompt({
+            userContext: userCtx,
+            grounding: weak ? renderGrounding(packet) : '',
+            weakGrounding: weak,
+            question: verdict.text,
+            spoken: !!opts.spoken,
+          }),
+          messages: turns,
+          maxTokens: opts.spoken ? 160 : 380,
+          temperature: 0.75,
+        },
+        opts.spoken ? { prefer: ['groq' as const, 'gemini' as const, 'legacy' as const] } : {},
+      );
+      text = cleanConversational(run.value.text, scrubPii);
+      provider0 = `${run.call.provider}:${run.call.model}`;
+      await track(d, 'mentor_ai_call', user.id, {
+        task: 'converse',
+        provider: run.call.provider,
+        model: run.call.model,
+        latencyMs: run.call.latencyMs,
+        approxTokens: run.value.approxTokens,
+        mode,
+      });
+    } catch (e) {
+      console.warn(
+        '[mentor-ai] converse failed',
+        e instanceof AllProvidersFailed ? 'all-providers-failed' : (e as Error).message,
+      );
+    }
+    // Numbers must come from the sources or the learner's own state — never invented.
+    const evidence: GroundingFact[] = [
+      ...packet.facts,
+      { id: 'user', kind: 'user', title: '', text: userCtx, ref: '', score: 1 },
+    ];
+    if (text && unsupportedNumbers(text, evidence).length) text = '';
+    if (!text) {
+      text = smallTalk
+        ? offlineSmallTalk(smallTalk, firstName(user), dayPart(d.clock()), started)
+        : unknownWithHint(sources);
+      provider0 = provider0 === 'none' ? 'offline' : `${provider0}|fallback`;
+    }
+    const outcome: AnswerResult['outcome'] = smallTalk ? 'answered' : 'unknown';
     const messageId = persist
-      ? await saveMessage(d, user, 'assistant', reply, {
-          outcome: 'unknown',
+      ? await saveMessage(d, user, 'assistant', text, {
+          outcome,
           mode,
-          provider: 'retrieval',
+          provider: provider0,
+          latencyMs: Date.now() - started,
         })
       : undefined;
     await track(d, 'mentor_ai_answer', user.id, {
-      outcome: 'unknown',
-      strategy: packet.strategy,
+      outcome,
+      strategy: smallTalk ? `smalltalk:${smallTalk}` : packet.strategy,
+      provider: provider0,
       questionChars: verdict.text.length,
+      spoken: !!opts.spoken,
     });
     return {
-      reply,
+      reply: text,
       sources: [],
-      outcome: 'unknown',
-      provider: 'retrieval',
+      outcome,
+      provider: provider0,
       latencyMs: Date.now() - started,
       cited: [],
       messageId,
-      nextAction,
+      nextAction: smallTalk ? null : nextAction,
     };
   }
 
   const grounding = renderGrounding(packet);
-  const history = (opts.history ?? [])
-    .slice(-4)
-    .map((h) => `${h.role === 'user' ? 'کاربر' : 'منتور'}: ${h.text.slice(0, 240)}`)
-    .join('\n');
+  const history = '';
   const constraints = { ...DEFAULT_CONSTRAINTS, spoken: !!opts.spoken };
   const envelope = seal({
     traceId: `${user.id}-${started}`,
@@ -337,8 +415,9 @@ export async function answerQuestion(
       {
         system,
         prompt,
-        maxTokens: opts.spoken ? 160 : 320,
-        temperature: opts.spoken ? 0.35 : 0.2,
+        messages: turns,
+        maxTokens: opts.spoken ? 160 : 360,
+        temperature: opts.spoken ? 0.4 : 0.3,
       },
       runOptions,
     );
