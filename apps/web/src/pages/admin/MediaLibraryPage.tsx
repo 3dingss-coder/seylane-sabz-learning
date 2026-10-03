@@ -352,6 +352,11 @@ function JobList({ jobs }: { jobs: Job[] }) {
               </p>
             )}
             {j.note && <p className="text-xs text-warning">{j.note}</p>}
+            {j.detail && (
+              <p className="text-[11px] text-text-secondary" dir="ltr">
+                {j.detail}
+              </p>
+            )}
             {j.error && <p className="text-xs font-medium text-danger">{j.error}</p>}
           </Card>
         );

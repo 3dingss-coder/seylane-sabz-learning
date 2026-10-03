@@ -256,6 +256,34 @@ export function createFetchHandler(
           );
           return jsonResponse(toErrorBody(err), err.status, baseHeaders);
         }
+        // Players seek with Range requests. Loading the whole file from D1 for each one is slow and
+        // memory-hungry, so serve just the requested window (capped), reading only those chunks.
+        const rangeHeader = request.headers.get('range');
+        const rm = rangeHeader ? /^bytes=(\d*)-(\d*)$/.exec(rangeHeader) : null;
+        if (rm && (rm[1] || rm[2])) {
+          const meta = await blob.stat(t.p);
+          if (meta && meta.size > 0) {
+            const MAX_WINDOW = 4 * 1024 * 1024;
+            let start = rm[1] ? Number(rm[1]) : Math.max(0, meta.size - Number(rm[2]));
+            let end = rm[1] && rm[2] ? Number(rm[2]) : meta.size - 1;
+            end = Math.min(meta.size - 1, end, start + MAX_WINDOW - 1);
+            start = Math.max(0, start);
+            const h = new Headers(baseHeaders);
+            h.set('Content-Type', meta.contentType);
+            h.set('Cache-Control', 'private, max-age=3600');
+            h.set('Accept-Ranges', 'bytes');
+            if (start > end) {
+              h.set('Content-Range', `bytes */${meta.size}`);
+              return new Response(null, { status: 416, headers: h });
+            }
+            const slice = await blob.readRange(t.p, start, end);
+            h.set('Content-Range', `bytes ${start}-${end}/${meta.size}`);
+            return new Response(new Uint8Array(slice.buffer, slice.byteOffset, slice.byteLength), {
+              status: 206,
+              headers: h,
+            });
+          }
+        }
         const file = await blob.read(t.p);
         if (!file) {
           const err = new ApiError('NOT_FOUND');

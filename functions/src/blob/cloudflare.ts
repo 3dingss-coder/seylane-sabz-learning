@@ -122,6 +122,35 @@ export class CloudflareBlobStore implements BlobStore {
     }
     const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / CHUNK_BYTES));
     const nowIso = new Date(this.now()).toISOString();
+    const upsertBlob = () =>
+      db
+        .prepare(
+          `INSERT INTO blobs (path, content_type, size, chunk_count, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5)
+           ON CONFLICT (path) DO UPDATE SET
+             content_type = excluded.content_type,
+             size = excluded.size,
+             chunk_count = excluded.chunk_count,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(p, contentType, bytes.byteLength, chunkCount, nowIso);
+    if (chunkCount <= 8) {
+      // Up to 2 MB: ONE atomic batch (a single database call).
+      const stmts: D1PreparedStatement[] = [
+        db.prepare('DELETE FROM blob_chunks WHERE path = ?1').bind(p),
+      ];
+      for (let idx = 0; idx < chunkCount; idx++) {
+        const slice = bytes.subarray(idx * CHUNK_BYTES, (idx + 1) * CHUNK_BYTES);
+        stmts.push(
+          db
+            .prepare('INSERT INTO blob_chunks (path, idx, data) VALUES (?1, ?2, ?3)')
+            .bind(p, idx, bytesToBase64(slice)),
+        );
+      }
+      stmts.push(upsertBlob());
+      await db.batch(stmts);
+      return;
+    }
     // Large files used to go to D1 in ONE batch (tens of MB) and failed. Now: write chunks to a
     // staging path in small batches, then swap atomically in a final batch, so a failure at any
     // point never leaves a half-written file under the real path.
@@ -248,10 +277,141 @@ export class CloudflareBlobStore implements BlobStore {
     return null;
   }
 
+  /** Chunk size of a stored blob (256 KB for app uploads, other sizes for imported files). */
+  private chunkSizes = new Map<string, number>();
+
+  private async chunkSizeOf(db: D1Database, p: string, size: number, count: number) {
+    if (count <= 1) return Math.max(1, size);
+    const key = `${p}:${size}:${count}`;
+    const hit = this.chunkSizes.get(key);
+    if (hit) return hit;
+    const row = await db
+      .prepare(
+        'SELECT length(data) AS l, substr(data, -2) AS t FROM blob_chunks WHERE path = ?1 AND idx = 0',
+      )
+      .bind(p)
+      .first<{ l: number; t: string }>();
+    if (!row) return 0;
+    const pad = row.t.endsWith('==') ? 2 : row.t.endsWith('=') ? 1 : 0;
+    const decoded = (Number(row.l) / 4) * 3 - pad;
+    this.chunkSizes.set(key, decoded);
+    return decoded;
+  }
+
   async readRange(p: string, start: number, end: number): Promise<Buffer> {
+    if (!this.opts.r2) {
+      const db = await this.ensureD1();
+      if (db) {
+        const meta = await db
+          .prepare('SELECT size, chunk_count FROM blobs WHERE path = ?1')
+          .bind(p)
+          .first<{ size: number; chunk_count: number }>();
+        if (meta) {
+          const size = Number(meta.size);
+          const last = Math.min(end, size - 1);
+          if (start > last) return toBufferLike(new Uint8Array(0));
+          const cs = await this.chunkSizeOf(db, p, size, Number(meta.chunk_count));
+          if (cs > 0) {
+            const firstIdx = Math.floor(start / cs);
+            const lastIdx = Math.floor(last / cs);
+            const rows = await db
+              .prepare(
+                'SELECT data FROM blob_chunks WHERE path = ?1 AND idx BETWEEN ?2 AND ?3 ORDER BY idx ASC',
+              )
+              .bind(p, firstIdx, lastIdx)
+              .all<{ data: string }>();
+            const joined = concatBytes((rows.results ?? []).map((c) => base64ToBytes(c.data)));
+            const offset = start - firstIdx * cs;
+            return toBufferLike(joined.subarray(offset, offset + (last - start + 1)));
+          }
+        }
+      }
+    }
     const file = await this.read(p);
     if (!file) throw new Error(`Blob not found: ${p}`);
     return toBufferLike(file.data.subarray(start, end + 1));
+  }
+
+  private static likePrefix(prefix: string): string {
+    return `${prefix.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  }
+
+  async listStored(prefix: string): Promise<Array<{ path: string; size: number }> | null> {
+    if (this.opts.r2) return null;
+    const db = await this.ensureD1();
+    if (!db) return null;
+    const rows = await db
+      .prepare(
+        `SELECT b.path AS path, b.size AS size FROM blobs b
+         WHERE b.path LIKE ?1 ESCAPE '\\'
+           AND b.chunk_count = (SELECT COUNT(*) FROM blob_chunks c WHERE c.path = b.path)`,
+      )
+      .bind(CloudflareBlobStore.likePrefix(prefix))
+      .all<{ path: string; size: number }>();
+    return (rows.results ?? []).map((r) => ({ path: r.path, size: Number(r.size) }));
+  }
+
+  async composeParts(
+    parts: Array<{ path: string; size: number }>,
+    dest: string,
+    contentType: string,
+  ): Promise<boolean | null> {
+    if (this.opts.r2) return null;
+    const db = await this.ensureD1();
+    if (!db || parts.length === 0) return null;
+    const bases: number[] = [];
+    let chunks = 0;
+    let total = 0;
+    parts.forEach((part, i) => {
+      if (i < parts.length - 1 && part.size % CHUNK_BYTES !== 0)
+        throw new Error(`Part ${i} is not a multiple of the chunk size`);
+      bases.push(chunks);
+      chunks += Math.max(1, Math.ceil(part.size / CHUNK_BYTES));
+      total += part.size;
+    });
+    // 1) clear any leftovers under the destination (a previous failed attempt)
+    await db.batch([db.prepare('DELETE FROM blob_chunks WHERE path = ?1').bind(dest)]);
+    // 2) move each part's rows under `dest` (re-keying only; the data is not copied or re-read)
+    const PER_BATCH = 16;
+    for (let from = 0; from < parts.length; from += PER_BATCH) {
+      const stmts: D1PreparedStatement[] = [];
+      for (let i = from; i < Math.min(parts.length, from + PER_BATCH); i++) {
+        stmts.push(
+          db
+            .prepare('UPDATE blob_chunks SET path = ?1, idx = idx + ?2 WHERE path = ?3')
+            .bind(dest, bases[i], parts[i]?.path),
+        );
+      }
+      await db.batch(stmts);
+    }
+    // 3) only now does the file become visible
+    await db.batch([
+      db
+        .prepare(
+          `INSERT INTO blobs (path, content_type, size, chunk_count, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?5)
+           ON CONFLICT (path) DO UPDATE SET
+             content_type = excluded.content_type,
+             size = excluded.size,
+             chunk_count = excluded.chunk_count,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(dest, contentType, total, chunks, new Date(this.now()).toISOString()),
+      ...parts.map((part) => db.prepare('DELETE FROM blobs WHERE path = ?1').bind(part.path)),
+    ]);
+    return true;
+  }
+
+  async deletePrefix(prefix: string): Promise<boolean | null> {
+    if (this.opts.r2) return null;
+    const db = await this.ensureD1();
+    if (!db) return null;
+    const like = CloudflareBlobStore.likePrefix(prefix);
+    await db.batch([
+      db.prepare("DELETE FROM blob_chunks WHERE path LIKE ?1 ESCAPE '\\'").bind(like),
+      db.prepare("DELETE FROM blobs WHERE path LIKE ?1 ESCAPE '\\'").bind(like),
+    ]);
+    return true;
   }
 
   async signedReadUrl(p: string, ttlSec: number): Promise<string> {
