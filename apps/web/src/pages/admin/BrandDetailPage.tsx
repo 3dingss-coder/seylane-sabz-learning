@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, FilePlus2, Pencil, Plus, Route as RouteIcon } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  Bot,
+  FilePlus2,
+  Pencil,
+  Plus,
+  Route as RouteIcon,
+  Sparkles,
+} from 'lucide-react';
 import {
   Button,
   Card,
@@ -24,6 +33,7 @@ import { toPersianDigits } from '@/lib/digits';
 import { errMsg } from '@/lib/errors';
 import type { AdminBrand, AdminPackage, AdminProduct } from '@/lib/types';
 import { useBrands, usePackagesAdmin, useProducts } from './adminQueries';
+import { MentorGuideDialog } from './MentorGuideDialog';
 import { PackageFormDialog } from './PackageFormDialog';
 import { PathDialog } from './AssignmentsPage';
 
@@ -44,6 +54,11 @@ export function BrandDetailPage() {
     name: string;
     description: string;
     packageIds: string[];
+  } | null>(null);
+  const [guide, setGuide] = useState<{
+    kind: 'brand' | 'product';
+    id: string;
+    name: string;
   } | null>(null);
   const brand = brands.data?.find((b) => b.id === id);
 
@@ -132,6 +147,30 @@ export function BrandDetailPage() {
             </Button>
           </div>
         </div>
+      </Card>
+
+      {/* جعبه‌ی رفتار منتور برای این برند — منتور درباره‌ی این برند دقیقاً همین را می‌گوید. */}
+      <Card className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary-light">
+            <Bot className="size-5 text-primary" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold">رفتار منتور درباره‌ی این برند</h2>
+            <p className="text-xs leading-6 text-text-secondary">
+              لحن، نکات کلیدی، پاسخ به اعتراض‌های مشتری و باید/نبایدهایی که منتور در گفت‌وگو با
+              بازاریاب درباره‌ی «{brand.name}» رعایت می‌کند.
+            </p>
+          </div>
+        </div>
+        <Button
+          variant="secondary"
+          className="shrink-0"
+          icon={<Sparkles className="size-4" aria-hidden />}
+          onClick={() => setGuide({ kind: 'brand', id: brand.id, name: brand.name })}
+        >
+          تعریف رفتار منتور
+        </Button>
       </Card>
 
       <div className="flex flex-col gap-2 rounded-card border border-info/30 bg-info-light p-3 text-sm leading-6 text-text sm:flex-row sm:items-center sm:justify-between">
@@ -246,6 +285,14 @@ export function BrandDetailPage() {
                     >
                       مسیر آشنایی کامل
                     </Button>
+                    <Button
+                      variant="ghost"
+                      className="px-2 text-xs"
+                      icon={<Sparkles className="size-4" aria-hidden />}
+                      onClick={() => setGuide({ kind: 'product', id: p.id, name: p.name })}
+                    >
+                      رفتار منتور
+                    </Button>
                     <Uploader
                       kind="image"
                       compact
@@ -292,6 +339,14 @@ export function BrandDetailPage() {
           onClose={() => setEditProduct(null)}
           brandId={brand.id}
           initial={editProduct === 'new' ? undefined : editProduct}
+        />
+      )}
+      {guide && (
+        <MentorGuideDialog
+          kind={guide.kind}
+          targetId={guide.id}
+          name={guide.name}
+          onClose={() => setGuide(null)}
         />
       )}
       {newPkg && (

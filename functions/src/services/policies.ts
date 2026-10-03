@@ -56,6 +56,10 @@ export const policySchema = z.object({
   mentorVoiceEnabled: z.boolean(),
   mentorVoiceMinutesPerUser: z.number().int().min(1).max(120),
   mentorVoiceMinutesGlobal: z.number().int().min(1).max(5000),
+  // Added after the first release: defaulted so clients built before the mentor behaviour boxes
+  // keep working when they PUT the policy payload they previously GETed.
+  mentorCatalogScope: z.enum(['all', 'assigned']).default(DEFAULT_POLICY.mentorCatalogScope),
+  mentorQuizAnswerAccess: z.boolean().default(DEFAULT_POLICY.mentorQuizAnswerAccess),
 });
 
 export async function readPolicy(d: Deps) {

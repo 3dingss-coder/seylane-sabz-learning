@@ -10,6 +10,7 @@ import { isJobName, JOB_NAMES, runJob } from '../services/cron';
 import { invalidateIndexCache as invalidateKnowledgeCache } from '../services/retrieval';
 import { ApiError } from '../http/errors';
 import * as mentor from '../services/mentor';
+import * as guides from '../services/mentor-guides';
 import * as aiQuality from '../services/mentor-quality';
 import * as knowledge from '../services/knowledge';
 import * as mediaIngest from '../services/media-ingest';
@@ -462,6 +463,38 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
       return result;
     }),
   );
+  // ── Mentor behaviour boxes (جعبه‌ی رفتار منتور) — one per brand / product + a global default ──
+  r.get(
+    '/admin/mentor/guides',
+    h(async (req) => guides.listGuides(d, parse(guides.guideListQuery, req.query))),
+  );
+  r.get(
+    '/admin/mentor/guides/global',
+    h(async () => guides.getGuide(d, 'global', null)),
+  );
+  r.put(
+    '/admin/mentor/guides/global',
+    h(async (req) =>
+      guides.upsertGuide(d, actorOf(req), 'global', null, parse(guides.guideSchema, req.body)),
+    ),
+  );
+  for (const kind of ['brand', 'product'] as const) {
+    r.get(
+      `/admin/mentor/guides/${kind}/:id`,
+      h(async (req) => guides.getGuide(d, kind, id(req))),
+    );
+    r.put(
+      `/admin/mentor/guides/${kind}/:id`,
+      h(async (req) =>
+        guides.upsertGuide(d, actorOf(req), kind, id(req), parse(guides.guideSchema, req.body)),
+      ),
+    );
+    r.delete(
+      `/admin/mentor/guides/${kind}/:id`,
+      h(async (req) => guides.deleteGuide(d, actorOf(req), kind, id(req))),
+    );
+  }
+
   r.get(
     '/admin/retake-requests',
     h(async (req) =>

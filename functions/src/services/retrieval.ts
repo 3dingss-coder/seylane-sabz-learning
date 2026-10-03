@@ -11,7 +11,7 @@ import {
   type KnowledgeItem,
   type KnowledgeKind,
 } from './knowledge';
-import type { Deps } from './context';
+import { getPolicy, type Deps } from './context';
 
 /**
  * Hybrid retriever (keyword BM25-lite ⊕ embeddings ⊕ RRF), scope-aware.
@@ -255,13 +255,24 @@ export function invalidateIndexCache(d: Deps) {
   indexCache.delete(d);
 }
 
-/** Same scoping rule as the app: assigned packages ∪ global knowledge. */
+/**
+ * Scoping rule for the mentor: assigned packages ∪ (catalog knowledge, unless restricted).
+ *
+ * `Policy.mentorCatalogScope = 'all'` (default) drops the brand filter entirely: the mentor is the
+ * marketer's product reference and must be able to answer about *any* brand or product in the
+ * holding, even one the marketer is not assigned to. Packages/sections stay scoped — those are
+ * assignments, and an unassigned training is still none of this marketer's business.
+ */
 export async function scopeForUser(d: Deps, user: Doc<User>): Promise<RetrievalScope> {
   const { loadUserLearning } = await import('./learning-state');
-  const { packages } = await loadUserLearning(d, user);
+  const [{ packages }, policy] = await Promise.all([loadUserLearning(d, user), getPolicy(d)]);
+  const brandIds =
+    policy.mentorCatalogScope === 'assigned' && user.brandIds.length
+      ? new Set(user.brandIds)
+      : null;
   return {
     packageIds: new Set(packages.map((p) => p.id)),
-    brandIds: user.brandIds.length ? new Set(user.brandIds) : null,
+    brandIds,
   };
 }
 

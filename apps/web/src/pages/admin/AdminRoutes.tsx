@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom';
 import {
   BarChart3,
   Bell,
+  Bot,
   FolderTree,
   Library,
   LayoutDashboard,
@@ -22,6 +23,7 @@ import { BrandDetailPage } from './BrandDetailPage';
 import { ContentPage } from './ContentPage';
 import { NotificationsPage } from './NotificationsPage';
 import { MediaLibraryPage } from './MediaLibraryPage';
+import { MentorGuidesPage } from './MentorGuidesPage';
 import { PackageEditorPage } from './PackageEditorPage';
 import { PoliciesPage } from './PoliciesPage';
 import { QuizBuilderPage } from './QuizBuilderPage';
@@ -38,6 +40,7 @@ const NAV = [
     match: ['/admin/packages', '/admin/quizzes'],
   },
   { to: '/admin/media', label: 'کتابخانه رسانه', icon: Library },
+  { to: '/admin/mentor', label: 'رفتار منتور', icon: Bot },
   { to: '/admin/assignments', label: 'مسیرها و مخاطبان', icon: Share2 },
   { to: '/admin/users', label: 'کاربران', icon: Users },
   { to: '/admin/teams', label: 'تیم‌ها', icon: UsersRound },
@@ -55,6 +58,7 @@ export default function AdminRoutes() {
         <Route index element={<AdminDashboard />} />
         <Route path="content" element={<ContentPage />} />
         <Route path="media" element={<MediaLibraryPage />} />
+        <Route path="mentor" element={<MentorGuidesPage />} />
         <Route path="content/brands/:id" element={<BrandDetailPage />} />
         <Route path="packages/:id" element={<PackageEditorPage />} />
         <Route path="quizzes/:id" element={<QuizBuilderPage />} />

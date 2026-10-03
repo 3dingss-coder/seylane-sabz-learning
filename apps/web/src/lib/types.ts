@@ -539,6 +539,58 @@ export interface AdminProduct {
   imageIsFallback: boolean;
   archived: boolean;
 }
+// ─── Mentor behaviour boxes (جعبه‌ی رفتار منتور) ─────────────────────────────
+export type MentorGuideKind = 'global' | 'brand' | 'product';
+export type MentorGuideTone = 'friendly' | 'professional' | 'coach' | 'brief';
+export type MentorGuideQuizPolicy = 'inherit' | 'allow' | 'hide';
+
+export interface MentorGuide {
+  kind: MentorGuideKind;
+  targetId: string | null;
+  title: string;
+  enabled: boolean;
+  tone: MentorGuideTone;
+  personaNote: string;
+  summary: string;
+  keyPoints: string[];
+  sellingPoints: string[];
+  objections: Array<{ objection: string; answer: string }>;
+  faq: Array<{ question: string; answer: string }>;
+  dos: string[];
+  donts: string[];
+  keywords: string[];
+  priority: number;
+  quizAnswers: MentorGuideQuizPolicy;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One row of the admin list: a brand or a product, with or without a box yet. */
+export interface MentorGuideRow {
+  key: string;
+  kind: MentorGuideKind;
+  targetId: string | null;
+  name: string;
+  parentName: string | null;
+  imageUrl: string | null;
+  code: string | null;
+  defined: boolean;
+  enabled: boolean;
+  tone: MentorGuideTone;
+  priority: number;
+  quizAnswers: MentorGuideQuizPolicy;
+  filled: number;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export interface MentorGuideDetail {
+  guide: MentorGuide;
+  defined: boolean;
+  name: string;
+}
+
 export interface ContentTree {
   brands: Array<{
     id: string;

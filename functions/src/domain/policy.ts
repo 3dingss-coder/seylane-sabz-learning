@@ -20,4 +20,8 @@ export const DEFAULT_POLICY: Omit<Policy, 'updatedAt' | 'updatedBy'> = {
   mentorVoiceEnabled: true,
   mentorVoiceMinutesPerUser: 15,
   mentorVoiceMinutesGlobal: 300,
+  // The mentor is the field marketer's product reference: it sees the whole catalog (every brand
+  // and every product, assigned or not) and knows the quizzes — including their answer keys.
+  mentorCatalogScope: 'all',
+  mentorQuizAnswerAccess: true,
 };

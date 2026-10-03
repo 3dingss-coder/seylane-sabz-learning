@@ -5,6 +5,7 @@ import { AllProvidersFailed, aiHub } from '../ai/hub';
 import * as prompts from '../ai/prompts';
 import { getPolicy, track, type Deps } from './context';
 import { checkInput, normalizeFa } from './mentor';
+import { guideContext } from './mentor-guides';
 import { answerQuestion, consumeVoiceQuota, recentTurns, type AnswerResult } from './mentor-ai';
 import { dayPart, firstName } from './mentor-converse';
 import { evaluateBehavior } from './behavior';
@@ -318,7 +319,13 @@ export async function createVoiceSession(
 
   const brief = await evaluateBehavior(d, user);
   const sessionId = `${user.id}-${d.clock().getTime().toString(36)}`;
-  const systemInstruction = `${prompts.VOICE_SYSTEM}
+  // The global behaviour box (if the admin defined one) shapes every Live session; a per-turn
+  // box for the brand/product being discussed arrives through the `ground` tool instead.
+  const box = await guideContext(d, { question: '' });
+  const systemInstruction = `${prompts.voiceSystem({
+    allowQuizAnswers: box.quizAnswers,
+    guide: box.block,
+  })}
 
 اسم کاربر: ${firstName(user) || 'نامشخص'} — الان ${dayPart(d.clock())} است (وقت تهران). اولین جمله‌ات را مثل یک سلام و احوال‌پرسی کوتاه و طبیعی بگو، نه یک معرفی رسمی.
 وضعیت فعلی کاربر: ${brief.state.reason}

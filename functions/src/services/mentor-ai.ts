@@ -21,6 +21,7 @@ import {
   scrubPii,
 } from './mentor';
 import { GLOBAL_SCOPE, searchKnowledge, scopeForUser, type RetrievedChunk } from './retrieval';
+import { EMPTY_GUIDE_CONTEXT, guideContext } from './mentor-guides';
 import type { KnowledgeKind } from './knowledge';
 import { getPolicy, track, type Deps } from './context';
 import type { ChatMessage, User } from '../domain/types';
@@ -69,7 +70,8 @@ export interface AnswerOptions {
 export interface AnswerResult {
   reply: string;
   sources: Array<{
-    type: 'package' | 'section' | 'product' | 'brand' | 'faq' | 'play' | 'policy' | 'media';
+    type:
+      'package' | 'section' | 'product' | 'brand' | 'faq' | 'play' | 'policy' | 'media' | 'guide';
     id: string;
     title: string;
   }>;
@@ -95,14 +97,22 @@ export const groundSchema = z.object({
 });
 
 const MAX_SOURCES = 4;
+/**
+ * Everything the mentor may ground an answer on — including quizzes (stems, options and, when
+ * `Policy.mentorQuizAnswerAccess` is on, the answer key) and the admin-authored behaviour boxes.
+ * The knowledge index decides *what* a quiz item contains; the behaviour box decides whether the
+ * mentor may *say* the key out loud (see `quizAnswersAllowed`).
+ */
 const ANSWER_KINDS: KnowledgeKind[] = [
   'brand',
   'product',
   'package',
   'section',
+  'quiz',
   'policy',
   'play',
   'faq',
+  'guide',
   'media',
 ];
 
@@ -120,6 +130,8 @@ function toFact(chunk: RetrievedChunk): GroundingFact {
 
 function sourceTypeOf(kind: string): AnswerResult['sources'][number]['type'] {
   switch (kind) {
+    case 'guide':
+      return 'guide';
     case 'package':
       return 'package';
     case 'section':
@@ -209,6 +221,8 @@ export async function buildGrounding(
   sources: AnswerResult['sources'];
   strategy: string;
   confident: boolean;
+  /** The behaviour boxes that apply to this query (may be empty). */
+  guide: Awaited<ReturnType<typeof guideContext>>;
 }> {
   const baseScope = await scopeForUser(d, user);
   const scope = opts.packageId
@@ -216,8 +230,6 @@ export async function buildGrounding(
     : baseScope;
   const result = await searchKnowledge(d, {
     query: opts.query,
-    // Quiz stems and options are assessment material, not knowledge: quoting them back as an
-    // "answer" confuses learners and leaks quiz content, so they never ground a reply.
     scope: { ...(scope.packageIds ? scope : GLOBAL_SCOPE), kinds: ANSWER_KINDS },
     k: opts.k ?? MAX_SOURCES,
   });
@@ -227,13 +239,39 @@ export async function buildGrounding(
     id: c.item.scope.sectionId ?? c.item.scope.packageId ?? c.item.id,
     title: c.item.title,
   }));
+  // Behaviour boxes are loaded by *target* (package → facts → literal name match), not by
+  // keyword score, so the mentor stays fluent about a brand/product even when the retriever
+  // found little. Their content is prepended as grounding facts → citable and number-checked.
+  const guide = await guideContext(d, {
+    question: opts.query,
+    packageId: opts.packageId ?? null,
+    facts: result.chunks.map((c) => ({
+      id: c.item.id,
+      kind: c.item.kind,
+      title: c.item.title,
+      scope: c.item.scope,
+    })),
+  });
+  if (guide.facts.length) {
+    const already = new Set(facts.map((f) => f.id));
+    facts.unshift(...guide.facts.filter((f) => !already.has(f.id)));
+    sources.unshift(
+      ...guide.facts
+        .filter((f) => !already.has(f.id))
+        .map((f) => ({
+          type: 'guide' as const,
+          id: f.id.replace(/^guide:/, ''),
+          title: f.title,
+        })),
+    );
+  }
   const packet: GroundingPacket = {
-    facts,
+    facts: facts.slice(0, MAX_SOURCES + 3),
     user: null,
     strategy: result.strategy,
     confident: result.confident,
   };
-  return { packet, sources, strategy: result.strategy, confident: result.confident };
+  return { packet, sources, strategy: result.strategy, confident: result.confident, guide };
 }
 
 export async function answerQuestion(
@@ -274,7 +312,7 @@ export async function answerQuestion(
   // Read the conversation BEFORE saving this message so it is not duplicated in the history.
   const convo = await recentConversation(d, user);
   const smallTalk = detectSmallTalk(verdict.text);
-  const { packet, sources, confident } = smallTalk
+  const groundingResult = smallTalk
     ? {
         packet: {
           facts: [],
@@ -284,11 +322,13 @@ export async function answerQuestion(
         } satisfies GroundingPacket,
         sources: [] as AnswerResult['sources'],
         confident: false,
+        guide: EMPTY_GUIDE_CONTEXT,
       }
     : await buildGrounding(d, user, {
         query: verdict.text,
         packageId: opts.packageId ?? null,
       });
+  const { packet, sources, confident, guide } = groundingResult;
   packet.user = behaviorContext(brief, user);
   const turns: AiMessage[] = opts.history?.length
     ? opts.history.slice(-6).map((h) => ({ role: h.role, content: h.text.slice(0, 400) }))
@@ -316,7 +356,11 @@ export async function answerQuestion(
     try {
       const run = await hub0.chat(
         {
-          system: prompts.converseSystem({ spoken: !!opts.spoken }),
+          system: prompts.converseSystem({
+            spoken: !!opts.spoken,
+            allowQuizAnswers: guide.quizAnswers,
+            guide: guide.block,
+          }),
           prompt: prompts.conversePrompt({
             userContext: userCtx,
             grounding: weak ? renderGrounding(packet) : '',
@@ -401,7 +445,13 @@ export async function answerQuestion(
   });
 
   const hub = aiHub(d);
-  const system = opts.spoken ? prompts.VOICE_SYSTEM : prompts.answerSystem(constraints);
+  const system = opts.spoken
+    ? prompts.voiceSystem({ allowQuizAnswers: guide.quizAnswers, guide: guide.block })
+    : prompts.answerSystem({
+        ...constraints,
+        allowQuizAnswers: guide.quizAnswers,
+        guide: guide.block,
+      });
   const prompt = opts.spoken
     ? prompts.voiceAnswerPrompt({
         grounding,
@@ -701,18 +751,21 @@ export async function coachTurn(
   user: Doc<User>,
   opts: z.infer<typeof coachTurnSchema>,
 ): Promise<{ reply: string; provider: string }> {
-  const { packet } = await buildGrounding(d, user, {
+  const { packet, guide } = await buildGrounding(d, user, {
     query: `${opts.persona.productName} ${opts.persona.objection}`,
     packageId: opts.persona.packageId,
     k: 3,
   });
-  const system = prompts.coachSystem({
-    name: opts.persona.name,
-    type: opts.persona.type,
-    mood: opts.persona.mood,
-    objection: opts.persona.objection,
-    productName: opts.persona.productName,
-  });
+  const system = prompts.coachSystem(
+    {
+      name: opts.persona.name,
+      type: opts.persona.type,
+      mood: opts.persona.mood,
+      objection: opts.persona.objection,
+      productName: opts.persona.productName,
+    },
+    guide.block,
+  );
   const prompt = `<context>\n${renderGrounding(packet, 500)}\n</context>\n\nگفت‌وگو تا اینجا:\n${opts.history
     .slice(-6)
     .map((h) => `${h.role === 'user' ? 'بازاریاب' : 'مشتری'}: ${h.text}`)
@@ -757,7 +810,7 @@ export async function coachDebrief(
   user: Doc<User>,
   input: z.infer<typeof coachDebriefSchema>,
 ): Promise<CoachScorecard> {
-  const { packet } = await buildGrounding(d, user, {
+  const { packet, guide } = await buildGrounding(d, user, {
     query: `${input.persona.productName} ${input.persona.objection}`,
     packageId: input.persona.packageId ?? null,
     k: 3,
@@ -779,7 +832,9 @@ export async function coachDebrief(
   };
   try {
     const run = await hub.chat({
-      system: prompts.COACH_DEBRIEF_SYSTEM,
+      system: guide.block
+        ? `${prompts.COACH_DEBRIEF_SYSTEM}\n\nجعبه‌ی رفتار این برند/محصول (معیار دقت محصول):\n${guide.block}`
+        : prompts.COACH_DEBRIEF_SYSTEM,
       prompt: `<context>\n${renderGrounding(packet, 400)}\n</context>\n\nمشتری: ${input.persona.name} (${input.persona.type}) — اعتراض اصلی: ${input.persona.objection}\n\n${transcript}\n\nکارنامه (JSON):`,
       maxTokens: 400,
       temperature: 0.2,

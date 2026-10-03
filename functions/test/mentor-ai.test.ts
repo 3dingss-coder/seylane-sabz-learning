@@ -327,20 +327,35 @@ describe('grounded answers', () => {
     expect(citedFactIds('هر دو درست است [۱] و [2].', facts)).toEqual(['a', 'b']);
   });
 
-  it('never grounds an answer on quiz questions or options', async () => {
+  it('grounds answers on quizzes (stems, options and the answer key) when quiz access is on', async () => {
+    // The mentor is a study reference: exams are knowledge, and the index carries the key.
     const { ctx, marketer } = await setup();
     await rebuildKnowledgeIndex(ctx.deps);
     const user = await loadUser(ctx, marketer.id);
-    const quizIds = new Set(
-      (await ctx.deps.store.query<KnowledgeItem>({ collection: KNOWLEDGE_COLLECTION }))
-        .filter((i) => i.kind === 'quiz')
-        .map((i) => i.id),
-    );
-    expect(quizIds.size).toBeGreaterThan(0);
+    const quizItems = (
+      await ctx.deps.store.query<KnowledgeItem>({ collection: KNOWLEDGE_COLLECTION })
+    ).filter((i) => i.kind === 'quiz');
+    expect(quizItems.length).toBeGreaterThan(0);
+    expect(quizItems.some((i) => i.body.includes('پاسخ صحیح:'))).toBe(true);
+
     const { packet } = await buildGrounding(ctx.deps, user, {
       query: 'گزینه ها پرسیدن نیاز مشتری',
     });
-    expect(packet.facts.every((f) => !quizIds.has(f.id))).toBe(true);
+    const quizIds = new Set(quizItems.map((i) => i.id));
+    expect(packet.facts.some((f) => quizIds.has(f.id))).toBe(true);
+  });
+
+  it('hides the answer key from the index when the company turns quiz access off', async () => {
+    const { ctx } = await setup();
+    await ctx.deps.store.set('policies/global', { mentorQuizAnswerAccess: false }, { merge: true });
+    invalidatePolicy(ctx.deps);
+    await rebuildKnowledgeIndex(ctx.deps);
+    const quizItems = (
+      await ctx.deps.store.query<KnowledgeItem>({ collection: KNOWLEDGE_COLLECTION })
+    ).filter((i) => i.kind === 'quiz');
+    expect(quizItems.length).toBeGreaterThan(0);
+    expect(quizItems.every((i) => !i.body.includes('پاسخ صحیح:'))).toBe(true);
+    invalidatePolicy(ctx.deps);
   });
 
   it('never invents facts when retrieval is weak (honest, natural "I do not have that")', async () => {

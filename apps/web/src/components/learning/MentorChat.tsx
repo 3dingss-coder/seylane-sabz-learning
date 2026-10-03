@@ -91,7 +91,9 @@ export function MentorChat({
   useEffect(() => {
     // Braces on purpose: newer Chrome versions return a Promise from scrollIntoView, and React
     // treats a value returned from an effect as its cleanup function ("C is not a function").
-    end.current?.scrollIntoView({ block: 'end' });
+    // The typeof guard keeps the chat alive in environments without it (jsdom, old WebViews).
+    if (typeof end.current?.scrollIntoView === 'function')
+      end.current.scrollIntoView({ block: 'end' });
   }, [history.data, pending]);
 
   const submit = (e?: FormEvent, t = text) => {
