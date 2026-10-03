@@ -37,22 +37,18 @@ describe('auth (PROMPT 002)', () => {
       password: 'long-test-pass-1',
       role: 'admin',
     });
-    const ok = await ctx
-      .api()
-      .post('/v1/auth/staff-login', {
-        username: 'Test Admin',
-        password: 'long-test-pass-1',
-        panel: 'admin',
-      });
+    const ok = await ctx.api().post('/v1/auth/staff-login', {
+      username: 'Test Admin',
+      password: 'long-test-pass-1',
+      panel: 'admin',
+    });
     expect(ok.status).toBe(200);
     expect(ok.body.data.user.role).toBe('admin');
-    const wrongPanel = await ctx
-      .api()
-      .post('/v1/auth/staff-login', {
-        username: 'Test Admin',
-        password: 'long-test-pass-1',
-        panel: 'manager',
-      });
+    const wrongPanel = await ctx.api().post('/v1/auth/staff-login', {
+      username: 'Test Admin',
+      password: 'long-test-pass-1',
+      panel: 'manager',
+    });
     expect(wrongPanel.status).toBe(401);
     const wrongPass = await ctx
       .api()
