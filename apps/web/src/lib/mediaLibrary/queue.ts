@@ -28,6 +28,8 @@ export interface Job {
   error: string | null;
   /** Shown when the file was stored without being optimised. */
   note: string | null;
+  /** Technical reason behind `note`/`error` (compression failure text) for support. */
+  detail: string | null;
   item: LibraryItem | null;
 }
 
@@ -113,6 +115,7 @@ export class MediaUploadQueue {
           etaMs: null,
           error: null,
           note: null,
+          detail: null,
           item: null,
         },
       });
@@ -136,7 +139,7 @@ export class MediaUploadQueue {
     if (!j || !['error', 'canceled'].includes(j.job.stage)) return;
     j.abort = new AbortController();
     j.eta = new EtaEstimator();
-    this.patch(j, { stage: 'queued', progress: 0, etaMs: null, error: null, note: null });
+    this.patch(j, { stage: 'queued', progress: 0, etaMs: null, error: null, note: null, detail: null });
     void this.pump();
   }
 
@@ -216,6 +219,8 @@ export class MediaUploadQueue {
         } catch (e) {
           if (j.abort.signal.aborted) throw e;
           if (!(e instanceof TranscodeUnavailable || e instanceof TranscodeFailed)) throw e;
+          console.error('[media-library] in-browser compression failed:', e);
+          this.patch(j, { detail: e.message || e.constructor.name });
           if (file.size > LIBRARY_MAX_BYTES)
             return fail(
               'این فایل برای بارگذاری بزرگ است و بهینه‌سازی آن روی این مرورگر ممکن نشد. از Chrome یا Edge نسخه‌ی جدید روی رایانه استفاده کنید.',

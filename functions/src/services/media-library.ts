@@ -97,6 +97,15 @@ const expectedPartSize = (m: MediaAsset, idx: number) =>
 
 async function receivedParts(d: Deps, m: Doc<MediaAsset>): Promise<number[]> {
   const total = m.totalParts ?? 0;
+  // Database-backed stores answer with ONE query (a Worker request may only make a few).
+  const listed = await d.blob.listStored?.(`uploads/${m.id}/`);
+  if (listed) {
+    const sizes = new Map(listed.map((r) => [r.path, r.size]));
+    const got: number[] = [];
+    for (let i = 0; i < total; i++)
+      if (sizes.get(partPath(m.id, i)) === expectedPartSize(m, i)) got.push(i);
+    return got;
+  }
   const stats = await Promise.all(
     Array.from({ length: total }, (_, i) => d.blob.stat(partPath(m.id, i))),
   );
@@ -105,6 +114,14 @@ async function receivedParts(d: Deps, m: Doc<MediaAsset>): Promise<number[]> {
     if (s && s.size === expectedPartSize(m, i)) got.push(i);
   });
   return got;
+}
+
+/** Remove all uploaded parts of one upload (one batch on database stores). */
+async function deleteParts(d: Deps, mediaId: string, total: number): Promise<void> {
+  if (await d.blob.deletePrefix?.(`uploads/${mediaId}/`).catch(() => null)) return;
+  await Promise.all(
+    Array.from({ length: total }, (_, i) => d.blob.delete(partPath(mediaId, i)).catch(() => {})),
+  );
 }
 
 export async function startLibraryUpload(
@@ -195,29 +212,35 @@ export async function completeLibraryUpload(
     const missing = Array.from({ length: total }, (_, i) => i).filter((i) => !have.has(i));
     throw new ApiError('CONFLICT', 'بعضی بخش‌های فایل هنوز آپلود نشده‌اند.', { missing });
   }
-  // Assemble into ONE preallocated buffer (peak memory = file size, not 2x) — Workers have 128 MB.
-  const whole = Buffer.allocUnsafe(m.declaredSize);
-  let offset = 0;
-  for (let i = 0; i < total; i++) {
-    const size = expectedPartSize(m, i);
-    const part = await d.blob.readRange(partPath(mediaId, i), 0, size - 1);
-    if (part.length !== size || offset + size > whole.length)
+  const parts = Array.from({ length: total }, (_, i) => ({
+    path: partPath(mediaId, i),
+    size: expectedPartSize(m, i),
+  }));
+  const composed = d.blob.composeParts
+    ? await d.blob.composeParts(parts, m.path, m.declaredMime)
+    : null;
+  if (composed === null || composed === undefined) {
+    // Generic stores (local disk / Firebase): assemble into ONE preallocated buffer.
+    const whole = Buffer.allocUnsafe(m.declaredSize);
+    let offset = 0;
+    for (const part of parts) {
+      const bytes = await d.blob.readRange(part.path, 0, part.size - 1);
+      if (bytes.length !== part.size || offset + part.size > whole.length)
+        throw new ApiError('CONFLICT', 'اندازه‌ی فایل با آپلود هم‌خوانی ندارد. دوباره تلاش کنید.');
+      bytes.copy(whole, offset);
+      offset += part.size;
+    }
+    if (offset !== m.declaredSize)
       throw new ApiError('CONFLICT', 'اندازه‌ی فایل با آپلود هم‌خوانی ندارد. دوباره تلاش کنید.');
-    part.copy(whole, offset);
-    offset += size;
+    await d.blob.put(m.path, whole, m.declaredMime);
   }
-  if (offset !== m.declaredSize)
-    throw new ApiError('CONFLICT', 'اندازه‌ی فایل با آپلود هم‌خوانی ندارد. دوباره تلاش کنید.');
-  await d.blob.put(m.path, whole, m.declaredMime);
   await finalizeMedia(
     d,
     actor,
     mediaId,
     input.durationSec ? { durationSec: input.durationSec } : {},
   );
-  await Promise.all(
-    Array.from({ length: total }, (_, i) => d.blob.delete(partPath(mediaId, i)).catch(() => {})),
-  );
+  await deleteParts(d, mediaId, total);
   const fresh = await d.store.get<MediaAsset>(`media/${mediaId}`);
   if (!fresh) throw notFound('فایل');
   return toItem(d, fresh, await usageIndex(d));
@@ -226,11 +249,7 @@ export async function completeLibraryUpload(
 export async function abortLibraryUpload(d: Deps, actor: Actor, mediaId: string) {
   const m = await ownedPending(d, actor, mediaId);
   if (m.status === 'ready') throw new ApiError('CONFLICT', 'این فایل قبلاً آپلود شده است.');
-  await Promise.all(
-    Array.from({ length: m.totalParts ?? 0 }, (_, i) =>
-      d.blob.delete(partPath(mediaId, i)).catch(() => {}),
-    ),
-  );
+  await deleteParts(d, mediaId, m.totalParts ?? 0);
   await d.store.update(`media/${mediaId}`, {
     status: 'rejected',
     rejectReason: 'آپلود لغو شد.',

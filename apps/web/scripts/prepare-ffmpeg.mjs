@@ -14,7 +14,10 @@ const PART = 8 * 1024 * 1024;
 let dist;
 try {
   const require = createRequire(import.meta.url);
-  dist = path.dirname(require.resolve('@ffmpeg/core'));
+  // The ffmpeg worker is an ES-module worker, so it must load the ESM build of the core
+  // (`export default createFFmpegCore`). The package "main" is the UMD build, which has no
+  // default export and makes load() fail with "failed to import ffmpeg-core.js".
+  dist = path.resolve(path.dirname(require.resolve('@ffmpeg/core')), '..', 'esm');
 } catch {
   console.warn('[ffmpeg] @ffmpeg/core not installed - in-browser compression will be unavailable.');
   process.exit(0);

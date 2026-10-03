@@ -96,6 +96,7 @@ describe('MediaUploadQueue', () => {
     const job = await settled(q);
     expect(job.stage).toBe('done');
     expect(job.note).toContain('بدون بهینه‌سازی');
+    expect(job.detail).toBe('no wasm');
     expect(uploaded[0]?.size).toBe(30 * MB);
   });
 

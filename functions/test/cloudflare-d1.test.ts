@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { completeLibraryUpload, startLibraryUpload } from '../src/services/media-library';
+import { fakeMp4 } from './support/ctx';
 import type { D1Database, D1PreparedStatement, D1Result } from '../src/store/d1';
 import type { Data } from '../src/store/types';
 import { buildCloudflareDeps, createFetchHandler } from '../src/web-handler';
@@ -204,6 +206,170 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     );
     expect(fallbackRes.status).toBe(302);
     expect(fallbackRes.headers.get('location')).toBe('/catalog/brands/dafi/logo.png');
+  });
+
+  it('readRange fetches only the needed chunks and supports non-256KB chunk sizes', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'dev' }, seedSnapshot);
+    const data = Buffer.alloc(1_000_000);
+    for (let i = 0; i < data.length; i++) data[i] = (i * 13 + 5) & 0xff;
+
+    await deps.blob.put('media/audio/a.m4a', data, 'audio/mp4'); // 256 KB chunks
+    // Same bytes, but stored the way the REST import script does it: 64 KB chunks.
+    const SMALL = 64 * 1024;
+    const n = Math.ceil(data.length / SMALL);
+    const stmts = [];
+    for (let i = 0; i < n; i++)
+      stmts.push(
+        db
+          .prepare('INSERT INTO blob_chunks (path, idx, data) VALUES (?1, ?2, ?3)')
+          .bind(
+            'media/audio/b.m4a',
+            i,
+            data.subarray(i * SMALL, (i + 1) * SMALL).toString('base64'),
+          ),
+      );
+    stmts.push(
+      db
+        .prepare(
+          "INSERT INTO blobs (path, content_type, size, chunk_count, updated_at) VALUES (?1, 'audio/mp4', ?2, ?3, 'x')",
+        )
+        .bind('media/audio/b.m4a', data.length, n),
+    );
+    await db.batch(stmts);
+
+    for (const path of ['media/audio/a.m4a', 'media/audio/b.m4a']) {
+      for (const [start, end] of [
+        [0, 63],
+        [65_530, 65_545],
+        [262_140, 262_150],
+        [500_000, 700_000],
+        [999_990, 999_999],
+        [999_990, 5_000_000],
+      ] as const) {
+        const got = await deps.blob.readRange(path, start, end);
+        expect(Buffer.compare(got, data.subarray(start, Math.min(end, data.length - 1) + 1))).toBe(
+          0,
+        );
+      }
+    }
+  });
+
+  it('composes uploaded parts inside the database, with a handful of queries and no leftovers', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'dev' }, seedSnapshot);
+    const MB = 1024 * 1024;
+    const total = 5 * MB + 12_345; // 6 parts of 1 MB, last one short
+    const data = Buffer.alloc(total);
+    for (let i = 0; i < total; i++) data[i] = (i * 7 + 3) & 0xff;
+    const parts: Array<{ path: string; size: number }> = [];
+    for (let i = 0; i * MB < total; i++) {
+      const slice = data.subarray(i * MB, Math.min(total, (i + 1) * MB));
+      await deps.blob.put(`uploads/m1/${i}`, slice, 'video/mp4');
+      parts.push({ path: `uploads/m1/${i}`, size: slice.length });
+    }
+    await deps.blob.put('uploads/other/0', Buffer.alloc(10), 'video/mp4');
+
+    const listed = await deps.blob.listStored?.('uploads/m1/');
+    expect(listed?.map((p) => p.size).sort()).toEqual(parts.map((p) => p.size).sort());
+
+    const ok = await deps.blob.composeParts?.(parts, 'media/video/m1.mp4', 'video/mp4');
+    expect(ok).toBe(true);
+    expect((await deps.blob.stat('media/video/m1.mp4'))?.size).toBe(total);
+    const all = await deps.blob.readRange('media/video/m1.mp4', 0, total - 1);
+    expect(Buffer.compare(all, data)).toBe(0);
+    const edge = await deps.blob.readRange('media/video/m1.mp4', MB - 5, MB + 5);
+    expect(Buffer.compare(edge, data.subarray(MB - 5, MB + 6))).toBe(0);
+
+    // part rows were re-keyed, not copied: nothing is left under uploads/m1, other uploads untouched
+    expect((await deps.blob.listStored?.('uploads/m1/'))?.length).toBe(0);
+    expect((await deps.blob.listStored?.('uploads/other/'))?.length).toBe(1);
+    expect(await deps.blob.deletePrefix?.('uploads/other/')).toBe(true);
+    expect((await deps.blob.listStored?.('uploads/other/'))?.length).toBe(0);
+
+    // a part that is not a whole number of chunks cannot be composed
+    await deps.blob.put('uploads/bad/0', Buffer.alloc(300_000), 'video/mp4');
+    await deps.blob.put('uploads/bad/1', Buffer.alloc(10), 'video/mp4');
+    await expect(
+      deps.blob.composeParts?.(
+        [
+          { path: 'uploads/bad/0', size: 300_000 },
+          { path: 'uploads/bad/1', size: 10 },
+        ],
+        'media/video/bad.mp4',
+        'video/mp4',
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('uploads a 38 MB video through the library flow within the free-plan call budget', async () => {
+    const real = createSqliteD1();
+    let calls = 0;
+    let inBatch = false;
+    const wrap = (st: D1PreparedStatement): D1PreparedStatement =>
+      new Proxy(st, {
+        get(t, k, r) {
+          const v = Reflect.get(t, k, r);
+          if (typeof v !== 'function') return v;
+          if (k === 'bind') return (...a: unknown[]) => wrap(v.apply(t, a));
+          if (['first', 'all', 'run', 'raw'].includes(String(k)))
+            return (...a: unknown[]) => {
+              if (!inBatch) calls++;
+              return v.apply(t, a);
+            };
+          return v.bind(t);
+        },
+      });
+    const db: D1Database = {
+      prepare: (q) => wrap(real.prepare(q)),
+      batch: async (stmts) => {
+        calls++;
+        inBatch = true;
+        try {
+          return await real.batch(stmts);
+        } finally {
+          inBatch = false;
+        }
+      },
+    };
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'dev' }, seedSnapshot);
+    const MB = 1024 * 1024;
+    const size = 38 * MB + 779_803;
+    const body = Buffer.concat([fakeMp4(451), Buffer.alloc(size - fakeMp4(451).length, 7)]);
+    const actor = { id: 'u-admin', role: 'admin' as const };
+
+    const { mediaId, totalParts } = await startLibraryUpload(deps, actor, {
+      kind: 'video',
+      fileName: 'big.mp4',
+      mime: 'video/mp4',
+      sizeBytes: body.length,
+    });
+    expect(totalParts).toBe(39);
+    for (let i = 0; i < totalParts; i++) {
+      calls = 0;
+      await deps.blob.put(
+        `uploads/${mediaId}/${i}`,
+        body.subarray(i * MB, (i + 1) * MB),
+        'video/mp4',
+      );
+      expect(calls).toBeLessThanOrEqual(2); // one part per request: 1 database call
+    }
+
+    calls = 0;
+    const item = await completeLibraryUpload(deps, actor, mediaId, { durationSec: 451 });
+    expect(calls).toBeLessThan(40); // the free plan allows 50 per request
+    expect(item.sizeBytes).toBe(body.length);
+    const stored = await deps.blob.readRange(
+      `media/video/${mediaId}.mp4`,
+      body.length - 100,
+      body.length - 1,
+    );
+    expect(Buffer.compare(stored, body.subarray(body.length - 100))).toBe(0);
+    expect((await deps.blob.listStored?.(`uploads/${mediaId}/`))?.length).toBe(0);
+    const leftovers = await real
+      .prepare("SELECT COUNT(*) AS c FROM blob_chunks WHERE path LIKE 'uploads/%'")
+      .first<{ c: number }>('c');
+    expect(Number(leftovers)).toBe(0);
   });
 
   it('stores large blobs in small staged batches and leaves no staging rows behind', async () => {
