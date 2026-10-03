@@ -452,6 +452,43 @@ describe('grounded answers', () => {
   });
 });
 
+describe('answer depth', () => {
+  it('gives the model long sources, many of them, and room for a full answer', async () => {
+    const seen: ChatRequest[] = [];
+    const provider = new ScriptedProvider({
+      reply: (req) => {
+        seen.push(req);
+        return 'پاسخ کامل [۱]';
+      },
+    });
+    const { ctx, marketer } = await setup(provider);
+    await rebuildKnowledgeIndex(ctx.deps);
+    const user = await loadUser(ctx, marketer.id);
+    await answerQuestion(ctx.deps, user, { question: 'این کرم برای چه پوستی مناسب است؟' });
+    const call = seen.find((r) => r.prompt.includes('<context>'));
+    expect(call).toBeTruthy();
+    // Plenty of room for a complete answer (the old cap of 360 cut replies off mid-sentence)…
+    expect(call?.maxTokens ?? 0).toBeGreaterThanOrEqual(1000);
+    // …and the prompt now asks for depth instead of "at most 3 sentences".
+    expect(call?.system).not.toMatch(/حداکثر ۳ جمله/);
+    expect(call?.system).toContain('جامع');
+  });
+
+  it('does not truncate a multi-sentence grounded answer to three sentences', async () => {
+    const long =
+      'این کرم برای پوست خشک مناسب است [۱]. جذب سریعی دارد. برای مشتری حساس هم بی‌خطر است. هنگام معرفی به مشتری روی نرمی پوست تأکید کن. اگر مشتری پوست چرب داشت، محصول دیگری را پیشنهاد بده.';
+    const provider = new ScriptedProvider({ reply: () => long });
+    const { ctx, marketer } = await setup(provider);
+    await rebuildKnowledgeIndex(ctx.deps);
+    const user = await loadUser(ctx, marketer.id);
+    const r = await answerQuestion(ctx.deps, user, {
+      question: 'این کرم برای چه پوستی مناسب است؟',
+    });
+    expect(r.outcome).toBe('answered');
+    expect(r.reply.split(/(?<=[.!؟?])\s+/).length).toBeGreaterThanOrEqual(5);
+  });
+});
+
 describe('behaviour management', () => {
   it('computes pressure/health/risk from signals', () => {
     const signals = annotateActivity(

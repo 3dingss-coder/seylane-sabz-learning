@@ -219,12 +219,36 @@ describe('mentor guardrails (unit)', () => {
     expect(checkInput('این کرم برای چه پوستی مناسب است؟').ok).toBe(true);
     expect(checkInput('x'.repeat(600))).toEqual({ ok: false, reason: 'too_long' });
   });
-  it('output: Persian only, max 3 sentences, PII scrubbed, unknown normalised', () => {
+  it('output: Persian only, bounded length, PII scrubbed, unknown normalised', () => {
     expect(checkOutput('This is English only').ok).toBe(false);
-    const out = checkOutput('جمله یک. جمله دو. جمله سه. جمله چهار. شماره 09121234567');
-    expect(out.text.split('.').filter((s) => s.trim()).length).toBeLessThanOrEqual(3);
+    const long = checkOutput('جمله یک. جمله دو. جمله سه. جمله چهار. جمله پنج. جمله شش.');
+    // A real answer is no longer chopped at three sentences…
+    expect(long.text.split('.').filter((s) => s.trim()).length).toBe(6);
+    // …but it is still bounded, and a voice reply stays short.
+    const many = Array.from({ length: 20 }, (_, i) => `جمله شماره ${i}.`).join(' ');
+    expect(
+      checkOutput(many)
+        .text.split('.')
+        .filter((s) => s.trim()).length,
+    ).toBeLessThanOrEqual(9);
+    expect(
+      checkOutput('یک. دو. سه. چهار.', { spoken: true })
+        .text.split('.')
+        .filter((s) => s.trim()).length,
+    ).toBeLessThanOrEqual(2);
     expect(checkOutput('با 09121234567 تماس بگیر.').text).not.toContain('0912');
     expect(checkOutput('متاسفانه نمی‌دانم').unknown).toBe(true);
+  });
+  it('output: keeps bullet lists, and a rich answer that mentions a gap is not a refusal', () => {
+    const listed = checkOutput(
+      'محصولات این برند:\n- محلول آرایش پاک کن مخصوص پوست چرب\n- محلول آرایش پاک کن مخصوص پوست خشک',
+    );
+    expect(listed.text.split('\n').length).toBe(3);
+    const partial =
+      'محلول آرایش پاک کن این برند برای پوست چرب و خشک جداگانه ساخته شده و جذب سریعی دارد. قیمت عمده را در آموزش‌ها پیدا نکردم و بهتر است از مدیرت بپرسی.';
+    const r = checkOutput(partial);
+    expect(r.unknown).toBe(false);
+    expect(r.text).toContain('جذب سریع');
   });
   it('retrieves relevant chunks by Persian keywords', () => {
     const chunks = [
