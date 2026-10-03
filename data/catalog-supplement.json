@@ -147,7 +147,7 @@
       "brandId": "brand-sb-5",
       "productId": "sb-pixel-stick-sunscreen",
       "deadlineDays": 20,
-      "publish": false,
+      "publish": true,
       "quizKey": null,
       "sections": [
         {
