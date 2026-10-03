@@ -11,10 +11,10 @@ export interface ModalProps {
   children: ReactNode;
   /** Footer actions (primary CTA first). */
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
-const SIZES = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' } as const;
+const SIZES = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' } as const;
 
 // Every open modal registers here; only the topmost one closes on Escape. A confirm dialog nested
 // inside a form dialog (e.g. «بازنشانی رمز» in UsersPage) used to close both at once, discarding

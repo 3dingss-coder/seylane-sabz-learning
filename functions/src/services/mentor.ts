@@ -6,6 +6,17 @@ import type { ChatMessage, Package, Question, Quiz, Section, User } from '../dom
 import { audit, getPolicy, track, type Actor, type Deps } from './context';
 import { loadUserLearning } from './learning-state';
 import { productsById } from './catalog-cache';
+import { guideContext } from './mentor-guides';
+
+/** A behaviour box rendered as a retrievable chunk for the legacy chat endpoint. */
+function guideChunk(f: { id: string; title: string; text: string }): Chunk {
+  return {
+    sourceType: 'guide',
+    sourceId: f.id.replace(/^guide:/, ''),
+    title: f.title,
+    text: f.text,
+  };
+}
 
 // ─── Guardrails (spec §23.4) ────────────────────────────────────────────────
 export const MAX_INPUT = 500;
@@ -98,7 +109,7 @@ export function tokenize(s: string): string[] {
 }
 
 export interface Chunk {
-  sourceType: 'package' | 'section';
+  sourceType: 'package' | 'section' | 'guide';
   sourceId: string;
   title: string;
   text: string;
@@ -291,7 +302,10 @@ export async function chat(d: Deps, user: Doc<User>, input: z.infer<typeof chatS
   const pkgDocs = (await d.store.getMany<Package>(scope.map((p) => `packages/${p.id}`))).filter(
     (p): p is Doc<Package> => !!p,
   );
-  const chunks = await buildChunks(d, pkgDocs);
+  // Behaviour boxes come first: they are the admin's curated knowledge about the brand/product
+  // this question is about, so they must be retrievable even when the training text is thin.
+  const guide = await guideContext(d, { question: verdict.text, packageId });
+  const chunks = [...guide.facts.map(guideChunk), ...(await buildChunks(d, pkgDocs))];
   const top = retrieve(verdict.text, chunks, 3);
   const sources = dedupeSources(top);
   if (!top.length || (top[0]?.score ?? 0) < MIN_SCORE) {
@@ -321,7 +335,10 @@ export async function chat(d: Deps, user: Doc<User>, input: z.infer<typeof chatS
     .join('، ');
   const prompt = `${FEW_SHOT}\n\n<context>\n${top.map((c, i) => `[${i + 1}] ${c.title}: ${c.text.slice(0, 900)}`).join('\n')}\n</context>\n\nپیشرفت کاربر: ${progressSummary || '—'}\n${recent ? `گفت‌وگوی اخیر:\n${recent}\n` : ''}\nسؤال: ${verdict.text}\nپاسخ:`;
   try {
-    const raw = await d.llm.generate({ system: SYSTEM_PROMPT, prompt, maxTokens: 300 });
+    const system = guide.block
+      ? `${SYSTEM_PROMPT}\n\n${guide.block}\n\nاین جعبه درباره‌ی همین برند/محصول بر برداشت عمومی‌ات مقدم است.`
+      : SYSTEM_PROMPT;
+    const raw = await d.llm.generate({ system, prompt, maxTokens: 300 });
     const out = checkOutput(raw);
     if (!out.ok) throw new Error('output guard rejected');
     const outcome = out.unknown ? ('unknown' as const) : ('answered' as const);
