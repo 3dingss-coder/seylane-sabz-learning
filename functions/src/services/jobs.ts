@@ -33,8 +33,16 @@ export async function runDeadlineSweep(d: Deps) {
       if (p.status === 'completed' || p.packageStatus !== 'published' || !p.deadlineAt) continue;
       const left = Date.parse(p.deadlineAt) - now.getTime();
       if (left > 0) {
+        // Personal windows (e.g. 24h from sign-up) only use thresholds shorter than the window,
+        // so nobody is warned the moment their clock starts; very short windows warn at 25%.
+        const win = p.deadlineWindowHours;
+        let own = thresholds;
+        if (win) {
+          own = thresholds.filter((t) => t < win);
+          if (!own.length) own = [Math.max(1, Math.round(win * 0.25))];
+        }
         // Smallest threshold that has been crossed → exactly one warning per threshold.
-        const h = thresholds.find((t) => left <= t * HOUR);
+        const h = own.find((t) => left <= t * HOUR);
         if (h !== undefined) {
           const n = await notifyTemplate(
             d,
@@ -239,6 +247,7 @@ export function upcomingDeadlines(packages: Array<Doc<Package>>, now: Date, days
   return packages.filter(
     (p) =>
       p.status === 'published' &&
+      !p.deadlineHours &&
       p.deadlineAt &&
       Date.parse(p.deadlineAt) > now.getTime() &&
       Date.parse(p.deadlineAt) - now.getTime() <= days * DAY,

@@ -25,6 +25,15 @@ export function formatFaDate(iso: string | null): string {
   }).format(new Date(iso));
 }
 
+/** Deadline text for notifications: a personal window reads «۲۴ ساعت از شروع»; otherwise the date. */
+export function deadlineLabel(p: { deadlineAt: string | null; deadlineHours?: number | null }) {
+  if (p.deadlineHours && p.deadlineHours > 0) {
+    const n = new Intl.NumberFormat('fa-IR').format(p.deadlineHours);
+    return `${n} ساعت از شروع شما`;
+  }
+  return formatFaDate(p.deadlineAt);
+}
+
 export const assignmentSchema = z
   .object({
     type: z.enum(['global', 'team', 'user', 'brand']),
@@ -102,6 +111,7 @@ export async function createAssignment(
     if (!p) continue;
     if (p.status === 'draft')
       warnings.push(`«${p.title}» هنوز منتشر نشده و پس از انتشار دیده می‌شود.`);
+    if (p.deadlineHours) continue; // personal window: every marketer's clock starts on their own
     if (p.deadlineAt && p.deadlineAt < now.toISOString())
       warnings.push(`مهلت «${p.title}» گذشته است.`);
     else if (p.deadlineAt && Date.parse(p.deadlineAt) - now.getTime() < 72 * HOUR)
@@ -142,7 +152,7 @@ export async function createAssignment(
       d,
       users.map((u) => u.id),
       'new_assignment',
-      { title: p.title, deadline: formatFaDate(p.deadlineAt) },
+      { title: p.title, deadline: deadlineLabel(p) },
       {
         actionRef: `/packages/${(p as Doc<Package>).id}`,
         priority: 'high',
@@ -201,7 +211,7 @@ export async function notifyAssignedUsers(d: Deps, packageIds: string[]) {
       d,
       [...userIds],
       'new_assignment',
-      { title: pkg.title, deadline: formatFaDate(pkg.deadlineAt) },
+      { title: pkg.title, deadline: deadlineLabel(pkg) },
       {
         actionRef: `/packages/${pid}`,
         priority: 'high',
