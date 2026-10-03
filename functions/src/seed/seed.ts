@@ -36,7 +36,24 @@ interface SupplementPackage {
   productId: string | null;
   deadlineDays: number | null;
   publish: boolean;
+  /** Key into data/skincare-products-quiz.json; null → sample fallback questions. */
+  quizKey: string | null;
   sections: SupplementSection[];
+}
+interface BankQuestion {
+  stem: string;
+  options: string[];
+  answer: string;
+  explanation: string;
+}
+interface BankProduct {
+  key: string;
+  nameFa: string;
+  nameEn: string;
+  questions: BankQuestion[];
+}
+interface QuizBank {
+  products: BankProduct[];
 }
 interface Supplement {
   holdingLogo: string;
@@ -86,6 +103,7 @@ export interface SeedReport {
     sectionId: string;
     durationSec: number;
     status: string;
+    quizSource: 'client-quiz-bank' | 'sample' | 'none';
   }>;
   demoUsers: Array<{ role: string; name: string; phone: string; password: string }>;
 }
@@ -128,6 +146,15 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
   const sup = JSON.parse(
     fs.readFileSync(path.join(opts.repoRoot, 'data', 'catalog-supplement.json'), 'utf8'),
   ) as Supplement;
+  const bank = JSON.parse(
+    fs.readFileSync(path.join(opts.repoRoot, 'data', 'skincare-products-quiz.json'), 'utf8'),
+  ) as QuizBank;
+  const quizAssign = distributeBankQuestions(sup.trainingPackages, bank);
+  const quizSourceFor = (
+    sp: SupplementPackage,
+    i: number,
+  ): SeedReport['training'][number]['quizSource'] =>
+    quizAssign.has(`${sp.id}|${i}`) ? 'client-quiz-bank' : sp.brandId ? 'sample' : 'none';
   const now = d.clock();
   const iso = now.toISOString();
   const report: SeedReport = {
@@ -323,6 +350,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
           sectionId: sec?.id ?? '',
           durationSec: sec?.durationSec ?? 0,
           status: exists.status,
+          quizSource: quizSourceFor(sp, i),
         });
       }
       if (exists.status === 'published') publishedIds.push(sp.id);
@@ -413,9 +441,14 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
         section as unknown as Record<string, unknown>,
       );
       await d.store.set(`section_index/${sectionId}`, { packageId: sp.id });
-      const questions = sp.brandId
-        ? sampleQuestions(sp, s, brand?.name ?? '', product, productInputs, brandInputs)
-        : [];
+      const bankQs = quizAssign.get(`${sp.id}|${i}`);
+      const questions =
+        bankQs && bankQs.length
+          ? bankQs
+          : sp.brandId
+            ? sampleQuestions(sp, s, brand?.name ?? '', product, productInputs, brandInputs)
+            : [];
+      const quizSource = quizSourceFor(sp, i);
       const quiz: Quiz = {
         sectionId,
         packageId: sp.id,
@@ -424,7 +457,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
         version: 1,
         active: true,
         questionCount: questions.length,
-        needsReview: true,
+        needsReview: quizSource !== 'client-quiz-bank',
         createdAt: iso,
         updatedAt: iso,
       };
@@ -453,6 +486,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
         sectionId,
         durationSec,
         status: sp.publish ? 'published' : 'draft',
+        quizSource,
       });
     }
     await refreshPackageSummary(d, sp.id);
@@ -524,6 +558,45 @@ function buildDescription(
 
 type QInput = Pick<Question, 'stem' | 'options' | 'answerKey' | 'explanation'>;
 
+function bankToQInput(q: BankQuestion): QInput {
+  const keys = ['a', 'b', 'c', 'd'];
+  return {
+    stem: q.stem,
+    options: q.options.map((text, i) => ({ key: keys[i] ?? 'a', text })),
+    answerKey: q.answer.trim().toLowerCase(),
+    explanation: q.explanation,
+  };
+}
+
+/**
+ * Split each quiz-bank product's question set across every section of the packages tagged with
+ * that quizKey (supplement order, contiguous chunks). A product's full bank therefore appears
+ * exactly once on the site — e.g. «WITH US» 10 questions split 5/5 between the ویت آس audio and
+ * video packages; single-section packages (زِن) get the whole 10.
+ */
+function distributeBankQuestions(
+  packages: SupplementPackage[],
+  bank: QuizBank,
+): Map<string, QInput[]> {
+  const out = new Map<string, QInput[]>();
+  for (const p of bank.products) {
+    const questions = p.questions.map(bankToQInput);
+    const targets: string[] = [];
+    for (const sp of packages)
+      if (sp.quizKey === p.key) sp.sections.forEach((_, i) => targets.push(`${sp.id}|${i}`));
+    if (!targets.length || !questions.length) continue;
+    const base = Math.floor(questions.length / targets.length);
+    let extra = questions.length % targets.length;
+    let idx = 0;
+    for (const t of targets) {
+      const n = base + (extra-- > 0 ? 1 : 0);
+      out.set(t, questions.slice(idx, idx + n));
+      idx += n;
+    }
+  }
+  return out;
+}
+
 /** Deterministic pick of `n` distinct items, excluding `exclude`. */
 function pick<T>(list: T[], n: number, seed: string, exclude: (x: T) => boolean): T[] {
   const pool = list.filter((x) => !exclude(x));
@@ -552,8 +625,10 @@ function withCorrect(
 }
 
 /**
- * Sample 5-question quizzes built only from catalog facts (brand, product, category) + generic
- * sales-process questions. Marked needsReview=true: the admin replaces them with content questions.
+ * Fallback sample 5-question quizzes built only from catalog facts (brand, product, category) +
+ * generic sales-process questions — used solely for products without a client quiz bank entry in
+ * data/skincare-products-quiz.json. Marked needsReview=true: the admin replaces them with content
+ * questions.
  */
 function sampleQuestions(
   sp: SupplementPackage,
