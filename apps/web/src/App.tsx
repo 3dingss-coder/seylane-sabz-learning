@@ -52,7 +52,7 @@ export function AppRoutes() {
       <Routes>
         <Route path="/login" element={<AuthPage />} />
         <Route path="/register" element={<AuthPage initial="register" />} />
-        <Route path="/forgot-password" element={<AuthPage initial="forgot" />} />
+        <Route path="/forgot-password" element={<Navigate to="/login" replace />} />
         <Route path="/gallery" element={<GalleryPage />} />
         <Route
           path="/onboarding"

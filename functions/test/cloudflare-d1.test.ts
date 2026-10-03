@@ -156,7 +156,7 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
 
     // 4. Phone-only login works even when APP_ENV=prod on Cloudflare D1
     const phoneLoginRes = await handler2(
-      new Request('https://learn.pages.dev/v1/auth/demo-phone-login', {
+      new Request('https://learn.pages.dev/v1/auth/phone-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: '09359998877' }),

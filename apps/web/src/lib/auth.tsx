@@ -20,8 +20,16 @@ import type { AuthResult, Me, Role } from './types';
 interface AuthState {
   user: Me | null;
   status: 'loading' | 'authenticated' | 'anonymous';
-  login(identifier: string, password?: string): Promise<Me>;
-  register(input: { name: string; identifier: string; password: string }): Promise<Me>;
+  /** Marketers: phone number only. Rejects with code NOT_FOUND when the number isn't registered. */
+  login(phone: string): Promise<Me>;
+  /** Marketers: sign up with name + phone and be signed in straight away. */
+  register(input: { name: string; phone: string }): Promise<Me>;
+  /** Admin / manager panels: username + password. */
+  staffLogin(input: {
+    panel: 'admin' | 'manager';
+    username: string;
+    password: string;
+  }): Promise<Me>;
   logout(): Promise<void>;
   refreshMe(): Promise<void>;
   setUser(u: Me): void;
@@ -97,13 +105,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       status,
-      login: async (identifier, password) =>
-        accept(
-          password && password.length > 0
-            ? await api.post<AuthResult>('/auth/login', { identifier, password })
-            : await api.post<AuthResult>('/auth/demo-phone-login', { phone: identifier }),
-        ),
-      register: async (input) => accept(await api.post<AuthResult>('/auth/register', input)),
+      login: async (phone) => accept(await api.post<AuthResult>('/auth/phone-login', { phone })),
+      register: async (input) => accept(await api.post<AuthResult>('/auth/phone-register', input)),
+      staffLogin: async (input) => accept(await api.post<AuthResult>('/auth/staff-login', input)),
       logout: async () => {
         try {
           await flushBeats(); // send offline progress before the token is revoked

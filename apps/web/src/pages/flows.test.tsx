@@ -26,7 +26,7 @@ const loggedIn = () => {
 describe('M1 login → M3 home', () => {
   it('logs in with phone, stores refresh token and shows «کار بعدی»', async () => {
     const { calls } = mockApi({
-      'POST /v1/auth/demo-phone-login': () => ({
+      'POST /v1/auth/phone-login': () => ({
         data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
       }),
       'GET /v1/me/home': () => ({ data: home }),
@@ -41,7 +41,7 @@ describe('M1 login → M3 home', () => {
     expect(await screen.findByTestId('next-item')).toHaveTextContent('معرفی کلی محصول فورمی');
     expect(screen.getByRole('button', { name: /ادامه/ })).toBeInTheDocument();
     // Persian digits are normalised before sending
-    expect(calls.find((c) => c.key === 'POST /v1/auth/demo-phone-login')?.body).toEqual({
+    expect(calls.find((c) => c.key === 'POST /v1/auth/phone-login')?.body).toEqual({
       phone: '09120000004',
     });
     expect(localStorage.getItem('ssl.refresh')).toBe('r1');
@@ -52,11 +52,14 @@ describe('M1 login → M3 home', () => {
     );
   });
 
-  it('shows the server error message on unknown phone', async () => {
+  it('unknown phone moves to sign-up with the number kept', async () => {
     mockApi({
-      'POST /v1/auth/demo-phone-login': () => ({
-        status: 401,
-        error: { code: 'UNAUTHENTICATED', message: 'حسابی با این شماره پیدا نشد.' },
+      'POST /v1/auth/phone-login': () => ({
+        status: 404,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'این شماره هنوز ثبت‌نام نکرده است. ابتدا ثبت‌نام کنید.',
+        },
       }),
     });
     renderApp('/login');
@@ -64,7 +67,9 @@ describe('M1 login → M3 home', () => {
       target: { value: '09120000004' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('حسابی با این شماره پیدا نشد.');
+    expect(await screen.findByRole('button', { name: 'ثبت‌نام و ورود' })).toBeInTheDocument();
+    expect(screen.getByLabelText('شماره موبایل')).toHaveValue('09120000004');
+    expect(screen.getByLabelText('نام و نام خانوادگی')).toBeInTheDocument();
   });
 
   it('home shows empty state when nothing is assigned', async () => {

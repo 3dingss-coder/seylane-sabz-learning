@@ -5,6 +5,7 @@ import { Button, Spinner } from '@/components/ui';
 import { homePathFor, useAuth } from '@/lib/auth';
 import { PANEL_LABEL, panelOf } from '@/lib/roles';
 import type { Role } from '@/lib/types';
+import { StaffLoginPage } from '@/pages/auth/StaffLoginPage';
 
 export function FullPageSpinner() {
   return (
@@ -23,8 +24,12 @@ export function RequireAuth({ roles, children }: { roles: Role[]; children: Reac
   const { status, user } = useAuth();
   const loc = useLocation();
   if (status === 'loading') return <FullPageSpinner />;
-  if (status === 'anonymous' || !user)
+  if (status === 'anonymous' || !user) {
+    // /admin and /manager show their own username + password sign-in at the same URL.
+    const panel = panelOf(loc.pathname);
+    if (panel === 'admin' || panel === 'manager') return <StaffLoginPage panel={panel} />;
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+  }
   if (!roles.includes(user.role)) {
     // Panels (/admin, /manager) explain why instead of silently bouncing to another screen.
     const panel = panelOf(loc.pathname);
@@ -60,7 +65,7 @@ function WrongAccount({
   const switchAccount = async () => {
     setBusy(true);
     await logout();
-    nav('/login', { replace: true, state: { from } });
+    nav(from, { replace: true });
   };
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background p-4">

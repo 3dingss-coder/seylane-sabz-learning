@@ -33,6 +33,27 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'رمز عبور را وارد کنید.').max(128),
 });
 
+/** Self sign-up by phone only (no password: marketers sign in with their number). */
+export const phoneRegisterSchema = z.object({
+  name: text(2, 60, 'نام'),
+  phone: z.string().min(1, 'شماره موبایل را وارد کنید.').max(20),
+});
+export const staffLoginSchema = z.object({
+  username: z.string().trim().min(2).max(60),
+  password: z.string().min(1).max(128),
+  panel: z.enum(['admin', 'manager']),
+});
+
+/** Staff (admin/manager) usernames map to an internal, non-routable auth email. */
+export function staffAuthEmail(username: string): string {
+  const slug = username
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9._-]/g, '');
+  return `${slug || 'staff'}@staff.seylane.local`;
+}
+
 export type Identifier =
   | { kind: 'phone'; phone: string; authEmail: string }
   | { kind: 'email'; email: string; authEmail: string };

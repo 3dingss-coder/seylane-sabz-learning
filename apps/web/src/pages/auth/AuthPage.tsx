@@ -1,17 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { KeyRound, Phone, UserRound } from 'lucide-react';
+import { Phone, UserRound } from 'lucide-react';
 import { BrandBackdrop } from '@/components/brand/BrandBackdrop';
 import { Button, Card, Input } from '@/components/ui';
-import { ApiError, api } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import { homePathFor, useAuth } from '@/lib/auth';
 import { canAccess } from '@/lib/roles';
 import { toLatinDigits } from '@/lib/digits';
 import { track } from '@/lib/telemetry';
 
-type Mode = 'login' | 'register' | 'forgot';
+type Mode = 'login' | 'register';
 
-/** MVP phone-only login; registration/reset remain separate flows. */
+/** Phone-only sign-in for marketers; unknown numbers are sent to sign-up, which signs them in directly. */
 export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
   const { status, user, login, register } = useAuth();
   const nav = useNavigate();
@@ -19,7 +19,6 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
   const [mode, setMode] = useState<Mode>(initial);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [info, setInfo] = useState('');
@@ -46,14 +45,8 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
   const validate = () => {
     const e: Record<string, string> = {};
     if (mode === 'register' && name.trim().length < 2) e.name = 'نام و نام خانوادگی را بنویسید.';
-    if (mode === 'login' && !/^09\d{9}$/.test(toLatinDigits(identifier.trim())))
+    if (!/^09\d{9}$/.test(toLatinDigits(identifier.trim())))
       e.identifier = 'شماره موبایل معتبر وارد کنید.';
-    else if (!identifier.trim()) e.identifier = 'شماره موبایل یا ایمیل را وارد کنید.';
-    if (
-      (mode === 'register' && password.length < 8) ||
-      (mode === 'login' && import.meta.env.VITE_REQUIRE_PASSWORD === 'true' && !password)
-    )
-      e.password = mode === 'register' ? 'رمز باید حداقل ۸ نویسه باشد.' : 'رمز را وارد کنید.';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -65,17 +58,8 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
     setBusy(true);
     const id = toLatinDigits(identifier.trim());
     try {
-      if (mode === 'forgot') {
-        await api.post('/auth/password-reset', { identifier: id });
-        setInfo(
-          'اگر حسابی با این مشخصات باشد، راهنمای بازیابی ارسال شد. اگر با شماره موبایل ثبت‌نام کرده‌اید، از مدیر خود بخواهید رمز را بازتنظیم کند.',
-        );
-        return;
-      }
       const u =
-        mode === 'login'
-          ? await login(id, password)
-          : await register({ name: name.trim(), identifier: id, password });
+        mode === 'login' ? await login(id) : await register({ name: name.trim(), phone: id });
       // Return to the page that sent the user here (e.g. /admin/users) when their role allows it.
       const from = (loc.state as { from?: string } | null)?.from;
       const target =
@@ -86,7 +70,15 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             : homePathFor(u.role);
       nav(target, { replace: true });
     } catch (e) {
-      if (e instanceof ApiError) {
+      if (mode === 'login' && e instanceof ApiError && e.code === 'NOT_FOUND') {
+        // Not registered yet: move to sign-up with the number kept; sign-up logs them in directly.
+        setMode('register');
+        track('signup_started');
+        setErrors({});
+        setInfo(
+          'این شماره هنوز ثبت‌نام نکرده است. نام خود را وارد کنید و ثبت‌نام را بزنید تا مستقیم وارد شوید.',
+        );
+      } else if (e instanceof ApiError) {
         const f = e.fields;
         if (Object.keys(f).length) setErrors(f);
         else if (e.code === 'CONFLICT') setErrors({ identifier: e.message });
@@ -97,7 +89,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
     }
   };
 
-  const title = mode === 'login' ? 'ورود' : mode === 'register' ? 'ثبت‌نام' : 'بازیابی رمز';
+  const title = mode === 'login' ? 'ورود' : 'ثبت‌نام';
   return (
     <div className="relative flex min-h-dvh flex-col items-center bg-background px-4 pb-8">
       {/* brand hero behind the top of the form */}
@@ -131,9 +123,9 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             />
           )}
           <Input
-            label={mode === 'login' ? 'شماره موبایل' : 'شماره موبایل یا ایمیل'}
+            label="شماره موبایل"
             ltr
-            inputMode={/^[\d۰-۹+]*$/.test(identifier) ? 'tel' : 'email'}
+            inputMode="tel"
             autoComplete="username"
             placeholder="09xxxxxxxxx"
             value={identifier}
@@ -142,21 +134,6 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             icon={<Phone className="size-5" />}
             disabled={busy}
           />
-          {(mode === 'register' ||
-            (mode === 'login' && import.meta.env.VITE_REQUIRE_PASSWORD === 'true')) && (
-            <Input
-              label="رمز عبور"
-              type="password"
-              ltr
-              autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={errors.password}
-              hint={mode === 'register' ? 'حداقل ۸ نویسه' : undefined}
-              icon={<KeyRound className="size-5" />}
-              disabled={busy}
-            />
-          )}
           {formError && (
             <p
               role="alert"
@@ -171,7 +148,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             </p>
           )}
           <Button type="submit" size="lg" block loading={busy} className="mt-2">
-            {mode === 'login' ? 'ورود' : mode === 'register' ? 'ثبت‌نام' : 'ارسال راهنما'}
+            {mode === 'login' ? 'ورود' : 'ثبت‌نام و ورود'}
           </Button>
         </form>
         <div className="mt-4 flex flex-col items-center gap-1 text-sm">
@@ -194,35 +171,9 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
           )}
         </div>
       </Card>
-      {mode === 'login' && (
-        <Card className="animate-fade-up relative mt-4 w-full max-w-[400px] [animation-delay:120ms]">
-          <p className="mb-2 text-sm font-bold text-text">ورود سریع آزمایشی</p>
-          <div className="grid grid-cols-3 gap-2">
-            {DEMO_ACCOUNTS.map((a) => (
-              <button
-                key={a.phone}
-                type="button"
-                className="pressable min-h-12 rounded-input border border-border px-2 text-sm text-text hover:border-primary/40 hover:bg-primary-light"
-                onClick={() => {
-                  setIdentifier(a.phone);
-                }}
-              >
-                {a.label}
-              </button>
-            ))}
-          </div>
-        </Card>
-      )}
       <Link to="/gallery" className="sr-only">
         راهنمای طراحی
       </Link>
     </div>
   );
 }
-
-/** Seeded accounts (functions/src/seed/demo.ts). */
-const DEMO_ACCOUNTS = [
-  { phone: '09120000002', label: 'ادمین' },
-  { phone: '09120000003', label: 'مدیر تیم' },
-  { phone: '09120000004', label: 'بازاریاب' },
-];
