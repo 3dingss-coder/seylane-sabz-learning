@@ -334,7 +334,16 @@ export interface MentorNudge {
 }
 
 export type ChatSourceType =
-  'package' | 'section' | 'product' | 'brand' | 'faq' | 'play' | 'policy' | 'media';
+  | 'package'
+  | 'section'
+  | 'product'
+  | 'brand'
+  | 'faq'
+  | 'play'
+  | 'policy'
+  | 'media'
+  /** A «جعبه‌ی رفتار منتور» (behaviour box) — admin-authored mentor knowledge. */
+  | 'guide';
 
 export type ChatMode = 'text' | 'voice' | 'coach';
 
@@ -375,8 +384,70 @@ export interface Policy {
   mentorVoiceEnabled: boolean;
   mentorVoiceMinutesPerUser: number;
   mentorVoiceMinutesGlobal: number;
+  /** Let the mentor read the whole catalog (every brand/product), not only assigned ones. */
+  mentorCatalogScope: 'all' | 'assigned';
+  /** Let the mentor use quiz stems, options and answer keys as knowledge. */
+  mentorQuizAnswerAccess: boolean;
   updatedAt: string;
   updatedBy: string | null;
+}
+
+// ─── Mentor behaviour boxes (جعبه‌ی رفتار منتور) ──────────────────────────────
+/**
+ * One editable box per brand / product (plus one global default) that tells the mentor *how to
+ * behave* and *what it must know* about that brand or product. Admin-authored, versioned by
+ * `updatedAt`, and fed into the mentor pipeline in two ways:
+ *   1. as a knowledge item (retrievable + citable like any approved content), and
+ *   2. as a behaviour block in the system prompt whenever the question is about that target.
+ */
+export type MentorGuideKind = 'global' | 'brand' | 'product';
+/** Persian labels are what the admin sees; the codes are what the store keeps. */
+export type MentorGuideTone = 'friendly' | 'professional' | 'coach' | 'brief';
+/** 'inherit' follows `Policy.mentorQuizAnswerAccess`. */
+export type MentorGuideQuizPolicy = 'inherit' | 'allow' | 'hide';
+
+export interface MentorGuideObjection {
+  objection: string;
+  answer: string;
+}
+export interface MentorGuideFaq {
+  question: string;
+  answer: string;
+}
+
+export interface MentorGuide {
+  kind: MentorGuideKind;
+  /** null for the global box; brand id / product id otherwise. */
+  targetId: string | null;
+  /** Overrides the brand/product name in mentor prompts and the admin list. */
+  title: string;
+  /** A disabled box is ignored everywhere (retrieval + prompts) but keeps its content. */
+  enabled: boolean;
+  tone: MentorGuideTone;
+  /** One line: who the mentor is for this brand/product. */
+  personaNote: string;
+  /** Positioning summary — the mentor must know this by heart. */
+  summary: string;
+  /** Product/brand facts the mentor should always be able to state. */
+  keyPoints: string[];
+  /** Benefits for the customer (sales ammunition). */
+  sellingPoints: string[];
+  /** Objection → approved answer pairs. */
+  objections: MentorGuideObjection[];
+  /** Short approved Q&A. */
+  faq: MentorGuideFaq[];
+  /** Things the mentor must say / must never say. */
+  dos: string[];
+  donts: string[];
+  /** Extra search vocabulary (nicknames, Latin names, slang). */
+  keywords: string[];
+  /** 0–2: retrieval boost for this box, so a defined brand always wins over generic content. */
+  priority: number;
+  /** May the mentor quote the answer key of this brand/product's quizzes? */
+  quizAnswers: MentorGuideQuizPolicy;
+  updatedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AuditLog {

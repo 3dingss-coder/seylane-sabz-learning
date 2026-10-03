@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { AdminBrand, AdminPackage, AdminProduct, AdminTeam, Me } from '@/lib/types';
+import type {
+  AdminBrand,
+  AdminPackage,
+  AdminProduct,
+  AdminTeam,
+  Me,
+  MentorGuideDetail,
+  MentorGuideRow,
+} from '@/lib/types';
 
 export const ak = {
   tree: ['admin', 'tree'] as const,
@@ -11,7 +19,13 @@ export const ak = {
   quiz: (id: string) => ['admin', 'quiz', id] as const,
   users: ['admin', 'users'] as const,
   teams: ['admin', 'teams'] as const,
+  guides: ['admin', 'mentor-guides'] as const,
+  guide: (key: string) => ['admin', 'mentor-guide', key] as const,
 };
+
+/** `mentor_guides` key: `global` | `brand:<id>` | `product:<id>`. */
+export const guideKey = (kind: MentorGuideRow['kind'], targetId: string | null) =>
+  kind === 'global' ? 'global' : `${kind}:${targetId ?? ''}`;
 
 export const useBrands = () =>
   useQuery({
@@ -42,5 +56,26 @@ export const useTeams = () =>
   useQuery({
     queryKey: ak.teams,
     queryFn: ({ signal }) => api.get<AdminTeam[]>('/admin/teams', signal),
+    staleTime: 30_000,
+  });
+
+/** Every brand + product with its mentor behaviour box (defined or not). */
+export const useMentorGuides = (qs = '') =>
+  useQuery({
+    queryKey: [...ak.guides, qs],
+    queryFn: ({ signal }) =>
+      api.get<MentorGuideRow[]>(`/admin/mentor/guides${qs ? `?${qs}` : ''}`, signal),
+    staleTime: 30_000,
+  });
+
+/** One box (`global` | `brand/<id>` | `product/<id>`). */
+export const useMentorGuide = (kind: MentorGuideRow['kind'], targetId: string | null) =>
+  useQuery({
+    queryKey: ak.guide(guideKey(kind, targetId)),
+    queryFn: ({ signal }) =>
+      api.get<MentorGuideDetail>(
+        `/admin/mentor/guides/${kind}${targetId ? `/${targetId}` : ''}`,
+        signal,
+      ),
     staleTime: 30_000,
   });

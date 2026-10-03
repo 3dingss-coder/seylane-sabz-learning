@@ -19,7 +19,17 @@ import { DAY } from '../lib/time';
  *     knowledge from a package that is not assigned to them (enforced in services/retrieval.ts).
  */
 export type KnowledgeKind =
-  'brand' | 'product' | 'package' | 'section' | 'quiz' | 'policy' | 'play' | 'faq' | 'media';
+  | 'brand'
+  | 'product'
+  | 'package'
+  | 'section'
+  | 'quiz'
+  | 'policy'
+  | 'play'
+  | 'faq'
+  | 'media'
+  /** Admin-authored «جعبه‌ی رفتار منتور» for the whole app, one brand or one product. */
+  | 'guide';
 
 export interface KnowledgeScope {
   brandId: string | null;
@@ -112,6 +122,12 @@ export async function buildKnowledgeItems(
 
   const brands = await allBrands(d);
   const brandName = new Map(brands.map((b) => [b.id, b.name]));
+  const policy = await getPolicy(d);
+  // The mentor is the field marketer's product reference: with `mentorCatalogScope: 'all'` the
+  // catalog (brands + products + their behaviour boxes) is indexed with a NULL brand scope, so
+  // `visibleUnder` never hides it from a marketer whose `brandIds` do not include that brand.
+  // Training packages and their sections keep their own scope — those are still assignments.
+  const catalogForAll = policy.mentorCatalogScope !== 'assigned';
 
   // ── Brands ────────────────────────────────────────────────────────────────
   for (const b of brands) {
@@ -123,8 +139,8 @@ export async function buildKnowledgeItems(
       body: `${b.name}${b.nameLatin ? ` (${b.nameLatin})` : ''}. ${trim(b.logoIsFallback ? '' : 'لوگوی برند در کاتالوگ موجود است.')}`,
       keywords: nonEmpty(b.name, b.nameLatin),
       ref: `/learn?brand=${encodeURIComponent(b.id)}`,
-      scope: { ...GLOBAL_SCOPE, brandId: b.id, brandIds: [b.id] },
-      sourceHash: hashSource([b.name, b.nameLatin, b.archived, b.updatedAt]),
+      scope: { ...GLOBAL_SCOPE, brandId: b.id, brandIds: catalogForAll ? null : [b.id] },
+      sourceHash: hashSource([b.name, b.nameLatin, b.archived, catalogForAll, b.updatedAt]),
       embedding: null,
       embeddingProvider: null,
       archived: false,
@@ -158,9 +174,17 @@ export async function buildKnowledgeItems(
         ...GLOBAL_SCOPE,
         brandId: p.brandId ?? null,
         productId: p.id,
-        brandIds: p.brandId ? [p.brandId] : null,
+        brandIds: catalogForAll || !p.brandId ? null : [p.brandId],
       },
-      sourceHash: hashSource([p.name, p.code, p.barcode, p.category, p.description, p.updatedAt]),
+      sourceHash: hashSource([
+        p.name,
+        p.code,
+        p.barcode,
+        p.category,
+        p.description,
+        catalogForAll,
+        p.updatedAt,
+      ]),
       embedding: null,
       embeddingProvider: null,
       archived: !!p.archived,
@@ -245,12 +269,25 @@ export async function buildKnowledgeItems(
           collection: `quizzes/${quiz.id}/questions`,
           where: [['archived', '==', false]],
         });
-        // Stems + explanations only. Answer keys are answer-key material and never indexed.
+        /**
+         * The mentor is a *study reference*, not an exam proctor: with
+         * `Policy.mentorQuizAnswerAccess` on (default) the stems, the four options **and the
+         * answer key** are indexed so the mentor can teach the quiz, explain why an option is
+         * right and quote it verbatim. Per-brand/per-product boxes can still switch this off
+         * (`quizAnswers: 'hide'`), which is enforced in the prompt at answer time, not here —
+         * the index always holds the truth, the prompt decides what may be spoken.
+         */
+        const withAnswers = policy.mentorQuizAnswerAccess;
         const qa = questions
           .map((q) => {
-            // Options are deliberately NOT indexed: they are distractors, and when they leaked into
-            // answers the mentor replied with raw «گزینه‌ها: a) … b) …» lists.
-            return `سؤال: ${q.stem}\nتوضیح آموزشی: ${q.explanation}`;
+            const correct = q.options.find((o) => o.key === q.answerKey);
+            const options =
+              withAnswers && q.options.length
+                ? `\nگزینه‌ها: ${q.options.map((o) => `${o.key}) ${o.text}`).join(' — ')}`
+                : '';
+            const key =
+              withAnswers && correct ? `\nپاسخ صحیح: ${correct.key}) ${correct.text}` : '';
+            return `سؤال: ${q.stem}${options}${key}\nتوضیح آموزشی: ${q.explanation}`;
           })
           .join('\n\n');
         if (qa.trim())
@@ -269,7 +306,13 @@ export async function buildKnowledgeItems(
               sectionId: s.id,
               brandIds: pkg.brandId ? [pkg.brandId] : null,
             },
-            sourceHash: hashSource([quiz.id, quiz.version, qa.length, questions.length]),
+            sourceHash: hashSource([
+              quiz.id,
+              quiz.version,
+              qa.length,
+              questions.length,
+              withAnswers,
+            ]),
             embedding: null,
             embeddingProvider: null,
             archived: false,
@@ -373,8 +416,17 @@ export async function buildKnowledgeItems(
     });
   }
 
+  // ── Mentor behaviour boxes (one per brand / product + the global default) ───
+  // Built last so `buildGuideItems` can reuse the brand/product maps above if it needs them;
+  // each enabled box is one searchable, citable item like any other approved content.
+  try {
+    const { buildGuideItems } = await import('./mentor-guides');
+    items.push(...(await buildGuideItems(d, nowIso)));
+  } catch (e) {
+    console.warn('[knowledge] guide items skipped', (e as Error).message);
+  }
+
   // ── Company policies (deterministic facts the assistant may quote) ─────────
-  const policy = await getPolicy(d);
   items.push(policyItem(policy, nowIso));
 
   return items;
