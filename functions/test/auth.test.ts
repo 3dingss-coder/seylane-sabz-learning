@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createCtx, type TestCtx } from './support/ctx';
+import { ensureUser, staffAuthEmail } from '../src/services/users';
 
 let ctx: TestCtx;
 beforeEach(async () => {
@@ -14,13 +15,66 @@ describe('auth (PROMPT 002)', () => {
       password: 'abc12345',
     });
     expect(created.status).toBe(201);
-    const login = await ctx.api().post('/v1/auth/demo-phone-login', { phone: '۰۹۳۵۱۲۳۴۵۶۷' });
+    const login = await ctx.api().post('/v1/auth/phone-login', { phone: '۰۹۳۵۱۲۳۴۵۶۷' });
     expect(login.status).toBe(200);
     expect(login.body.data.user.phone).toBe('09351234567');
     expect((await ctx.api(login.body.data.idToken).get('/v1/me')).status).toBe(200);
     expect(
-      (await ctx.api().post('/v1/auth/demo-phone-login', { phone: 'unknown@example.com' })).status,
+      (await ctx.api().post('/v1/auth/phone-login', { phone: 'unknown@example.com' })).status,
     ).toBe(400);
+  });
+
+  it('phone login for an unregistered number says to sign up first (404 NOT_REGISTERED)', async () => {
+    const res = await ctx.api().post('/v1/auth/phone-login', { phone: '09361112233' });
+    expect(res.status).toBe(404);
+    expect(res.body.error.details).toEqual({ reason: 'NOT_REGISTERED' });
+  });
+
+  it('staff login: username + password per panel; wrong panel or password is rejected', async () => {
+    await ensureUser(ctx.deps, {
+      name: 'ادمین',
+      identifier: staffAuthEmail('Test Admin'),
+      password: 'long-test-pass-1',
+      role: 'admin',
+    });
+    const ok = await ctx.api().post('/v1/auth/staff-login', {
+      username: 'Test Admin',
+      password: 'long-test-pass-1',
+      panel: 'admin',
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.user.role).toBe('admin');
+    const wrongPanel = await ctx.api().post('/v1/auth/staff-login', {
+      username: 'Test Admin',
+      password: 'long-test-pass-1',
+      panel: 'manager',
+    });
+    expect(wrongPanel.status).toBe(401);
+    const wrongPass = await ctx
+      .api()
+      .post('/v1/auth/staff-login', { username: 'Test Admin', password: 'nope', panel: 'admin' });
+    expect(wrongPass.status).toBe(401);
+    // staff can never use the marketer phone route
+    expect((await ctx.api().post('/v1/auth/phone-login', { phone: 'Test Admin' })).status).toBe(
+      400,
+    );
+  });
+
+  it('phone-register signs the new marketer in directly, then phone login works', async () => {
+    const reg = await ctx
+      .api()
+      .post('/v1/auth/phone-register', { name: 'نیلوفر', phone: '۰۹۳۶۱۱۱۲۲۳۳' });
+    expect(reg.status).toBe(201);
+    expect(reg.body.data.user.role).toBe('marketer');
+    expect(reg.body.data.user.phone).toBe('09361112233');
+    expect((await ctx.api(reg.body.data.idToken).get('/v1/me')).status).toBe(200);
+    expect((await ctx.api().post('/v1/auth/phone-login', { phone: '09361112233' })).status).toBe(
+      200,
+    );
+    expect(
+      (await ctx.api().post('/v1/auth/phone-register', { name: 'دوباره', phone: '09361112233' }))
+        .status,
+    ).toBe(409);
   });
 
   it('registers with phone (Persian digits) → marketer + tokens, then logs in', async () => {

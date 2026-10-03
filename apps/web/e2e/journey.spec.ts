@@ -27,10 +27,23 @@ async function token(request: APIRequestContext, identifier: string) {
 }
 
 async function login(page: Page, identifier: string) {
+  // Marketers sign in through the UI with their phone only. Admin/manager panels use a
+  // username + password form, so for the seeded staff phones we establish the session
+  // through the API and let the app restore it from the stored refresh token.
+  const staff = [ADMIN, MANAGER].includes(identifier);
+  if (staff) {
+    const r = await page.request.post(`${API}/auth/login`, {
+      data: { identifier, password: PASS },
+    });
+    expect(r.ok(), await r.text()).toBeTruthy();
+    const { refreshToken } = ((await r.json()) as { data: { refreshToken: string } }).data;
+    await page.addInitScript((rt) => localStorage.setItem('ssl.refresh', rt), refreshToken);
+    await page.goto(identifier === ADMIN ? '/admin' : '/manager');
+    await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
+    return;
+  }
   await page.goto('/login');
   await page.getByLabel(/شماره موبایل/).fill(identifier);
-  const pw = page.getByLabel('رمز عبور');
-  if (await pw.isVisible()) await pw.fill(PASS);
   await page.getByRole('button', { name: 'ورود' }).click();
   // Wait until the session is established before navigating (avoids racing the login call).
   await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
