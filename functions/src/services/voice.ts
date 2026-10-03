@@ -6,6 +6,7 @@ import * as prompts from '../ai/prompts';
 import { getPolicy, track, type Deps } from './context';
 import { checkInput, normalizeFa } from './mentor';
 import { answerQuestion, consumeVoiceQuota, recentTurns, type AnswerResult } from './mentor-ai';
+import { dayPart, firstName } from './mentor-converse';
 import { evaluateBehavior } from './behavior';
 import type { ChatMessage, User } from '../domain/types';
 import type { Doc } from '../store/types';
@@ -319,6 +320,7 @@ export async function createVoiceSession(
   const sessionId = `${user.id}-${d.clock().getTime().toString(36)}`;
   const systemInstruction = `${prompts.VOICE_SYSTEM}
 
+اسم کاربر: ${firstName(user) || 'نامشخص'} — الان ${dayPart(d.clock())} است (وقت تهران). اولین جمله‌ات را مثل یک سلام و احوال‌پرسی کوتاه و طبیعی بگو، نه یک معرفی رسمی.
 وضعیت فعلی کاربر: ${brief.state.reason}
 قدم بعدی پیشنهادی: ${brief.nextAction?.label ?? 'ادامه‌ی آموزش‌های باز'}
 

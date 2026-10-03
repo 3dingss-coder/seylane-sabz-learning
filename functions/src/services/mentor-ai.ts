@@ -21,6 +21,7 @@ import {
   scrubPii,
 } from './mentor';
 import { GLOBAL_SCOPE, searchKnowledge, scopeForUser, type RetrievedChunk } from './retrieval';
+import type { KnowledgeKind } from './knowledge';
 import { getPolicy, track, type Deps } from './context';
 import type { ChatMessage, User } from '../domain/types';
 import type { Doc } from '../store/types';
@@ -94,6 +95,16 @@ export const groundSchema = z.object({
 });
 
 const MAX_SOURCES = 4;
+const ANSWER_KINDS: KnowledgeKind[] = [
+  'brand',
+  'product',
+  'package',
+  'section',
+  'policy',
+  'play',
+  'faq',
+  'media',
+];
 
 function toFact(chunk: RetrievedChunk): GroundingFact {
   const item = chunk.item;
@@ -205,7 +216,9 @@ export async function buildGrounding(
     : baseScope;
   const result = await searchKnowledge(d, {
     query: opts.query,
-    scope: scope.packageIds ? scope : GLOBAL_SCOPE,
+    // Quiz stems and options are assessment material, not knowledge: quoting them back as an
+    // "answer" confuses learners and leaks quiz content, so they never ground a reply.
+    scope: { ...(scope.packageIds ? scope : GLOBAL_SCOPE), kinds: ANSWER_KINDS },
     k: opts.k ?? MAX_SOURCES,
   });
   const facts = result.chunks.map(toFact);
@@ -497,6 +510,8 @@ export async function answerQuestion(
   const usedSources = cited.length
     ? sources.filter((_, idx) => cited.includes(packet.facts[idx]?.id ?? ''))
     : sources.slice(0, 2);
+  // Citation markers are for the system; the learner sees sources as chips under the message.
+  finalText = finalText.replace(/\s*\[[\d۰-۹]+\]/g, '').trim();
 
   const messageId = persist
     ? await saveMessage(d, user, 'assistant', finalText, {

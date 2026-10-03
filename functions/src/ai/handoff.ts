@@ -199,8 +199,10 @@ export function renderGrounding(packet: GroundingPacket, maxCharsPerFact = 900):
 /** Ids of the facts a reply actually cited — used to prove grounding, not to trust the model. */
 export function citedFactIds(reply: string, facts: GroundingFact[]): string[] {
   const used: string[] = [];
-  for (const m of reply.matchAll(/\[(\d+)\]/g)) {
-    const idx = Number(m[1]) - 1;
+  // Models answer in Persian, so markers usually look like [۱]; accept both digit sets.
+  for (const m of reply.matchAll(/\[([\d۰-۹]+)\]/g)) {
+    const latin = (m[1] ?? '').replace(/[۰-۹]/g, (c) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(c)));
+    const idx = Number(latin) - 1;
     const fact = facts[idx];
     if (fact && !used.includes(fact.id)) used.push(fact.id);
   }

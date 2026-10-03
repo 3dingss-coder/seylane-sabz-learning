@@ -21,6 +21,7 @@ import {
 import { searchKnowledge, visibleUnder, type RetrievalScope } from '../src/services/retrieval';
 import {
   answerQuestion,
+  buildGrounding,
   extractiveReply,
   unsupportedNumbers,
   consumeVoiceQuota,
@@ -33,6 +34,7 @@ import {
   runBehaviorSweep,
 } from '../src/services/behavior';
 import { extractPendingMedia, mediaCoverage, extractionId } from '../src/services/media-ingest';
+import { citedFactIds } from '../src/ai/handoff';
 import {
   createVoiceSession,
   extractActionItems,
@@ -312,7 +314,33 @@ describe('grounded answers', () => {
     });
     expect(r.outcome).toBe('answered');
     expect(r.sources.length).toBeGreaterThan(0);
-    expect(r.reply).toContain('[۱]');
+    // The marker proves grounding (r.cited) but is hidden from the learner.
+    expect(r.cited.length).toBeGreaterThan(0);
+    expect(r.reply).not.toMatch(/\[[\d۰-۹]+\]/);
+  });
+
+  it('understands Persian and Latin digits in citation markers', () => {
+    const facts = [
+      { id: 'a', kind: 'section', title: '', text: '', ref: '', score: 1 },
+      { id: 'b', kind: 'section', title: '', text: '', ref: '', score: 1 },
+    ];
+    expect(citedFactIds('هر دو درست است [۱] و [2].', facts)).toEqual(['a', 'b']);
+  });
+
+  it('never grounds an answer on quiz questions or options', async () => {
+    const { ctx, marketer } = await setup();
+    await rebuildKnowledgeIndex(ctx.deps);
+    const user = await loadUser(ctx, marketer.id);
+    const quizIds = new Set(
+      (await ctx.deps.store.query<KnowledgeItem>({ collection: KNOWLEDGE_COLLECTION }))
+        .filter((i) => i.kind === 'quiz')
+        .map((i) => i.id),
+    );
+    expect(quizIds.size).toBeGreaterThan(0);
+    const { packet } = await buildGrounding(ctx.deps, user, {
+      query: 'گزینه ها پرسیدن نیاز مشتری',
+    });
+    expect(packet.facts.every((f) => !quizIds.has(f.id))).toBe(true);
   });
 
   it('never invents facts when retrieval is weak (honest, natural "I do not have that")', async () => {
