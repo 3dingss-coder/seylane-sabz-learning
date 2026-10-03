@@ -33,6 +33,10 @@ import { parseJsonLoose } from './mentor-ai';
 export const MEDIA_EXTRACTIONS = 'media_extractions';
 /** Video above this size goes through speech-only analysis (inline multimodal has a request cap). */
 export const VISION_MAX_BYTES = 6 * 1024 * 1024;
+/** Whisper (Groq free tier) accepts up to 25 MB; larger files are skipped, not crashed on. */
+export const SPEECH_MAX_BYTES = 24 * 1024 * 1024;
+/** A failed asset is not retried for this long, so a broken file cannot starve the rest of the queue. */
+export const FAILED_RETRY_MS = 6 * 60 * 60 * 1000;
 /** How many assets one sweep may process — a free-tier courtesy brake. */
 export const DEFAULT_EXTRACT_LIMIT = 8;
 
@@ -161,6 +165,8 @@ export async function extractAsset(d: Deps, input: ExtractInput): Promise<MediaE
       const useVision =
         input.sourceKind === 'video' &&
         (input.bytes?.byteLength ?? Number.MAX_SAFE_INTEGER) <= VISION_MAX_BYTES;
+      if (!bytes && !input.fileUri)
+        throw new Error('فایل بزرگ‌تر از سقف رونویسی است یا خوانده نشد.');
       if (useVision && input.bytes) {
         raw = await callVision(
           d,
@@ -387,7 +393,9 @@ export async function extractPendingMedia(
     if (
       existing &&
       existing.extractorVersion === EXTRACTOR_VERSION &&
-      existing.status === 'ready'
+      (existing.status === 'ready' ||
+        (existing.status === 'failed' &&
+          d.clock().getTime() - Date.parse(existing.updatedAt) < FAILED_RETRY_MS))
     ) {
       result.skipped++;
       continue;
@@ -399,16 +407,17 @@ export async function extractPendingMedia(
         result.skipped++;
         continue;
       }
-      input.bytes = await d.blob.readRange(blobPath, 0, stat.size - 1);
+      input.bytes = Buffer.from(await d.blob.readRange(blobPath, 0, stat.size - 1));
       input.sizeBytes = stat.size;
       input.mime = stat.contentType;
     }
     // Bytes are read lazily, one asset at a time: loading every small file up front for the whole
     // candidate list could exhaust a Worker's memory before the first provider call.
     if (!input.bytes && input.sourceKind !== 'image' && !input.fileUri) {
-      if (input.sizeBytes !== null && input.sizeBytes <= VISION_MAX_BYTES)
-        input.bytes = await d.blob.readRange(input.path, 0, input.sizeBytes - 1);
+      if (input.sizeBytes !== null && input.sizeBytes <= SPEECH_MAX_BYTES)
+        input.bytes = Buffer.from(await d.blob.readRange(input.path, 0, input.sizeBytes - 1));
     }
+    if (input.bytes && !Buffer.isBuffer(input.bytes)) input.bytes = Buffer.from(input.bytes);
     const out = await extractAsset(d, input);
     const id = extractionId(input);
     if (out.status === 'ready' || out.status === 'skipped') result.extracted++;
