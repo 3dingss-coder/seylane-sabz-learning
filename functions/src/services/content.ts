@@ -363,6 +363,14 @@ export const packageSchema = z.object({
   brandId: z.string().max(80).nullable().optional(),
   productId: z.string().max(80).nullable().optional(),
   deadlineAt: isoDate('مهلت').nullable().optional(),
+  /** Personal learning window in hours, counted from each marketer's own start. */
+  deadlineHours: z
+    .number({ message: 'مهلت یادگیری را به ساعت وارد کنید.' })
+    .int('مهلت یادگیری باید عدد صحیح باشد.')
+    .min(1, 'مهلت یادگیری حداقل ۱ ساعت است.')
+    .max(24 * 365, 'مهلت یادگیری بیش از حد طولانی است.')
+    .nullable()
+    .optional(),
   estimatedMinutes: z.number().int().min(0).max(1000).optional(),
   coverUrl: z.string().url().max(500).nullable().optional(),
 });
@@ -444,6 +452,7 @@ export async function createPackage(
     description: input.description ?? '',
     status: 'draft',
     deadlineAt: input.deadlineAt ?? null,
+    deadlineHours: input.deadlineHours ?? null,
     estimatedMinutes: input.estimatedMinutes ?? 0,
     coverUrl: input.coverUrl ?? null,
     sections: [],
@@ -478,8 +487,14 @@ export async function updatePackage(
       throw new ApiError('VALIDATION', 'بسته منتشرشده باید برند داشته باشد.');
     Object.assign(patch, links);
   }
-  if (pkg.status === 'published' && input.deadlineAt !== undefined) {
-    if (!input.deadlineAt) throw new ApiError('VALIDATION', 'بسته منتشرشده باید مهلت داشته باشد.');
+  if (
+    pkg.status === 'published' &&
+    (input.deadlineAt !== undefined || input.deadlineHours !== undefined)
+  ) {
+    const nextAt = input.deadlineAt !== undefined ? input.deadlineAt : pkg.deadlineAt;
+    const nextHours = input.deadlineHours !== undefined ? input.deadlineHours : pkg.deadlineHours;
+    if (!nextAt && !nextHours)
+      throw new ApiError('VALIDATION', 'بسته منتشرشده باید مهلت داشته باشد.');
   }
   await d.store.update(`packages/${id}`, patch);
   await audit(d, actor, 'package.updated', 'packages', id, pkg, patch);
@@ -495,8 +510,11 @@ export async function validatePublish(
 ): Promise<string[]> {
   const issues: string[] = [];
   if (!pkg.brandId) issues.push('برند بسته مشخص نشده است (پیش‌نویس بدون تخصیص).');
-  if (!pkg.deadlineAt) issues.push('مهلت بسته تعیین نشده است.');
-  else if (pkg.deadlineAt <= d.clock().toISOString()) issues.push('مهلت بسته باید در آینده باشد.');
+  if (!pkg.deadlineHours) {
+    if (!pkg.deadlineAt) issues.push('مهلت بسته تعیین نشده است.');
+    else if (pkg.deadlineAt <= d.clock().toISOString())
+      issues.push('مهلت بسته باید در آینده باشد.');
+  }
   const sections = (
     sectionsIn ??
     (await d.store.query<Section>({ collection: `packages/${(pkg as Doc<Package>).id}/sections` }))

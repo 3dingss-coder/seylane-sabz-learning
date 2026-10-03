@@ -226,7 +226,7 @@ function Editor({ d }: { d: AdminPackageDetail }) {
           },
           {
             label: 'مهلت',
-            done: !!p.deadlineAt,
+            done: !!p.deadlineAt || !!p.deadlineHours,
             hint: 'تا چه روزی باید این آموزش تمام شود؟',
             action: { text: 'تعیین مهلت', run: () => setEditMeta(true) },
           },
@@ -384,7 +384,12 @@ function Editor({ d }: { d: AdminPackageDetail }) {
           <Card className="flex flex-col gap-2 text-sm">
             <h2 className="font-bold">انتشار</h2>
             <p className="text-text-secondary">
-              مهلت: {p.deadlineAt ? faDateTime(p.deadlineAt) : 'تعیین نشده'}
+              مهلت:{' '}
+              {p.deadlineHours
+                ? `${p.deadlineHours.toLocaleString('fa-IR')} ساعت برای هر بازاریاب (از زمان ثبت‌نام خودش)`
+                : p.deadlineAt
+                  ? faDateTime(p.deadlineAt)
+                  : 'تعیین نشده'}
             </p>
             {p.description && <p className="leading-6 text-text-secondary">{p.description}</p>}
             {d.publishIssues.length > 0 && p.status !== 'published' && (

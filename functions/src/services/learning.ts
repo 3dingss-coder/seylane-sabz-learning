@@ -18,6 +18,7 @@ import type {
 import { getPolicy, track, type Deps } from './context';
 import {
   computeNextItem,
+  effectiveDeadlineAt,
   loadUserLearning,
   type PackageCompletion,
   type PackageView,
@@ -759,9 +760,10 @@ export async function submitAttempt(
 /** Records completion once, awards completion + on-time points, badges, R3 nudge. */
 async function onPackageCompleted(d: Deps, user: Doc<User>, pkg: Doc<Package>): Promise<number> {
   const now = d.clock();
-  const onTime = !pkg.deadlineAt || now.toISOString() <= pkg.deadlineAt;
+  const deadlineAt = effectiveDeadlineAt(pkg, user);
+  const onTime = !deadlineAt || now.toISOString() <= deadlineAt;
   const delayHours =
-    pkg.deadlineAt && !onTime ? Math.round((now.getTime() - Date.parse(pkg.deadlineAt)) / HOUR) : 0;
+    deadlineAt && !onTime ? Math.round((now.getTime() - Date.parse(deadlineAt)) / HOUR) : 0;
   const completion: PackageCompletion = {
     userId: user.id,
     packageId: pkg.id,

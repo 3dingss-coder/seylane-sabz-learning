@@ -9,6 +9,7 @@ import type {
   User,
 } from '../domain/types';
 import type { Deps } from './context';
+import { HOUR } from '../lib/time';
 import { allBrands, productsById } from './catalog-cache';
 
 /** Pure computation of what a user sees and what is locked (F2/F5/F9). */
@@ -49,6 +50,8 @@ export interface PackageView {
   brand: { id: string; name: string; logoUrl: string } | null;
   product: { id: string; name: string; imageUrl: string } | null;
   deadlineAt: string | null;
+  /** Length of the personal learning window in hours (null = one fixed date for everyone). */
+  deadlineWindowHours?: number | null;
   estimatedMinutes: number;
   status: PackageUserStatus;
   packageStatus: Package['status'];
@@ -110,6 +113,23 @@ export function sectionScore(
   return Math.min(90, Math.round(s.percent * 0.9));
 }
 
+/**
+ * Per-marketer deadline. With a personal window (`deadlineHours`) the clock starts when the
+ * marketer registered — or when the package was published, if that came later, so a new
+ * package never starts out already overdue. Without a window the package's absolute date applies.
+ */
+export function effectiveDeadlineAt(
+  pkg: Pick<Package, 'deadlineAt' | 'deadlineHours' | 'publishedAt'>,
+  user: Pick<User, 'createdAt'>,
+): string | null {
+  const hours = pkg.deadlineHours;
+  if (!hours || hours <= 0) return pkg.deadlineAt;
+  const reg = Date.parse(user.createdAt);
+  const pub = pkg.publishedAt ? Date.parse(pkg.publishedAt) : 0;
+  const start = Math.max(Number.isFinite(reg) ? reg : 0, Number.isFinite(pub) ? pub : 0);
+  return new Date(start + hours * HOUR).toISOString();
+}
+
 export interface SharedData {
   now: Date;
   assignments: Doc<Assignment>[];
@@ -124,8 +144,10 @@ export function computePackageView(
   pkg: Doc<Package>,
   progress: Map<string, Doc<SectionProgress>>,
   completion: PackageCompletion | undefined,
+  user: Pick<User, 'createdAt'>,
 ): PackageView {
   const nowIso = shared.now.toISOString();
+  const deadlineAt = effectiveDeadlineAt(pkg, user);
   const sections: SectionView[] = [];
   const ordered = [...pkg.sections].sort((a, b) => a.order - b.order);
   for (const s of ordered) {
@@ -183,12 +205,13 @@ export function computePackageView(
     description: pkg.description,
     brand: brand ? { id: brand.id, name: brand.name, logoUrl: brand.logoUrl } : null,
     product: product ? { id: product.id, name: product.name, imageUrl: product.imageUrl } : null,
-    deadlineAt: pkg.deadlineAt,
+    deadlineAt,
+    deadlineWindowHours: pkg.deadlineHours && pkg.deadlineHours > 0 ? pkg.deadlineHours : null,
     estimatedMinutes: pkg.estimatedMinutes,
     status,
     packageStatus: pkg.status,
     percent: status === 'completed' ? 100 : percent,
-    overdue: status !== 'completed' && !!pkg.deadlineAt && pkg.deadlineAt < nowIso,
+    overdue: status !== 'completed' && !!deadlineAt && deadlineAt < nowIso,
     completedAt: completion?.completedAt ?? null,
     onTime: completion ? completion.onTime : null,
     lastActivityAt: lastActivity,
@@ -325,7 +348,9 @@ export function computeUserPackages(
       (pkg.status === 'published' && assigned.has(pkg.id)) ||
       (started.has(pkg.id) && pkg.status !== 'draft');
     if (!visible) continue;
-    out.push(computePackageView(sh, pkg, byPkg.get(pkg.id) ?? new Map(), compByPkg.get(pkg.id)));
+    out.push(
+      computePackageView(sh, pkg, byPkg.get(pkg.id) ?? new Map(), compByPkg.get(pkg.id), user),
+    );
   }
   return sortPackages(out);
 }

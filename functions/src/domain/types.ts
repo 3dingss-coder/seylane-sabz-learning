@@ -79,7 +79,13 @@ export interface Package {
   title: string;
   description: string;
   status: PackageStatus;
+  /** Absolute cutoff for everyone. Ignored for the learner when `deadlineHours` is set. */
   deadlineAt: string | null;
+  /**
+   * Personal learning window: each marketer gets this many hours, counted from their own start
+   * (see effectiveDeadlineAt). Missing on older documents = null.
+   */
+  deadlineHours?: number | null;
   estimatedMinutes: number;
   coverUrl: string | null;
   /** Denormalized, ordered section summaries (read-optimisation for Home/catalog). */

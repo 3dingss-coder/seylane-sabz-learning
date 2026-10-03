@@ -337,6 +337,8 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
       deadlineAt: sp.deadlineDays
         ? new Date(now.getTime() + sp.deadlineDays * DAY).toISOString()
         : null,
+      // Seed packages get a personal learning window (counted from each marketer's own start).
+      deadlineHours: sp.deadlineDays ? sp.deadlineDays * 24 : null,
       estimatedMinutes: 0,
       coverUrl: null,
       sections: [],

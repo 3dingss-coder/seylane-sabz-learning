@@ -29,6 +29,7 @@ export function PackageFormDialog({
   const [brandId, setBrandId] = useState(initial?.brandId ?? presetBrandId ?? '');
   const [productId, setProductId] = useState(initial?.productId ?? presetProductId ?? '');
   const [deadline, setDeadline] = useState(toZonedInput(initial?.deadlineAt ?? null));
+  const [hours, setHours] = useState(initial?.deadlineHours ? String(initial.deadlineHours) : '');
   const [minutes, setMinutes] = useState(String(initial?.estimatedMinutes ?? ''));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const brands = useBrands();
@@ -43,7 +44,9 @@ export function PackageFormDialog({
         description: description.trim(),
         brandId: brandId || null,
         productId: productId || null,
-        deadlineAt: fromZonedInput(deadline),
+        // A personal window (hours from each marketer's own start) replaces the fixed date.
+        deadlineHours: hours ? Number(hours) : null,
+        deadlineAt: hours ? null : fromZonedInput(deadline),
         ...(minutes ? { estimatedMinutes: Number(minutes) } : {}),
       };
       return initial
@@ -136,14 +139,28 @@ export function PackageFormDialog({
           </Select>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            label="مهلت یادگیری برای هر بازاریاب (ساعت)"
+            type="number"
+            ltr
+            min={1}
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+            error={errors.deadlineHours}
+            hint="مثلاً ۲۴ = هر بازاریاب از لحظه ثبت‌نام خودش ۲۴ ساعت وقت دارد."
+          />
           <JalaliDateField
-            label="مهلت"
+            label="مهلت ثابت برای همه (اختیاری)"
             mode="datetime"
             disablePast
             value={deadline}
             onChange={setDeadline}
             error={errors.deadlineAt}
-            hint="تا پایان این لحظه (به وقت تهران) باید آموزش تمام شود."
+            hint={
+              hours
+                ? 'وقتی مهلت به ساعت تعیین شده، این تاریخ نادیده گرفته می‌شود.'
+                : 'تا پایان این لحظه (به وقت تهران) باید آموزش تمام شود.'
+            }
           />
           <Input
             label="زمان تقریبی (دقیقه)"

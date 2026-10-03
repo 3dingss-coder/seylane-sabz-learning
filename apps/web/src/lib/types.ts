@@ -559,6 +559,8 @@ export interface AdminPackage {
   productId: string | null;
   status: 'draft' | 'published' | 'archived';
   deadlineAt: string | null;
+  /** Personal learning window in hours, counted from each marketer's own start. */
+  deadlineHours?: number | null;
   estimatedMinutes: number;
   coverUrl: string | null;
   sections: Array<{ id: string; title: string; order: number }>;
