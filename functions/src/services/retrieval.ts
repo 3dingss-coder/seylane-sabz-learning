@@ -351,6 +351,8 @@ export async function searchKnowledge(
     keywordOnly?: boolean;
     /** Max chunks from the same package — keeps one package from monopolising the context. */
     perPackage?: number;
+    /** Characters of each source handed to the model (default 260 = a UI preview, not grounding). */
+    snippetLen?: number;
   },
 ): Promise<SearchResult> {
   const started = Date.now();
@@ -445,7 +447,7 @@ export async function searchKnowledge(
     score: Math.min(1, Number(s.score.toFixed(4))),
     keywordScore: Number(s.keywordScore.toFixed(4)),
     vectorScore: Number(s.vectorScore.toFixed(4)),
-    snippet: snippetFor(s.item, queryTokens),
+    snippet: snippetFor(s.item, queryTokens, opts.snippetLen ?? 260),
   }));
 
   const best = chunks[0];

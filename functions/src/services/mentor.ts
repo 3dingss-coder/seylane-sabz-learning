@@ -75,23 +75,66 @@ export const FALLBACK_REPLY = 'منتور الان در دسترس نیست — 
 export const BLOCKED_REPLY =
   'من فقط درباره محتوای همین آموزش می‌توانم کمک کنم. سؤال دیگری درباره آموزش داری؟';
 
-/** Output guard: Persian only, ≤ 3 sentences, no PII; "don't know" normalised with referral. */
-export function checkOutput(raw: string): { ok: boolean; text: string; unknown: boolean } {
-  const text = scrubPii(
-    raw
-      .replace(/[*#`_>]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim(),
-  );
+/**
+ * Output guard: Persian only, no PII, a bounded length. Text answers may be a short paragraph or a
+ * tidy list (line breaks and «-» bullets are kept); spoken answers stay one or two sentences.
+ * «I don't know» is only treated as a refusal when the whole reply is a short refusal — a rich
+ * answer that also says «this part isn't in the training» is still a useful answer.
+ */
+export function checkOutput(
+  raw: string,
+  opts: { spoken?: boolean; maxSentences?: number; maxChars?: number } = {},
+): { ok: boolean; text: string; unknown: boolean } {
+  const spoken = !!opts.spoken;
+  const maxSentences = opts.maxSentences ?? (spoken ? 2 : 9);
+  const maxChars = opts.maxChars ?? (spoken ? 280 : 1400);
+  const cleaned = raw
+    .replace(/[*#`_>]/g, '')
+    .replace(/[ \t\u00a0]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const text = scrubPii(spoken ? cleaned.replace(/\s+/g, ' ') : cleaned);
   if (!text) return { ok: false, text: '', unknown: false };
-  if (/نمی[\s‌]?دانم|اطلاعی ندارم|در محتوا نیست/.test(text))
+  const REFUSAL = /نمی[\s‌]?دانم|اطلاعی ندارم|در محتوا نیست|پیدا نکردم/;
+  const firstSentence = text.split(/(?<=[.!؟?])\s+/)[0] ?? text;
+  // A refusal is a reply that *opens* with «I don't know» and has little else. A substantive
+  // answer that only mentions a gap further down is a useful answer and is kept.
+  if (
+    (REFUSAL.test(firstSentence) && text.length < 260) ||
+    (text.length < 100 && REFUSAL.test(text))
+  )
     return { ok: true, text: UNKNOWN_REPLY, unknown: true };
   const letters = text.replace(/[^A-Za-z\u0600-\u06FF]/g, '');
   const fa = (letters.match(/[\u0600-\u06FF]/g) ?? []).length;
   if (letters.length > 0 && fa / letters.length < 0.6)
     return { ok: false, text: '', unknown: false };
-  const sentences = text.split(/(?<=[.!؟?])\s+/).filter(Boolean);
-  return { ok: true, text: sentences.slice(0, 3).join(' '), unknown: false };
+  // Count sentences per line so a bullet list is not mistaken for one endless sentence.
+  const out: string[] = [];
+  let count = 0;
+  for (const line of text.split('\n')) {
+    if (!line.trim()) {
+      if (out.length && out[out.length - 1] !== '') out.push('');
+      continue;
+    }
+    const parts = line.split(/(?<=[.!؟?])\s+/).filter(Boolean);
+    const room = maxSentences - count;
+    if (room <= 0) break;
+    out.push(parts.slice(0, room).join(' '));
+    count += Math.min(parts.length, room);
+  }
+  let joined = out.join('\n').trim();
+  if (joined.length > maxChars) {
+    const cut = joined.slice(0, maxChars);
+    const lastStop = Math.max(
+      cut.lastIndexOf('.'),
+      cut.lastIndexOf('؟'),
+      cut.lastIndexOf('!'),
+      cut.lastIndexOf('\n'),
+    );
+    joined = (lastStop > maxChars * 0.5 ? cut.slice(0, lastStop + 1) : cut).trim();
+  }
+  return { ok: true, text: joined, unknown: false };
 }
 
 // ─── Retrieval (spec §23.3 — keyword Top-K, no vector DB) ───────────────────

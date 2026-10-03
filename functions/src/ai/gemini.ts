@@ -138,6 +138,10 @@ export class GeminiProvider implements AiProvider {
         generationConfig: {
           temperature: req.temperature ?? 0.2,
           maxOutputTokens: req.maxTokens,
+          // Gemini 2.5 Flash spends part of maxOutputTokens on hidden "thinking", which cut chat
+          // answers off mid-sentence. The answer is already grounded in retrieved facts, so
+          // thinking is switched off for the Flash family (2.5-pro cannot disable it).
+          ...(/2\.5-flash/.test(this.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
           ...(req.json ? { responseMimeType: 'application/json' } : {}),
         },
         safetySettings: GeminiProvider.safety(),

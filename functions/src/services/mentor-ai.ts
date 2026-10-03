@@ -22,7 +22,7 @@ import {
 } from './mentor';
 import { GLOBAL_SCOPE, searchKnowledge, scopeForUser, type RetrievedChunk } from './retrieval';
 import { EMPTY_GUIDE_CONTEXT, guideContext } from './mentor-guides';
-import type { KnowledgeKind } from './knowledge';
+import { KNOWLEDGE_COLLECTION, type KnowledgeItem, type KnowledgeKind } from './knowledge';
 import { getPolicy, track, type Deps } from './context';
 import type { ChatMessage, User } from '../domain/types';
 import type { Doc } from '../store/types';
@@ -96,7 +96,11 @@ export const groundSchema = z.object({
   packageId: z.string().max(80).nullable().optional(),
 });
 
-const MAX_SOURCES = 4;
+const MAX_SOURCES = 6;
+/** Characters of each source the model reads (text chat). Voice stays short for latency. */
+const FACT_CHARS_TEXT = 1500;
+const FACT_CHARS_VOICE = 600;
+const MAX_BRAND_PRODUCTS = 8;
 /**
  * Everything the mentor may ground an answer on — including quizzes (stems, options and, when
  * `Policy.mentorQuizAnswerAccess` is on, the answer key) and the admin-authored behaviour boxes.
@@ -215,7 +219,7 @@ export function unsupportedNumbers(reply: string, facts: GroundingFact[]): strin
 export async function buildGrounding(
   d: Deps,
   user: Doc<User>,
-  opts: { query: string; packageId?: string | null; k?: number },
+  opts: { query: string; packageId?: string | null; k?: number; spoken?: boolean },
 ): Promise<{
   packet: GroundingPacket;
   sources: AnswerResult['sources'];
@@ -228,10 +232,12 @@ export async function buildGrounding(
   const scope = opts.packageId
     ? { ...baseScope, packageIds: new Set([...(baseScope.packageIds ?? []), opts.packageId]) }
     : baseScope;
+  const spokenGrounding = !!opts.spoken;
   const result = await searchKnowledge(d, {
     query: opts.query,
     scope: { ...(scope.packageIds ? scope : GLOBAL_SCOPE), kinds: ANSWER_KINDS },
-    k: opts.k ?? MAX_SOURCES,
+    k: opts.k ?? (spokenGrounding ? 4 : MAX_SOURCES),
+    snippetLen: spokenGrounding ? FACT_CHARS_VOICE : FACT_CHARS_TEXT,
   });
   const facts = result.chunks.map(toFact);
   const sources: AnswerResult['sources'] = result.chunks.map((c) => ({
@@ -265,8 +271,38 @@ export async function buildGrounding(
         })),
     );
   }
+  // «Tell me about brand X» — the retriever returns the few best-scoring passages, but the learner
+  // wants the whole picture. When the question names a brand/product (guide selection), add that
+  // brand's other products too so the mentor can describe the full range, not one fragment.
+  if (!spokenGrounding && guide.selection.brandId) {
+    const have = new Set(facts.map((f) => f.id));
+    const all = await d.store.query<KnowledgeItem>({ collection: KNOWLEDGE_COLLECTION });
+    const range = all
+      .filter(
+        (i) =>
+          !i.archived &&
+          (i.kind === 'brand' || i.kind === 'product') &&
+          i.scope.brandId === guide.selection.brandId &&
+          !have.has(i.id),
+      )
+      .sort((a, b) =>
+        a.kind === b.kind ? a.title.localeCompare(b.title, 'fa') : a.kind === 'brand' ? -1 : 1,
+      )
+      .slice(0, MAX_BRAND_PRODUCTS);
+    for (const i of range) {
+      facts.push({
+        id: i.id,
+        kind: i.kind,
+        title: i.title,
+        text: i.body.replace(/\s+/g, ' ').trim().slice(0, 700),
+        ref: i.ref,
+        score: 0.5,
+      });
+      sources.push({ type: sourceTypeOf(i.kind), id: i.id, title: i.title });
+    }
+  }
   const packet: GroundingPacket = {
-    facts: facts.slice(0, MAX_SOURCES + 3),
+    facts: facts.slice(0, spokenGrounding ? MAX_SOURCES + 1 : MAX_SOURCES + MAX_BRAND_PRODUCTS + 2),
     user: null,
     strategy: result.strategy,
     confident: result.confident,
@@ -327,6 +363,7 @@ export async function answerQuestion(
     : await buildGrounding(d, user, {
         query: verdict.text,
         packageId: opts.packageId ?? null,
+        spoken: !!opts.spoken,
       });
   const { packet, sources, confident, guide } = groundingResult;
   packet.user = behaviorContext(brief, user);
@@ -369,7 +406,7 @@ export async function answerQuestion(
             spoken: !!opts.spoken,
           }),
           messages: turns,
-          maxTokens: opts.spoken ? 160 : 380,
+          maxTokens: opts.spoken ? 200 : 700,
           temperature: 0.75,
         },
         opts.spoken ? { prefer: ['groq' as const, 'gemini' as const, 'legacy' as const] } : {},
@@ -430,9 +467,13 @@ export async function answerQuestion(
     };
   }
 
-  const grounding = renderGrounding(packet);
+  const grounding = renderGrounding(packet, opts.spoken ? FACT_CHARS_VOICE : FACT_CHARS_TEXT + 100);
   const history = '';
-  const constraints = { ...DEFAULT_CONSTRAINTS, spoken: !!opts.spoken };
+  const constraints = {
+    ...DEFAULT_CONSTRAINTS,
+    maxSentences: opts.spoken ? 2 : 9,
+    spoken: !!opts.spoken,
+  };
   const envelope = seal({
     traceId: `${user.id}-${started}`,
     stage: 'answer',
@@ -461,7 +502,9 @@ export async function answerQuestion(
       })
     : prompts.answerPrompt({
         grounding,
-        userContext: packet.user?.progress ?? '',
+        userContext: `${packet.user?.progress ?? ''}${
+          turns.length ? ' — گفت‌وگو ادامه دارد (سلام و معرفی تکرار نشود).' : ''
+        }`,
         history,
         question: envelope.payload.question,
       });
@@ -479,8 +522,8 @@ export async function answerQuestion(
         system,
         prompt,
         messages: turns,
-        maxTokens: opts.spoken ? 160 : 360,
-        temperature: opts.spoken ? 0.4 : 0.3,
+        maxTokens: opts.spoken ? 200 : 1400,
+        temperature: opts.spoken ? 0.4 : 0.35,
       },
       runOptions,
     );
@@ -521,7 +564,10 @@ export async function answerQuestion(
   }
 
   // ── Output guardrails ─────────────────────────────────────────────────────
-  const guard = checkOutput(rawReply);
+  const guard = checkOutput(rawReply, {
+    spoken: !!opts.spoken,
+    maxSentences: constraints.maxSentences,
+  });
   let finalText = guard.ok ? guard.text : '';
   if (!finalText || guard.unknown) {
     reply = guard.unknown ? unknownWithHint(sources) : extractiveReply(packet);
