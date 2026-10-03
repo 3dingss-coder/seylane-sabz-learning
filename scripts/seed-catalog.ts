@@ -33,11 +33,11 @@ function reportMarkdown(r: SeedReport): string {
     '',
     '## Training file → brand → product → package / part',
     '',
-    '| File | Brand | Product | Package | Part | Section id | Duration | Status |',
-    '|---|---|---|---|---|---|---|---|',
+    '| File | Brand | Product | Package | Part | Section id | Duration | Quiz | Status |',
+    '|---|---|---|---|---|---|---|---|---|',
     ...r.training.map(
       (t) =>
-        `| \`${t.file}\` | ${t.brand} | ${t.product} | ${t.packageTitle} (\`${t.packageId}\`) | ${t.part} | \`${t.sectionId}\` | ${Math.round(t.durationSec)}s | ${t.status} |`,
+        `| \`${t.file}\` | ${t.brand} | ${t.product} | ${t.packageTitle} (\`${t.packageId}\`) | ${t.part} | \`${t.sectionId}\` | ${Math.round(t.durationSec)}s | ${t.quizSource} | ${t.status} |`,
     ),
     '',
     '## Brand logos',

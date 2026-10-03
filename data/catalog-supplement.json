@@ -1,5 +1,5 @@
 {
-  "$comment": "Client decisions not present in the original export (spec §36 D27, D30–D34). Consumed by scripts/seed-catalog.ts. Names are copied verbatim from hidden-products.csv / client answers.",
+  "$comment": "Client decisions not present in the original export (spec §36 D27, D30–D34). Consumed by scripts/seed-catalog.ts. Names are copied verbatim from hidden-products.csv / client answers. `quizKey` on a training package links its sections' quizzes to the client quiz bank in data/skincare-products-quiz.json (source: skincare_products_quiz.docx / .xlsx); when two packages share one quizKey (ویت آس) the bank is split between them in file order. «زِن» brand + product sb-290252101 were reactivated to host the ZEN BODY OIL quiz of the same bank.",
   "holdingLogo": "کامپوننت های کمکی برای تکمیل UI UX اپلیکیشن/اپ مشتری/لوگو و آیکون/logo-full.png",
   "reactivatedBrands": [
     {
@@ -29,13 +29,21 @@
       "nameLatin": "Vitas",
       "logoFile": "vitas.webp",
       "decision": "D27"
+    },
+    {
+      "id": "brand-sb-zen",
+      "name": "زِن",
+      "nameLatin": "Zen",
+      "logoFile": "zen.jpg",
+      "decision": "skincare_products_quiz"
     }
   ],
   "reactivatedProducts": [
     { "id": "sb-310350101", "brandId": "brand-sb-formi" },
     { "id": "sb-220306101", "brandId": "brand-sb-atl" },
     { "id": "sb-370276101", "brandId": "brand-sb-icebubble" },
-    { "id": "sb-340122101", "brandId": "brand-sb-vitas" }
+    { "id": "sb-340122101", "brandId": "brand-sb-vitas" },
+    { "id": "sb-290252101", "brandId": "brand-sb-zen" }
   ],
   "newProducts": [
     {
@@ -57,6 +65,7 @@
       "productId": "sb-310350101",
       "deadlineDays": 10,
       "publish": true,
+      "quizKey": "4ME HYDRATION THERAPY",
       "sections": [
         {
           "file": "معرفی کلی محصول فورمی.m4a",
@@ -77,6 +86,7 @@
       "productId": "sb-370276101",
       "deadlineDays": 14,
       "publish": true,
+      "quizKey": "ICE BUBBLE",
       "sections": [
         { "file": "معرفی کلی بابل.m4a", "title": "معرفی کلی بابل", "mediaType": "audio" },
         {
@@ -93,6 +103,7 @@
       "productId": "sb-220306101",
       "deadlineDays": 2,
       "publish": true,
+      "quizKey": "ATL QUICK FIX",
       "sections": [
         {
           "file": "ای_تی_ال_پادزهر_دردهای_دیجیتال.m4a",
@@ -109,6 +120,7 @@
       "productId": "sb-340122101",
       "deadlineDays": 12,
       "publish": true,
+      "quizKey": "WITH US",
       "sections": [
         { "file": "معرفی کلی ویت آس.m4a", "title": "معرفی کلی ویت آس", "mediaType": "audio" }
       ]
@@ -120,6 +132,7 @@
       "productId": "sb-340122101",
       "deadlineDays": 16,
       "publish": true,
+      "quizKey": "WITH US",
       "sections": [
         {
           "file": "آموزش_کرم_ترک_پای__WITH_US_.mp4",
@@ -135,6 +148,7 @@
       "productId": "sb-pixel-stick-sunscreen",
       "deadlineDays": 20,
       "publish": true,
+      "quizKey": null,
       "sections": [
         {
           "file": "معرفی کلی ضدآفتاب استیکی پیکسل.m4a",
@@ -155,9 +169,26 @@
       "productId": null,
       "deadlineDays": 25,
       "publish": true,
+      "quizKey": "ICE BALL",
       "sections": [
         { "file": "معرفی کلی آیس بال.m4a", "title": "معرفی کلی آیس بال", "mediaType": "audio" },
         { "file": "آموزش_فروش_آیس_بال.mp4", "title": "آموزش فروش آیس بال", "mediaType": "video" }
+      ]
+    },
+    {
+      "id": "seed-pkg-zen",
+      "title": "آموزش روغن بدن زِن (Zen)",
+      "brandId": "brand-sb-zen",
+      "productId": "sb-290252101",
+      "deadlineDays": 12,
+      "publish": true,
+      "quizKey": "ZEN BODY OIL",
+      "sections": [
+        {
+          "file": "آموزش_روغن_بدن_ZEN.mp4",
+          "title": "آموزش روغن بدن زِن (Zen)",
+          "mediaType": "video"
+        }
       ]
     },
     {
@@ -167,6 +198,7 @@
       "productId": null,
       "deadlineDays": null,
       "publish": false,
+      "quizKey": null,
       "sections": [
         { "file": "معرفی کلی‌ دارت.m4a", "title": "معرفی کلی دارت", "mediaType": "audio" }
       ]

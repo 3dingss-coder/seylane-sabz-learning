@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runSeed, type SeedReport } from '../src/seed/seed';
-import type { Brand, Package, Product } from '../src/domain/types';
+import type { Brand, Package, Product, Question, Quiz } from '../src/domain/types';
 import { catalogPaths, loadCatalog } from '../src/seed/catalog-source';
 import { createCtx, passQuiz, watchSection, type TestCtx } from './support/ctx';
 
@@ -16,10 +16,10 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('real catalog seed (PROMPT 003/004)', () => {
-  it('seeds 12 catalog + 4 reactivated brands and every product verbatim', async () => {
+  it('seeds 12 catalog + 5 reactivated brands and every product verbatim', async () => {
     const cat = loadCatalog(catalogPaths(repoRoot));
-    expect(report.brands).toBe(16);
-    expect(report.products).toBe(cat.products.length + 4 + 1);
+    expect(report.brands).toBe(17);
+    expect(report.products).toBe(cat.products.length + 5 + 1);
     for (const b of cat.brands)
       expect((await ctx.deps.store.get<Brand>(`brands/${b.id}`))?.name).toBe(b.name);
     for (const p of cat.products.slice(0, 400))
@@ -45,9 +45,9 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     ).toEqual(['sb-220306101', 'sb-pixel-stick-sunscreen']);
   });
 
-  it('creates the 8 sample packages under the agreed brand/product (7 published, دارت unassigned draft)', async () => {
+  it('creates the 9 sample packages under the agreed brand/product (8 published, دارت unassigned draft)', async () => {
     const pk = await ctx.deps.store.query<Package>({ collection: 'packages' });
-    expect(pk).toHaveLength(8);
+    expect(pk).toHaveLength(9);
     const byId = new Map(pk.map((p) => [p.id, p]));
     expect(byId.get('seed-pkg-comeon-heel')?.productId).toBe('sb-340122101');
     expect(byId.get('seed-pkg-pixel-stick')?.productId).toBe('sb-pixel-stick-sunscreen');
@@ -55,15 +55,16 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     expect(byId.get('seed-pkg-icebal')?.productId).toBeNull();
     expect(byId.get('seed-pkg-dart')?.brandId).toBeNull();
     expect(byId.get('seed-pkg-dart')?.status).toBe('draft');
-    expect(pk.filter((p) => p.status === 'published')).toHaveLength(7);
+    expect(byId.get('seed-pkg-zen')?.productId).toBe('sb-290252101');
+    expect(pk.filter((p) => p.status === 'published')).toHaveLength(8);
     const withMedia = report.training.filter((t) => t.durationSec > 300);
-    expect(withMedia).toHaveLength(13);
+    expect(withMedia).toHaveLength(14);
   });
 
   it('is idempotent (second run changes nothing)', async () => {
     const again = await runSeed(ctx.deps, { repoRoot, demo: true, linkLocalFiles: true });
     expect(again.brands).toBe(report.brands);
-    expect(await ctx.deps.store.query({ collection: 'packages' })).toHaveLength(8);
+    expect(await ctx.deps.store.query({ collection: 'packages' })).toHaveLength(9);
     const users = await ctx.deps.store.query({ collection: 'users' });
     expect(users).toHaveLength(7);
   });
@@ -75,7 +76,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     expect(login.status).toBe(200);
     const token = login.body.data.idToken as string;
     const home = await ctx.api(token).get('/v1/me/home');
-    expect(home.body.data.packages.length).toBe(7);
+    expect(home.body.data.packages.length).toBe(8);
     const pkg = await ctx.api(token).get('/v1/me/packages/seed-pkg-vitas');
     const s = pkg.body.data.sections[0];
     await watchSection(ctx, token, s.id, s.durationSec);
@@ -88,6 +89,68 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     const answers = Object.fromEntries(qs.map((q) => [q.id, q.answerKey]));
     const r = await passQuiz(ctx, token, s.quizId, answers);
     expect(r.body.data.passed).toBe(true);
+  });
+
+  it('section quizzes are the client quiz bank questions (skincare_products_quiz.xlsx)', async () => {
+    const bank = JSON.parse(
+      fs.readFileSync(path.join(repoRoot, 'data', 'skincare-products-quiz.json'), 'utf8'),
+    ) as {
+      products: Array<{
+        key: string;
+        questions: Array<{ stem: string; options: string[]; answer: string; explanation: string }>;
+      }>;
+    };
+    const byKey = new Map(bank.products.map((p) => [p.key, p.questions]));
+    const must = <T>(v: T | undefined, what: string): T => {
+      if (v === undefined) throw new Error(`missing ${what}`);
+      return v;
+    };
+    expect(bank.products).toHaveLength(6);
+
+    const questionsOf = async (quizId: string) => {
+      const qs = await ctx.deps.store.query<Question>({
+        collection: `quizzes/${quizId}/questions`,
+      });
+      return qs.sort((a, b) => a.order - b.order);
+    };
+
+    // formi s1 covers 4ME HYDRATION THERAPY questions 1–5, verbatim, and is not needsReview
+    const q4me = must(byKey.get('4ME HYDRATION THERAPY'), '4ME bank entry');
+    const formiQuiz = await ctx.deps.store.get<Quiz>('quizzes/seed-pkg-formi-s1-quiz');
+    expect(formiQuiz?.needsReview).toBe(false);
+    expect(formiQuiz?.questionCount).toBe(5);
+    const formiQs = await questionsOf('seed-pkg-formi-s1-quiz');
+    expect(formiQs.map((q) => q.stem)).toEqual(q4me.slice(0, 5).map((q) => q.stem));
+    const firstQ = must(formiQs[0], 'formi s1 q1');
+    const firstBank = must(q4me[0], '4ME bank q1');
+    expect(firstQ.options.map((o) => o.text)).toEqual(firstBank.options);
+    expect(firstQ.answerKey).toBe(firstBank.answer.toLowerCase());
+    expect(firstQ.explanation).toBe(firstBank.explanation);
+
+    // WITH US: 10 questions split 5/5 across the ویت آس audio and WITH US video packages
+    const qWithUs = must(byKey.get('WITH US'), 'WITH US bank entry');
+    const vitasQs = await questionsOf('seed-pkg-vitas-s1-quiz');
+    const heelQs = await questionsOf('seed-pkg-comeon-heel-s1-quiz');
+    expect(vitasQs.map((q) => q.stem)).toEqual(qWithUs.slice(0, 5).map((q) => q.stem));
+    expect(heelQs.map((q) => q.stem)).toEqual(qWithUs.slice(5).map((q) => q.stem));
+
+    // ICE BALL brand package + ZEN single-section package
+    const icebalQs = [
+      ...(await questionsOf('seed-pkg-icebal-s1-quiz')),
+      ...(await questionsOf('seed-pkg-icebal-s2-quiz')),
+    ];
+    expect(icebalQs).toHaveLength(10);
+    expect(icebalQs.map((q) => q.stem)).toEqual(
+      must(byKey.get('ICE BALL'), 'ICE BALL bank entry').map((q) => q.stem),
+    );
+    const zenQuiz = await ctx.deps.store.get<Quiz>('quizzes/seed-pkg-zen-s1-quiz');
+    expect(zenQuiz?.questionCount).toBe(10);
+    expect(zenQuiz?.needsReview).toBe(false);
+
+    // no quiz-bank coverage → sample fallback stays needsReview
+    const pixelQuiz = await ctx.deps.store.get<Quiz>('quizzes/seed-pkg-pixel-stick-s1-quiz');
+    expect(pixelQuiz?.needsReview).toBe(true);
+    expect(pixelQuiz?.questionCount).toBe(5);
   });
 
   it('serves real logo files from local storage', async () => {
