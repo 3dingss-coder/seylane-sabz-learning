@@ -45,7 +45,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     ).toEqual(['sb-220306101', 'sb-pixel-stick-sunscreen']);
   });
 
-  it('creates the 9 sample packages under the agreed brand/product (8 published, دارت unassigned draft)', async () => {
+  it('creates the 9 sample packages under the agreed brand/product (7 published; پیکسل and دارت draft until a quiz is added)', async () => {
     const pk = await ctx.deps.store.query<Package>({ collection: 'packages' });
     expect(pk).toHaveLength(9);
     const byId = new Map(pk.map((p) => [p.id, p]));
@@ -56,7 +56,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     expect(byId.get('seed-pkg-dart')?.brandId).toBeNull();
     expect(byId.get('seed-pkg-dart')?.status).toBe('draft');
     expect(byId.get('seed-pkg-zen')?.productId).toBe('sb-290252101');
-    expect(pk.filter((p) => p.status === 'published')).toHaveLength(8);
+    expect(pk.filter((p) => p.status === 'published')).toHaveLength(7);
     const withMedia = report.training.filter((t) => t.durationSec > 300);
     expect(withMedia).toHaveLength(14);
   });
@@ -76,7 +76,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     expect(login.status).toBe(200);
     const token = login.body.data.idToken as string;
     const home = await ctx.api(token).get('/v1/me/home');
-    expect(home.body.data.packages.length).toBe(8);
+    expect(home.body.data.packages.length).toBe(7);
     const pkg = await ctx.api(token).get('/v1/me/packages/seed-pkg-vitas');
     const s = pkg.body.data.sections[0];
     await watchSection(ctx, token, s.id, s.durationSec);
@@ -147,10 +147,13 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     expect(zenQuiz?.questionCount).toBe(10);
     expect(zenQuiz?.needsReview).toBe(false);
 
-    // no quiz-bank coverage → sample fallback stays needsReview
+    // no quiz-bank coverage → no sample questions; package stays draft until admin adds a quiz
     const pixelQuiz = await ctx.deps.store.get<Quiz>('quizzes/seed-pkg-pixel-stick-s1-quiz');
     expect(pixelQuiz?.needsReview).toBe(true);
-    expect(pixelQuiz?.questionCount).toBe(5);
+    expect(pixelQuiz?.questionCount).toBe(0);
+    expect((await ctx.deps.store.get<Package>('packages/seed-pkg-pixel-stick'))?.status).toBe(
+      'draft',
+    );
   });
 
   it('serves real logo files from local storage', async () => {

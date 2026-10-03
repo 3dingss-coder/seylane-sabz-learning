@@ -36,7 +36,7 @@ interface SupplementPackage {
   productId: string | null;
   deadlineDays: number | null;
   publish: boolean;
-  /** Key into data/skincare-products-quiz.json; null → sample fallback questions. */
+  /** Key into data/skincare-products-quiz.json; null → no quiz questions (admin adds them). */
   quizKey: string | null;
   sections: SupplementSection[];
 }
@@ -103,7 +103,7 @@ export interface SeedReport {
     sectionId: string;
     durationSec: number;
     status: string;
-    quizSource: 'client-quiz-bank' | 'sample' | 'none';
+    quizSource: 'client-quiz-bank' | 'none';
   }>;
   demoUsers: Array<{ role: string; name: string; phone: string; password: string }>;
 }
@@ -154,7 +154,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
     sp: SupplementPackage,
     i: number,
   ): SeedReport['training'][number]['quizSource'] =>
-    quizAssign.has(`${sp.id}|${i}`) ? 'client-quiz-bank' : sp.brandId ? 'sample' : 'none';
+    quizAssign.has(`${sp.id}|${i}`) ? 'client-quiz-bank' : 'none';
   const now = d.clock();
   const iso = now.toISOString();
   const report: SeedReport = {
@@ -442,12 +442,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
       );
       await d.store.set(`section_index/${sectionId}`, { packageId: sp.id });
       const bankQs = quizAssign.get(`${sp.id}|${i}`);
-      const questions =
-        bankQs && bankQs.length
-          ? bankQs
-          : sp.brandId
-            ? sampleQuestions(sp, s, brand?.name ?? '', product, productInputs, brandInputs)
-            : [];
+      const questions = bankQs ?? [];
       const quizSource = quizSourceFor(sp, i);
       const quiz: Quiz = {
         sectionId,
@@ -595,113 +590,4 @@ function distributeBankQuestions(
     }
   }
   return out;
-}
-
-/** Deterministic pick of `n` distinct items, excluding `exclude`. */
-function pick<T>(list: T[], n: number, seed: string, exclude: (x: T) => boolean): T[] {
-  const pool = list.filter((x) => !exclude(x));
-  const h = parseInt(short(seed).slice(0, 8), 16);
-  const out: T[] = [];
-  for (let i = 0; out.length < n && i < pool.length * 2; i++) {
-    const item = pool[(h + i * 7919) % pool.length];
-    if (item !== undefined && !out.includes(item)) out.push(item);
-  }
-  return out;
-}
-
-function withCorrect(
-  correct: string,
-  distractors: string[],
-  seed: string,
-): { options: Question['options']; answerKey: string } {
-  const keys = ['a', 'b', 'c', 'd'];
-  const pos = parseInt(short(seed).slice(0, 2), 16) % 4;
-  const texts = [...distractors.slice(0, 3)];
-  texts.splice(pos, 0, correct);
-  return {
-    options: texts.map((t, i) => ({ key: keys[i] ?? 'a', text: t })),
-    answerKey: keys[pos] ?? 'a',
-  };
-}
-
-/**
- * Fallback sample 5-question quizzes built only from catalog facts (brand, product, category) +
- * generic sales-process questions — used solely for products without a client quiz bank entry in
- * data/skincare-products-quiz.json. Marked needsReview=true: the admin replaces them with content
- * questions.
- */
-function sampleQuestions(
-  sp: SupplementPackage,
-  s: SupplementSection,
-  brandName: string,
-  product: { id: string; name: string; category: string | null } | undefined,
-  products: Array<{ id: string; name: string; brandId: string | null; category: string | null }>,
-  brands: Array<{ id: string; name: string }>,
-): QInput[] {
-  const seed = `${sp.id}|${s.file}`;
-  const qs: QInput[] = [];
-  const otherBrands = pick(brands, 3, `${seed}|b`, (b) => b.id === sp.brandId).map((b) => b.name);
-  if (product) {
-    const others = pick(
-      products,
-      3,
-      `${seed}|p`,
-      (p) => p.brandId === sp.brandId || p.id === product.id,
-    ).map((p) => p.name);
-    qs.push({
-      stem: 'این قسمت آموزشی درباره کدام محصول است؟',
-      ...withCorrect(product.name, others, `${seed}|1`),
-      explanation: `این آموزش مربوط به «${product.name}» است.`,
-    });
-    qs.push({
-      stem: `«${product.name}» محصول کدام برند است؟`,
-      ...withCorrect(brandName, otherBrands, `${seed}|2`),
-      explanation: `این محصول متعلق به برند ${brandName} است.`,
-    });
-  } else {
-    const own = products.filter((p) => p.brandId === sp.brandId);
-    const ownPick = pick(own, 1, `${seed}|own`, () => false)[0];
-    const others = pick(products, 3, `${seed}|p`, (p) => p.brandId === sp.brandId).map(
-      (p) => p.name,
-    );
-    qs.push({
-      stem: 'این آموزش درباره کدام برند است؟',
-      ...withCorrect(brandName, otherBrands, `${seed}|1`),
-      explanation: `این آموزش سطح برند ${brandName} است.`,
-    });
-    if (ownPick)
-      qs.push({
-        stem: `کدام محصول متعلق به برند ${brandName} است؟`,
-        ...withCorrect(ownPick.name, others, `${seed}|2`),
-        explanation: `«${ownPick.name}» از محصولات ${brandName} است.`,
-      });
-  }
-  qs.push({
-    stem: 'هدف اصلی این قسمت آموزشی چیست؟',
-    ...withCorrect(
-      'آشنایی با محصول و مزیت‌های آن برای معرفی به مشتری',
-      ['آموزش حسابداری فروشگاه', 'آموزش نصب اپلیکیشن سفارش', 'آشنایی با قوانین مرخصی'],
-      `${seed}|3`,
-    ),
-    explanation: 'هر قسمت آموزشی برای شناخت محصول و فروش بهتر آن است.',
-  });
-  qs.push({
-    stem: 'بهترین شروع برای معرفی محصول به مشتری کدام است؟',
-    ...withCorrect(
-      'پرسیدن نیاز مشتری و گفتن مزیت اصلی محصول',
-      ['گفتن قیمت قبل از هر توضیحی', 'مقایسه منفی با برندهای دیگر', 'اصرار به خرید تعداد زیاد'],
-      `${seed}|4`,
-    ),
-    explanation: 'اول نیاز مشتری را بشناس، بعد مزیت متناسب را بگو.',
-  });
-  qs.push({
-    stem: 'اگر مشتری سؤالی پرسید که پاسخش را در آموزش ندیده‌اید، چه باید کرد؟',
-    ...withCorrect(
-      'صادقانه بگویید بررسی می‌کنید و از مدیر یا منتور بپرسید',
-      ['یک پاسخ حدسی بدهید', 'سؤال را نادیده بگیرید', 'بگویید این محصول مشکلی ندارد'],
-      `${seed}|5`,
-    ),
-    explanation: 'اطلاعات نادرست اعتماد مشتری را از بین می‌برد.',
-  });
-  return qs;
 }
