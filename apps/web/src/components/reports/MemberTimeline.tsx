@@ -21,7 +21,7 @@ export function MemberTimeline({ data, canMessage }: { data: Timeline; canMessag
               فعالیت: {user.lastActiveAt ? faRelative(user.lastActiveAt) : 'هرگز'}
             </p>
             <p className="text-sm text-text-secondary">
-              محل سکونت: {user.province ? `${user.province} • ${user.city ?? ''}` : 'ثبت نشده'}
+              محل فعالیت: {user.province ? `${user.province} • ${user.city ?? ''}` : 'ثبت نشده'}
             </p>
           </div>
           {canMessage && (

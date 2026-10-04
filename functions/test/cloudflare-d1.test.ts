@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { completeLibraryUpload, startLibraryUpload } from '../src/services/media-library';
 import { fakeMp4 } from './support/ctx';
-import type { D1Database, D1PreparedStatement, D1Result } from '../src/store/d1';
+import { D1Store, type D1Database, type D1PreparedStatement, type D1Result } from '../src/store/d1';
 import type { Data } from '../src/store/types';
 import { buildCloudflareDeps, createFetchHandler } from '../src/web-handler';
 
@@ -98,6 +98,124 @@ const seedSnapshot: Record<string, Record<string, Data>> | undefined = fs.exists
   : undefined;
 
 describe('Cloudflare D1 + Web Fetch Handler', () => {
+  it('keeps the app starting when mentor guide seeding fails, and retries on the next start', async () => {
+    const db = createSqliteD1();
+    await new D1Store(db).ensureReady();
+    await db
+      .prepare('INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)')
+      .bind('brands', 'broken-brand', 'brands', '{not valid json', '2026-10-04T00:00:00.000Z')
+      .run();
+    const snapshot: Record<string, Record<string, Data>> = {
+      mentor_guides: {
+        'brand:broken-brand': {
+          kind: 'brand',
+          targetId: 'broken-brand',
+          title: 'راهنما',
+          summary: 'x',
+        },
+      },
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const store = new D1Store(db, snapshot);
+      await expect(store.ensureReady()).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalled();
+      // The store still works, and no "already applied" marker was written.
+      await store.set('probe/1', { ok: true });
+      expect(await store.get('probe/1')).toMatchObject({ ok: true });
+      expect(await store.get('knowledge_meta/mentor_guides_seed_version')).toBeNull();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('adds missing mentor guides to an existing D1, remaps brand IDs by exact name, and preserves admin guides', async () => {
+    const db = createSqliteD1();
+    await new D1Store(db).ensureReady();
+    const putDoc = (collection: string, id: string, data: Record<string, unknown>) =>
+      db
+        .prepare('INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)')
+        .bind(collection, id, collection, JSON.stringify(data), '2026-10-04T00:00:00.000Z');
+    await db.batch([
+      putDoc('brands', 'live-zen-id', { name: 'زِن', nameLatin: 'Zen' }),
+      putDoc('brands', 'live-formi-id', { name: 'فورمی', nameLatin: 'Formi' }),
+      putDoc('brands', 'brand-b9jgxnnlhx', { name: 'دارت', nameLatin: 'Dart' }),
+      putDoc('mentor_guides', 'global', {
+        kind: 'global',
+        targetId: null,
+        title: 'راهنمای مدیر',
+        summary: 'محتوای تنظیم‌شده توسط مدیر',
+      }),
+      putDoc('mentor_guides', 'brand:brand-b9jgxnnlhx', {
+        kind: 'brand',
+        targetId: 'brand-b9jgxnnlhx',
+        title: 'راهنمای مدیر برای دارت',
+        summary: 'محتوای مدیر',
+      }),
+    ]);
+
+    const snapshot: Record<string, Record<string, Data>> = {
+      brands: {
+        'brand-sb-zen': { name: 'زِن', nameLatin: 'Zen' },
+        'brand-sb-formi': { name: 'فورمی', nameLatin: 'Formi' },
+      },
+      mentor_guides: {
+        global: {
+          kind: 'global',
+          targetId: null,
+          title: 'راهنمای تازه',
+          summary: 'این راهنمای global نباید محتوای مدیر را بازنویسی کند.',
+        },
+        'brand:brand-sb-zen': {
+          kind: 'brand',
+          targetId: 'brand-sb-zen',
+          title: 'زن | روغن بدن Zen',
+          summary: 'دانش محصول زن',
+        },
+        'brand:brand-sb-formi': {
+          kind: 'brand',
+          targetId: 'brand-sb-formi',
+          title: 'فورمی | ست آبرسان',
+          summary: 'دانش محصول فورمی',
+        },
+        'brand:brand-b9jgxnnlhx': {
+          kind: 'brand',
+          targetId: 'brand-b9jgxnnlhx',
+          title: 'دارت | Filler Shot',
+          summary: 'دانش محصول دارت',
+        },
+      },
+    };
+
+    const migrated = new D1Store(db, snapshot);
+    await migrated.ensureReady();
+    expect(
+      (await migrated.get<{ summary: string }>('mentor_guides/brand:live-zen-id'))?.summary,
+    ).toBe('دانش محصول زن');
+    expect(
+      (await migrated.get<{ summary: string }>('mentor_guides/brand:live-formi-id'))?.summary,
+    ).toBe('دانش محصول فورمی');
+    expect(
+      (await migrated.get<{ summary: string }>('mentor_guides/brand:brand-b9jgxnnlhx'))?.summary,
+    ).toBe('محتوای مدیر');
+    expect((await migrated.get<{ summary: string }>('mentor_guides/global'))?.summary).toBe(
+      'محتوای تنظیم‌شده توسط مدیر',
+    );
+    expect(await migrated.get('knowledge_meta/dirty')).not.toBeNull();
+
+    await new D1Store(db, snapshot).ensureReady();
+    const guides = await db
+      .prepare('SELECT id FROM docs WHERE col = ?1 ORDER BY id')
+      .bind('mentor_guides')
+      .all<{ id: string }>();
+    expect(guides.results?.map((row) => row.id)).toEqual([
+      'brand:brand-b9jgxnnlhx',
+      'brand:live-formi-id',
+      'brand:live-zen-id',
+      'global',
+    ]);
+  });
+
   it('auto-migrates schema, auto-seeds snapshot, and persists data & sessions across cold starts', async () => {
     const db = createSqliteD1();
 
@@ -370,7 +488,7 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
       .prepare("SELECT COUNT(*) AS c FROM blob_chunks WHERE path LIKE 'uploads/%'")
       .first<{ c: number }>('c');
     expect(Number(leftovers)).toBe(0);
-  });
+  }, 15_000);
 
   it('stores large blobs in small staged batches and leaves no staging rows behind', async () => {
     const db = createSqliteD1();

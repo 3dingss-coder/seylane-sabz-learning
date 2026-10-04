@@ -74,6 +74,32 @@ function parseRow<T>(id: string, raw: string): Doc<T> {
   return { ...parsed, id } as Doc<T>;
 }
 
+function normalizeCatalogName(value: unknown): string {
+  return typeof value === 'string'
+    ? value
+        .normalize('NFKC')
+        .toLowerCase()
+        .replace(/[يى]/g, 'ی')
+        .replace(/ك/g, 'ک')
+        .replace(/[\u064b-\u065f\u0670ـ]/g, '')
+        .replace(/[\u200c\s\-_]+/g, ' ')
+        .trim()
+    : '';
+}
+
+/** Deterministic lightweight fingerprint so D1 applies each additive guide snapshot once. */
+function mentorGuideSnapshotVersion(snapshot: Record<string, Data>): string {
+  const source = Object.keys(snapshot)
+    .sort()
+    .map((id) => `${id}:${JSON.stringify(snapshot[id])}`)
+    .join('|');
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < source.length; index++) {
+    hash = Math.imul(hash ^ source.charCodeAt(index), 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 /**
  * Cloudflare D1 (SQLite at the edge) implementation of DocStore.
  * Automatically creates tables and seeds initial catalog/demo data on first request.
@@ -105,7 +131,18 @@ export class D1Store implements DocStore {
       .prepare('SELECT id FROM docs WHERE col = ?1 LIMIT 1')
       .bind('brands')
       .first<{ id: string }>();
-    if (existing) return;
+    if (existing) {
+      // Additive and optional: a problem here must never keep the whole app from starting.
+      // Nothing is marked as applied on failure, so the next cold start simply tries again.
+      try {
+        await this.seedMissingMentorGuides();
+      } catch (err) {
+        console.warn(
+          `[d1] mentor guide seeding skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      return;
+    }
 
     const now = new Date().toISOString();
     const stmts: D1PreparedStatement[] = [];
@@ -128,6 +165,138 @@ export class D1Store implements DocStore {
     for (let i = 0; i < stmts.length; i += CHUNK) {
       await this.db.batch(stmts.slice(i, i + CHUNK));
     }
+  }
+
+  /**
+   * Existing D1 databases are not re-seeded with the full catalog snapshot. Still, additive
+   * mentor guides shipped in a new Worker snapshot must reach those databases. Import only
+   * missing guide rows, never overwrite admin-authored guides, and remap a seeded brand ID by
+   * exact brand name/Latin name when the live catalog uses a different ID.
+   */
+  private async seedMissingMentorGuides(): Promise<void> {
+    const snapshotGuides = this.seedSnapshot?.mentor_guides;
+    if (!snapshotGuides) return;
+
+    const version = mentorGuideSnapshotVersion(snapshotGuides);
+    const applied = await this.db
+      .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
+      .bind('knowledge_meta', 'mentor_guides_seed_version')
+      .first<{ data: string }>();
+    if (applied) {
+      try {
+        if ((JSON.parse(applied.data) as { version?: string }).version === version) return;
+      } catch {
+        // Replace malformed migration marker below and try the safe INSERT OR IGNORE again.
+      }
+    }
+
+    const [brandResult, guideResult] = await Promise.all([
+      this.db.prepare('SELECT id, data FROM docs WHERE col = ?1').bind('brands').all<{
+        id: string;
+        data: string;
+      }>(),
+      this.db.prepare('SELECT id FROM docs WHERE col = ?1').bind('mentor_guides').all<{
+        id: string;
+      }>(),
+    ]);
+    const liveBrands = (brandResult.results ?? []).map((row) => ({
+      id: row.id,
+      data: JSON.parse(row.data) as Record<string, unknown>,
+    }));
+    const liveBrandIds = new Set(liveBrands.map((row) => row.id));
+    const existingGuideIds = new Set((guideResult.results ?? []).map((row) => row.id));
+    const now = new Date().toISOString();
+    const statements: D1PreparedStatement[] = [];
+
+    for (const [seedDocId, seedGuide] of Object.entries(snapshotGuides)) {
+      if (!seedGuide || typeof seedGuide !== 'object' || existingGuideIds.has(seedDocId)) continue;
+      const guide = seedGuide as Record<string, unknown>;
+      const kind = guide.kind;
+      if (kind === 'global' || seedDocId === 'global') {
+        statements.push(this.mentorGuideInsert(seedDocId, guide, now));
+        continue;
+      }
+      if (kind !== 'brand') continue;
+
+      const sourceTargetId =
+        typeof guide.targetId === 'string'
+          ? guide.targetId
+          : seedDocId.slice(seedDocId.indexOf(':') + 1);
+      if (!sourceTargetId || sourceTargetId === seedDocId) continue;
+
+      const targetId = liveBrandIds.has(sourceTargetId)
+        ? sourceTargetId
+        : this.matchLiveBrandId(sourceTargetId, guide, liveBrands);
+      if (!targetId) {
+        console.warn(
+          `[d1] skipping seeded brand mentor guide ${seedDocId}: no unambiguous live catalog match`,
+        );
+        continue;
+      }
+
+      const docId = `brand:${targetId}`;
+      if (existingGuideIds.has(docId)) continue;
+      statements.push(this.mentorGuideInsert(docId, { ...guide, kind, targetId }, now));
+    }
+
+    const results = statements.length ? await this.db.batch(statements) : [];
+    const inserted = results.some((result) => (result.meta?.changes ?? 0) > 0);
+    if (inserted) {
+      // Guide changes need an incremental knowledge-index rebuild before retrieval.
+      const dirty = JSON.stringify({ at: now });
+      await this.db
+        .prepare(
+          `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+           ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+        )
+        .bind('knowledge_meta', 'dirty', 'knowledge_meta', dirty, now)
+        .run();
+    }
+
+    // One small persistent version marker prevents scanning the catalog on every isolate.
+    const marker = JSON.stringify({ version });
+    await this.db
+      .prepare(
+        `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+      )
+      .bind('knowledge_meta', 'mentor_guides_seed_version', 'knowledge_meta', marker, now)
+      .run();
+  }
+
+  private matchLiveBrandId(
+    sourceTargetId: string,
+    guide: Record<string, unknown>,
+    liveBrands: Array<{ id: string; data: Record<string, unknown> }>,
+  ): string {
+    const sourceBrand = this.seedSnapshot?.brands?.[sourceTargetId] as
+      Record<string, unknown> | undefined;
+    const titleHint = typeof guide.title === 'string' ? guide.title.split(/[|｜]/, 1)[0] : '';
+    const sourceNames = [sourceBrand?.name, sourceBrand?.nameLatin, titleHint]
+      .map(normalizeCatalogName)
+      .filter(Boolean);
+    if (!sourceNames.length) return '';
+
+    const matches = liveBrands.filter((row) =>
+      [row.data.name, row.data.nameLatin]
+        .map(normalizeCatalogName)
+        .some((name) => name && sourceNames.includes(name)),
+    );
+    const match = matches.length === 1 ? matches[0] : undefined;
+    return match?.id ?? '';
+  }
+
+  private mentorGuideInsert(
+    id: string,
+    guide: Record<string, unknown>,
+    now: string,
+  ): D1PreparedStatement {
+    const clean = toPlainData(guide);
+    return this.db
+      .prepare(
+        'INSERT OR IGNORE INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)',
+      )
+      .bind('mentor_guides', id, 'mentor_guides', JSON.stringify(clean), now);
   }
 
   private async readRaw(col: string, id: string): Promise<Data | null> {

@@ -15,7 +15,7 @@
   - `BACKUP_BUCKET` (اختیاری؛ باکت `gs://` برای بکاپ روزانه)
   - `CLOUDFLARE_API_TOKEN`، `CLOUDFLARE_ACCOUNT_ID`، `CLOUDFLARE_PAGES_PROJECT`
 - [ ] ثبت Variableها: `VITE_API_BASE` (آدرس API)، `ALLOWED_ORIGINS` (دامنه وب + `https://localhost` برای اپ اندروید)، `APP_URL` (آدرس عمومی وب — برای لینک ایمیل و Push وب)، `VITE_SENTRY_DSN` (اختیاری)، `TRUST_PROXY_HOPS` (اختیاری؛ پیش‌فرض ۱ — اگر API را پشت Cloudflare Proxy گذاشتید ۲)
-- [ ] ایمیل گزارش هفتگی مدیر (اختیاری): Secret `SMTP_URL` به شکل `smtps://user:pass@smtp.example.com:465` و `MAIL_FROM` (مثلاً `سیلانه‌سبز لرنینگ <no-reply@دامنه‌شما>`). سرویس رایگان مثل Brevo (۳۰۰ ایمیل/روز) کافی است. مدیرانی که ایمیل دارند شنبه‌ها گزارش افراد عقب‌مانده را می‌گیرند؛ بدون SMTP فقط نوتیف داخل اپ ارسال می‌شود
+- [ ] ایمیل گزارش هفتگی مدیر (اختیاری): Secret `SMTP_URL` به شکل `smtps://user:pass@smtp.example.com:465` و `MAIL_FROM` (مثلاً `آکادمی سیلانه <no-reply@دامنه‌شما>`). سرویس رایگان مثل Brevo (۳۰۰ ایمیل/روز) کافی است. مدیرانی که ایمیل دارند شنبه‌ها گزارش افراد عقب‌مانده را می‌گیرند؛ بدون SMTP فقط نوتیف داخل اپ ارسال می‌شود
 - [ ] اولین استقرار: `firebase deploy --only functions,firestore,storage` (به‌صورت خودکار بعد از merge به main انجام می‌شود)
 - [ ] پس از اولین استقرار روی Cloudflare: `wrangler deployments status` / `npm run deploy -w functions` (اگر با CLI می‌کنید)؛ سپس با `POST /v1/admin/jobs/deadline-sweep` اجرای دستی را امتحان کنید. (تأیید `[triggers] crons` در صفحه Triggers فقط بعد از باز کردن کامنت این بلوک — بند §۴ را ببینید)
 - [ ] اجرای Seed روی پروژه واقعی با ساخت حساب مدیر ارشد (دستور در RELEASE.md §2) — **بدون `--demo`**

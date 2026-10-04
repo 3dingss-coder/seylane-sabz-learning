@@ -33,15 +33,21 @@ export function UsersPage() {
   const [q, setQ] = useState('');
   const [role, setRole] = useState('');
   const [team, setTeam] = useState('');
+  const [city, setCity] = useState('');
   const [edit, setEdit] = useState<Me | null>(null);
   const teamName = useMemo(
     () => new Map((teams.data ?? []).map((t) => [t.id, t.name])),
     [teams.data],
   );
+  const cityOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const u of users.data ?? []) if (u.city) s.add(u.city);
+    return [...s].sort();
+  }, [users.data]);
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="کاربران" subtitle="نقش، تیم و وضعیت کاربران" />
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
         <Input
           label="جستجو"
           value={q}
@@ -66,6 +72,14 @@ export function UsersPage() {
             </option>
           ))}
         </Select>
+        <Select label="شهر" value={city} onChange={(e) => setCity(e.target.value)}>
+          <option value="">همه</option>
+          {cityOptions.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </Select>
       </div>
       <QueryState query={users} loading={<TableSkeleton rows={8} />}>
         {(list) => {
@@ -76,11 +90,11 @@ export function UsersPage() {
                 u.name.includes(needle) ||
                 (u.phone ?? '').includes(needle) ||
                 (u.email ?? '').includes(needle) ||
-                // «مشهد» or «خراسان» finds the marketers of that region.
                 (u.province ?? '').includes(needle) ||
                 (u.city ?? '').includes(needle)) &&
               (!role || u.role === role) &&
-              (!team || (team === 'none' ? !u.teamId : u.teamId === team)),
+              (!team || (team === 'none' ? !u.teamId : u.teamId === team)) &&
+              (!city || u.city === city),
           );
           return rows.length === 0 ? (
             <EmptyState title="کاربری پیدا نشد" />
@@ -106,8 +120,7 @@ export function UsersPage() {
                 },
                 {
                   key: 'loc',
-                  header: 'محل سکونت',
-                  // Stored at sign-up («انتخاب محل سکونت») — the region each marketer sells in.
+                  header: 'محل فعالیت',
                   cell: (u) => (u.province ? `${u.province} • ${u.city ?? ''}` : '—'),
                   hideOnMobile: true,
                 },
@@ -302,7 +315,7 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
         <ResidencePicker
           value={residence}
           onChange={setResidence}
-          label="محل سکونت"
+          label="محل فعالیت"
           cityError={errors.city}
           clearable
         />
