@@ -30,12 +30,14 @@ import { ApiError, api } from '@/lib/api';
 import { toPersianDigits } from '@/lib/digits';
 import { faDuration } from '@/lib/format';
 import { formatEta } from '@/lib/mediaLibrary/eta';
+import { sectionBodyFromItem } from '@/lib/mediaLibrary/sections';
 import { getUploadQueue, setOnItemReady, useUploadJobs, type Job } from '@/lib/mediaLibrary/queue';
 import type { LibraryItem } from '@/lib/mediaLibrary/types';
 import { errMsg } from '@/lib/errors';
 import { ak, useBrands, usePackagesAdmin, useProducts } from './adminQueries';
 
 const libKey = ['admin', 'media-library'] as const;
+const NEW_PACKAGE = '__new__';
 
 const fmtSize = (bytes: number | null) =>
   bytes
@@ -427,7 +429,7 @@ function AddToPackage({
   const toast = useToast();
   const brands = useBrands();
   const pkgs = usePackagesAdmin(brandId ? `brandId=${brandId}` : '');
-  const [packageId, setPackageId] = useState('');
+  const [picked, setPicked] = useState('');
   const [sectionTitle, setSectionTitle] = useState(item.title);
   const [added, setAdded] = useState<{ packageId: string; packageTitle: string } | null>(null);
 
@@ -436,31 +438,52 @@ function AddToPackage({
     const all = (pkgs.data ?? []).filter(
       (p) => p.status !== 'archived' && (!brandId || p.brandId === brandId),
     );
-    // Packages of the chosen product first.
-    return [...all].sort(
-      (a, b) =>
-        Number(b.productId === productId && !!productId) -
-        Number(a.productId === productId && !!productId),
-    );
+    const mine = (p: { productId: string | null }) =>
+      Boolean(productId) && p.productId === productId;
+    return [...all].sort((a, b) => Number(mine(b)) - Number(mine(a)));
   }, [pkgs.data, brandId, productId]);
 
+  // The obvious choice is made for the admin: the only candidate is preselected.
+  const packageId = picked || (options.length === 1 ? (options[0]?.id ?? '') : '');
+  const isNew = packageId === NEW_PACKAGE;
+
   const add = useMutation({
-    mutationFn: () =>
-      api.post(`/admin/packages/${packageId}/sections`, {
-        title: sectionTitle.trim(),
-        description: '',
-        transcript: '',
-        mediaType: item.kind,
-        mediaSource: 'file',
-        youtubeUrl: null,
-        mediaId: item.id,
-        ...(item.durationSec ? { durationSec: item.durationSec } : {}),
-      }),
-    onSuccess: () => {
-      const pkg = options.find((p) => p.id === packageId);
-      setAdded({ packageId, packageTitle: pkg?.title ?? '' });
+    mutationFn: async () => {
+      let targetId = packageId;
+      let targetTitle = options.find((p) => p.id === packageId)?.title ?? '';
+      if (isNew) {
+        const created = await api.post<{ id: string; title: string }>('/admin/packages', {
+          title:
+            sectionTitle.trim().length >= 3
+              ? sectionTitle.trim()
+              : `${sectionTitle.trim()} (آموزش)`,
+          brandId: brandId || null,
+          productId: productId || null,
+        });
+        targetId = created.id;
+        targetTitle = created.title;
+        try {
+          await api.post(
+            `/admin/packages/${targetId}/sections`,
+            sectionBodyFromItem(item, sectionTitle),
+          );
+        } catch (e) {
+          // Never leave an empty draft behind when the section could not be created.
+          await api.post(`/admin/packages/${targetId}/archive`).catch(() => {});
+          throw e;
+        }
+      } else {
+        await api.post(
+          `/admin/packages/${targetId}/sections`,
+          sectionBodyFromItem(item, sectionTitle),
+        );
+      }
+      return { packageId: targetId, packageTitle: targetTitle };
+    },
+    onSuccess: (r) => {
+      setAdded(r);
       void qc.invalidateQueries({ queryKey: libKey });
-      void qc.invalidateQueries({ queryKey: ak.pkg(packageId) });
+      void qc.invalidateQueries({ queryKey: ak.pkg(r.packageId) });
       void qc.invalidateQueries({ queryKey: ['admin', 'packages'] });
       void qc.invalidateQueries({ queryKey: ['admin', 'tree'] });
     },
@@ -475,7 +498,7 @@ function AddToPackage({
       >
         <p className="font-bold text-text">به آموزش «{added.packageTitle}» اضافه شد.</p>
         <p className="mt-1 text-text-secondary">
-          برای نمایش به بازاریاب‌ها، سؤال‌های آزمون این قسمت را بنویسید و آموزش را منتشر کنید.
+          فقط سؤال‌های آزمون این قسمت را بنویسید و آموزش را منتشر کنید.
         </p>
         <Link
           to={`/admin/packages/${added.packageId}`}
@@ -492,16 +515,17 @@ function AddToPackage({
       <Select
         label="آموزش"
         value={packageId}
-        onChange={(e) => setPackageId(e.target.value)}
+        onChange={(e) => setPicked(e.target.value)}
         hint={
-          options.length === 0
-            ? brandId
-              ? 'این برند هنوز آموزشی ندارد. از «محتوای آموزشی» یک آموزش بسازید.'
-              : 'ابتدا برند را انتخاب کنید یا از «محتوای آموزشی» آموزش بسازید.'
-            : undefined
+          isNew && !brandId
+            ? 'برای ساخت آموزش جدید، ابتدا برند را انتخاب و ذخیره کنید.'
+            : options.length === 0 && brandId
+              ? 'این برند هنوز آموزشی ندارد؛ «آموزش جدید از این فایل» را بزنید.'
+              : undefined
         }
       >
         <option value="">انتخاب آموزش…</option>
+        <option value={NEW_PACKAGE}>＋ آموزش جدید از این فایل</option>
         {options.map((p) => (
           <option key={p.id} value={p.id}>
             {p.title}
@@ -511,17 +535,17 @@ function AddToPackage({
         ))}
       </Select>
       <Input
-        label="عنوان قسمت"
+        label={isNew ? 'عنوان آموزش و قسمت' : 'عنوان قسمت'}
         value={sectionTitle}
         onChange={(e) => setSectionTitle(e.target.value)}
-        maxLength={160}
+        maxLength={120}
       />
       <Button
         onClick={() => add.mutate()}
         loading={add.isPending}
-        disabled={!packageId || sectionTitle.trim().length < 2}
+        disabled={!packageId || sectionTitle.trim().length < 2 || (isNew && !brandId)}
       >
-        افزودن به آموزش
+        {isNew ? 'ساخت آموزش و قسمت' : 'افزودن به آموزش'}
       </Button>
     </div>
   );
