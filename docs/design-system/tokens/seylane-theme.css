@@ -1,0 +1,79 @@
+/* ============================================================================
+   SEYLANE × DUOLINGO — لایهٔ توکن «انرژی» (فاز ۱) — v2
+   ----------------------------------------------------------------------------
+   • لایهٔ **افزودنی**؛ توکن‌های موجود apps/web/src/styles/index.css دست‌نخورده‌اند.
+   • v2: پالت «انرژی» از **مسکات رسمی برند** مشتق شد (ریشهٔ ریپو «مسکات.png» و
+     docs/design-system/assets/mascot-official.png): پرندهٔ بنفش با تاج قرمز و
+     چشم‌های سبز. هگزهای غالب با ImageMagick اندازه‌گیری شدند.
+   • سبز سازمانی #177a50 (برند/موفقیت/ادمین) سر جایش می‌ماند؛ بنفشِ مسکات لایهٔ
+     «یادگیری/کاراکتر» اپ بازاریاب را می‌سازد — همان کاری که سبزِ Duo برای
+     دولینگو می‌کند. چشم‌های سبز مسکات، پلِ بصری به برند سبز است.
+   • هر عدد کنتراست خروجی tools/contrast.py است (CONTRAST-REPORT.txt, v2: 19 جفت، ۰ خطا).
+   ========================================================================== */
+
+@theme {
+  /* ---- لایهٔ انرژی: بنفشِ مسکات (CTA/کاراکتر اپ بازاریاب) ---- */
+  --color-energy:      #7048a3;  /* تنهٔ مسکات — CTA؛ متن سفید 6.68:1 ✅ */
+  --color-energy-lip:  #472475;  /* لبهٔ ۳بعدی / pressed / متن روی 100 (9.83:1) */
+  --color-energy-glow: #9455a9;  /* هاور/درخشش — تزئینی */
+  --color-energy-100:  #efe7f9;  /* چیپ و نوار بازخورد بنفش */
+  --color-energy-950:  #2a1447;  /* hero تاریک (سفید رویش 16.29:1) */
+
+  /* ---- تاج قرمز = پیوستگی/جشن (فقط fill و آیکن) ---- */
+  --color-streak:      #c55d41;  /* شعله/جشن — متن نیاید (سفید رویش 4.19:1) */
+  --color-streak-100:  #fbeae4;  /* پس‌زمینهٔ چیپ streak */
+  --color-streak-deep: #8a3423;  /* متن چیپ streak روی 100 (6.93:1) */
+
+  /* ---- منقار کرم = سطح گرم نرم ---- */
+  --color-beak:        #ddb8ab;
+  --color-beak-ink:    #3c1e59;  /* متن روی کرم (7.57:1) */
+
+  /* ---- پالت پاداش (نقش انحصاری) ---- */
+  --color-reward:      #ffc800;  /* امتیاز/XP */
+  --color-reward-fg:   #4a3600;  /* متن روی زرد (7.43:1) */
+  --color-mastery:     #6d28d9;  /* استادی (7.10:1) */
+  --color-danger-deep: #a81f1f;  /* خطا با متن سفید (7.29:1) */
+
+  /* ---- خنثی‌های افزودنی ---- */
+  --color-chunk-border: #cbd5e1;
+  --color-track:        #e2e8f0;
+
+  /* ---- شعاع‌ها ---- */
+  --radius-pill:    9999px;
+  --radius-station: 24px;
+
+  /* ---- لبهٔ سه‌بعدی ---- */
+  --lip-sm: 0 2px 0 var(--color-energy-lip);
+  --lip-md: 0 4px 0 var(--color-energy-lip);
+  --lip-lg: 0 6px 0 var(--color-energy-lip);
+
+  /* ---- تایپ نمایشی ---- */
+  --font-display: 'Vazirmatn RD Variable', 'Vazirmatn Variable', Vazirmatn, Tahoma, sans-serif;
+  --text-display: 3rem;
+  --text-hero:    2.25rem;
+}
+
+/* دکمهٔ cta (فاز ۴ §4.1) — فقط اپ بازاریاب */
+.btn-cta {
+  background: var(--color-energy);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-card, 12px);
+  box-shadow: var(--lip-md);
+  font-weight: 800;
+  min-height: 56px;
+  transition: transform 150ms cubic-bezier(.22,1,.36,1), box-shadow 150ms cubic-bezier(.22,1,.36,1);
+}
+.btn-cta:active:not(:disabled) { transform: translateY(4px); box-shadow: none; }
+.btn-cta:disabled { background: var(--color-track); color: #94a3b8; box-shadow: none; }
+
+.card-chunky { border: 2px solid var(--color-chunk-border); }
+
+/* حالت تاریک (R-04) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-energy-lip: #2a1447;
+    --color-chunk-border: #334155;
+    --color-track: #1e293b;
+  }
+}

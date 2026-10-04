@@ -1,0 +1,39 @@
+{
+  "$schema": "https://tr.designtokens.org/format/",
+  "seylane": {
+    "color": {
+      "energy": { "$value": "#7048A3", "$type": "color", "$description": "Mascot body purple; CTA fill, white text 6.68:1" },
+      "energyLip": { "$value": "#472475", "$type": "color", "$description": "3D lip / pressed / text on 100 (9.83:1)" },
+      "energyGlow": { "$value": "#9455A9", "$type": "color", "$description": "hover/glow decorative" },
+      "energy100": { "$value": "#EFE7F9", "$type": "color", "$description": "purple chip / feedback bar bg" },
+      "energy950": { "$value": "#2A1447", "$type": "color", "$description": "dark hero bg (16.29:1 white)" },
+      "streak": { "$value": "#C55D41", "$type": "color", "$description": "crest red; fill/icon only, no text (white 4.19:1)" },
+      "streak100": { "$value": "#FBEAE4", "$type": "color", "$description": "streak chip bg" },
+      "streakDeep": { "$value": "#8A3423", "$type": "color", "$description": "streak chip text (6.93:1)" },
+      "beak": { "$value": "#DDB8AB", "$type": "color", "$description": "warm cream surface" },
+      "beakInk": { "$value": "#3C1E59", "$type": "color", "$description": "text on cream (7.57:1)" },
+      "reward": { "$value": "#FFC800", "$type": "color", "$description": "XP/points" },
+      "rewardFg": { "$value": "#4A3600", "$type": "color", "$description": "text on yellow (7.43:1)" },
+      "mastery": { "$value": "#6D28D9", "$type": "color", "$description": "mastery (7.10:1)" },
+      "dangerDeep": { "$value": "#A81F1F", "$type": "color", "$description": "white text (7.29:1)" },
+      "chunkBorder": { "$value": "#CBD5E1", "$type": "color" },
+      "track": { "$value": "#E2E8F0", "$type": "color" }
+    },
+    "radius": {
+      "pill": { "$value": "9999px", "$type": "dimension" },
+      "station": { "$value": "24px", "$type": "dimension" }
+    },
+    "typography": {
+      "display": {
+        "fontFamily": { "$value": "'Vazirmatn RD Variable', 'Vazirmatn Variable', Vazirmatn, Tahoma, sans-serif", "$type": "fontFamily" },
+        "display": { "$value": "48px", "$type": "fontSize" },
+        "hero": { "$value": "36px", "$type": "fontSize" }
+      }
+    },
+    "shadow": {
+      "lipSm": { "$value": "0 2px 0 {seylane.color.energyLip}", "$type": "shadow" },
+      "lipMd": { "$value": "0 4px 0 {seylane.color.energyLip}", "$type": "shadow" },
+      "lipLg": { "$value": "0 6px 0 {seylane.color.energyLip}", "$type": "shadow" }
+    }
+  }
+}
