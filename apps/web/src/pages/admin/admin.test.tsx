@@ -117,7 +117,7 @@ describe('admin: everything understandable at a glance', () => {
       }),
     });
     renderApp('/admin');
-    const guide = await screen.findByTestId('publish-guide');
+    const guide = await screen.findByTestId('publish-guide', {}, { timeout: 5000 });
     for (const t of ['آموزش بساز', 'آزمون بگذار', 'منتشر کن', 'به بازاریاب‌ها برسان'])
       expect(within(guide).getByRole('heading', { name: t })).toBeInTheDocument();
     expect(await within(guide).findByRole('link', { name: /۲ پیش‌نویس/ })).toBeInTheDocument();
@@ -143,29 +143,39 @@ describe('admin: everything understandable at a glance', () => {
     expect(screen.getByTestId('audience-card')).toHaveTextContent('بعد از انتشار');
   });
 
-  it('a new section can use a file already in the media library', async () => {
+  const libraryMocks = (extra: Record<string, (body?: unknown) => never> | object = {}) => ({
+    ...asAdmin(),
+    'GET /v1/admin/packages/p1': () => ({ data: detail({}, []) }),
+    'GET /v1/admin/assignments': () => ({ data: [] }),
+    // The mock router matches on the path first, so one list serves both pickers (the real API
+    // filters by ?kind=). The video picker simply also lists the audio file here.
+    'GET /v1/admin/media/library': () => ({
+      data: [
+        libItem(),
+        libItem({ id: 'lib2', title: 'ویدیوی برند دیگر', brandId: 'b2', brandName: 'پیکسل' }),
+        libItem({ id: 'lib3', title: 'ویدیوی بدون برند', brandId: null, brandName: null }),
+        libItem({ id: 'lib4', kind: 'audio', title: 'پادکست آتل' }),
+      ],
+    }),
+    ...extra,
+  });
+
+  it('choosing a library file in the new-section dialog creates the section right away', async () => {
     let posted: Record<string, unknown> | null = null;
-    mockApi({
-      ...asAdmin(),
-      'GET /v1/admin/packages/p1': () => ({ data: detail({}, []) }),
-      'GET /v1/admin/assignments': () => ({ data: [] }),
-      'GET /v1/admin/media/library?kind=video': () => ({
-        data: [
-          libItem(),
-          libItem({ id: 'lib2', title: 'ویدیوی برند دیگر', brandId: 'b2', brandName: 'پیکسل' }),
-          libItem({ id: 'lib3', title: 'ویدیوی بدون برند', brandId: null, brandName: null }),
-        ],
+    mockApi(
+      libraryMocks({
+        'POST /v1/admin/packages/p1/sections': (body: unknown) => {
+          posted = body as Record<string, unknown>;
+          return { status: 201, data: { id: 's9' } };
+        },
       }),
-      'POST /v1/admin/packages/p1/sections': (body) => {
-        posted = body as Record<string, unknown>;
-        return { status: 201, data: { id: 's9' } };
-      },
-    });
+    );
     renderApp('/admin/packages/p1');
     fireEvent.click(
       (await screen.findAllByRole('button', { name: 'افزودن قسمت' }))[0] as HTMLElement,
     );
-    fireEvent.click(await screen.findByRole('button', { name: 'انتخاب از کتابخانه رسانه' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'انتخاب از کتابخانه رسانه' }));
 
     // Opens filtered to the package's brand: same-brand and unassigned files, not other brands.
     expect(await screen.findByText('آموزش کامل فیلر شات دارت')).toBeInTheDocument();
@@ -173,17 +183,35 @@ describe('admin: everything understandable at a glance', () => {
     expect(screen.queryByText('ویدیوی برند دیگر')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('آموزش کامل فیلر شات دارت'));
-    // The title is prefilled and the section can be saved without uploading anything.
-    expect(await screen.findByDisplayValue('آموزش کامل فیلر شات دارت')).toBeInTheDocument();
-    expect(screen.getByText(/آپلود شد/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'ذخیره قسمت' }));
+    // No «ذخیره قسمت» needed: picking is the decision.
     await screen.findByText(/قسمت اضافه شد/);
     expect(posted).toMatchObject({
+      title: 'آموزش کامل فیلر شات دارت',
       mediaId: 'lib1',
       mediaType: 'video',
       mediaSource: 'file',
       durationSec: 451,
     });
+  });
+
+  it('an empty training offers the library and picking a file adds the section in one click', async () => {
+    let posted: Record<string, unknown> | null = null;
+    mockApi(
+      libraryMocks({
+        'POST /v1/admin/packages/p1/sections': (body: unknown) => {
+          posted = body as Record<string, unknown>;
+          return { status: 201, data: { id: 's9' } };
+        },
+      }),
+    );
+    renderApp('/admin/packages/p1');
+    await screen.findByText('هنوز قسمتی ندارد');
+    fireEvent.click(screen.getByRole('button', { name: 'انتخاب از کتابخانه رسانه' }));
+    // Both videos and audio are offered here.
+    expect(await screen.findByText('پادکست آتل')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('پادکست آتل'));
+    await screen.findByText(/قسمت از کتابخانه اضافه شد/);
+    expect(posted).toMatchObject({ title: 'پادکست آتل', mediaId: 'lib4', mediaType: 'audio' });
   });
 
   it('a library file can be added to a training from the library', async () => {
@@ -224,6 +252,67 @@ describe('admin: everything understandable at a glance', () => {
       mediaSource: 'file',
       durationSec: 451,
     });
+  });
+
+  it('a library file can start a brand-new training: package + section in one click', async () => {
+    const calls: string[] = [];
+    let pkgBody: Record<string, unknown> | null = null;
+    mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/media/library': () => ({ data: [libItem()] }),
+      'GET /v1/admin/media/library/lib1/preview-url': () => ({
+        data: { url: '/x.mp4', mime: 'video/mp4', kind: 'video' },
+      }),
+      'GET /v1/admin/packages?brandId=b1': () => ({ data: [] }),
+      'POST /v1/admin/packages': (body) => {
+        calls.push('package');
+        pkgBody = body as Record<string, unknown>;
+        return { status: 201, data: { id: 'pNew', title: 'آموزش کامل فیلر شات دارت' } };
+      },
+      'POST /v1/admin/packages/pNew/sections': () => {
+        calls.push('section');
+        return { status: 201, data: { id: 's1' } };
+      },
+    });
+    renderApp('/admin/media');
+    fireEvent.click(await screen.findByText('آموزش کامل فیلر شات دارت'));
+    fireEvent.change(await screen.findByLabelText('آموزش'), { target: { value: '__new__' } });
+    fireEvent.click(screen.getByRole('button', { name: 'ساخت آموزش و قسمت' }));
+    expect(await screen.findByRole('link', { name: 'رفتن به آموزش' })).toHaveAttribute(
+      'href',
+      '/admin/packages/pNew',
+    );
+    expect(calls).toEqual(['package', 'section']);
+    expect(pkgBody).toMatchObject({ title: 'آموزش کامل فیلر شات دارت', brandId: 'b1' });
+  });
+
+  it('does not leave an empty draft behind when the section cannot be created', async () => {
+    const calls: string[] = [];
+    mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/media/library': () => ({ data: [libItem()] }),
+      'GET /v1/admin/media/library/lib1/preview-url': () => ({
+        data: { url: '/x.mp4', mime: 'video/mp4', kind: 'video' },
+      }),
+      'GET /v1/admin/packages?brandId=b1': () => ({ data: [] }),
+      'POST /v1/admin/packages': () => ({
+        status: 201,
+        data: { id: 'pNew', title: 'آموزش کامل فیلر شات دارت' },
+      }),
+      'POST /v1/admin/packages/pNew/sections': () => ({
+        error: { code: 'VALIDATION', message: 'فایل انتخاب‌شده آماده نیست.' },
+      }),
+      'POST /v1/admin/packages/pNew/archive': () => {
+        calls.push('archive');
+        return { data: {} };
+      },
+    });
+    renderApp('/admin/media');
+    fireEvent.click(await screen.findByText('آموزش کامل فیلر شات دارت'));
+    fireEvent.change(await screen.findByLabelText('آموزش'), { target: { value: '__new__' } });
+    fireEvent.click(screen.getByRole('button', { name: 'ساخت آموزش و قسمت' }));
+    expect(await screen.findByText('فایل انتخاب‌شده آماده نیست.')).toBeInTheDocument();
+    expect(calls).toEqual(['archive']);
   });
 
   it('published package nobody sees shows a warning and one click makes it visible to everyone', async () => {

@@ -13,6 +13,7 @@ import {
   EyeOff,
   FileQuestion,
   Headphones,
+  Library,
   Pencil,
   PlayCircle,
   Plus,
@@ -32,6 +33,9 @@ import type { AdminAssignment, AdminPackageDetail, AdminPath, AdminSection } fro
 import { ak, useBrands, useProducts, useTeams, useUsers } from './adminQueries';
 import { AssignmentDialog } from './AssignmentsPage';
 import { PackageFormDialog } from './PackageFormDialog';
+import { MediaPicker } from '@/components/admin/MediaPicker';
+import type { LibraryItem } from '@/lib/mediaLibrary/types';
+import { sectionBodyFromItem } from '@/lib/mediaLibrary/sections';
 import { SectionEditor } from './SectionEditor';
 
 /** A3 — ویرایشگر بسته: metadata, ordered sections, publish checklist. */
@@ -56,6 +60,7 @@ function Editor({ d }: { d: AdminPackageDetail }) {
   const products = useProducts(p.brandId ?? undefined);
   const [editMeta, setEditMeta] = useState(false);
   const [section, setSection] = useState<AdminSection | 'new' | null>(null);
+  const [pickLibrary, setPickLibrary] = useState(false);
   const [confirm, setConfirm] = useState<'publish' | 'unpublish' | 'archive' | null>(null);
   const [assign, setAssign] = useState(false);
   const assignments = useQuery({
@@ -122,6 +127,24 @@ function Editor({ d }: { d: AdminPackageDetail }) {
       });
     },
   });
+  // Choosing a library file creates the section on the spot — nothing else to fill in; the admin
+  // only has to write the quiz and publish.
+  const addFromLibrary = useMutation({
+    mutationFn: (item: LibraryItem) =>
+      api.post(`/admin/packages/${p.id}/sections`, sectionBodyFromItem(item)),
+    onSuccess: () => {
+      setPickLibrary(false);
+      refresh();
+      void qc.invalidateQueries({ queryKey: ['admin', 'media-library'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'tree'] });
+      toast.show({
+        type: 'success',
+        message: 'قسمت از کتابخانه اضافه شد. حالا سؤال‌های آزمون را بنویسید.',
+      });
+    },
+    onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
+  });
+
   // One click: make a published package visible to every marketer (global assignment).
   const assignAll = useMutation({
     mutationFn: () =>
@@ -259,20 +282,29 @@ function Editor({ d }: { d: AdminPackageDetail }) {
             <h2 id="sections-h" className="font-bold">
               قسمت‌ها ({toPersianDigits(live.length)})
             </h2>
-            <Button
-              variant="secondary"
-              icon={<Plus className="size-4" aria-hidden />}
-              onClick={() => setSection('new')}
-            >
-              افزودن قسمت
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                icon={<Library className="size-4" aria-hidden />}
+                onClick={() => setPickLibrary(true)}
+              >
+                از کتابخانه رسانه
+              </Button>
+              <Button
+                variant="secondary"
+                icon={<Plus className="size-4" aria-hidden />}
+                onClick={() => setSection('new')}
+              >
+                افزودن قسمت
+              </Button>
+            </div>
           </div>
           {live.length === 0 ? (
             <EmptyState
               title="هنوز قسمتی ندارد"
-              description="اولین قسمت (ویدیو یا صوت) را اضافه کنید."
-              actionText="افزودن قسمت"
-              onAction={() => setSection('new')}
+              description="اولین قسمت را از کتابخانه رسانه انتخاب کنید یا فایل جدید آپلود کنید."
+              actionText="انتخاب از کتابخانه رسانه"
+              onAction={() => setPickLibrary(true)}
             />
           ) : (
             <ol className="flex flex-col gap-2">
@@ -441,6 +473,13 @@ function Editor({ d }: { d: AdminPackageDetail }) {
       </div>
       {editMeta && <PackageFormDialog open onClose={() => setEditMeta(false)} initial={p} />}
       {assign && <AssignmentDialog presetPackageIds={[p.id]} onClose={() => setAssign(false)} />}
+      {pickLibrary && (
+        <MediaPicker
+          brandId={p.brandId}
+          onClose={() => setPickLibrary(false)}
+          onPick={(it) => addFromLibrary.mutate(it)}
+        />
+      )}
       {section && (
         <SectionEditor
           open

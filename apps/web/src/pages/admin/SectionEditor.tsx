@@ -58,16 +58,18 @@ export function SectionEditor({
       : (initial?.durationSec ?? undefined));
 
   const m = useMutation({
-    mutationFn: () => {
+    mutationFn: (picked?: UploadedMedia) => {
+      const mm = picked ?? media;
+      const dur = picked?.durationSec ?? durationSec;
       const body: Record<string, unknown> = {
-        title: title.trim(),
+        title: title.trim() || picked?.originalName || '',
         description: description.trim(),
         transcript: transcript.trim(),
         mediaType,
         mediaSource: source,
         youtubeUrl: source === 'youtube' ? youtubeUrl.trim() : null,
-        ...(media ? { mediaId: media.id } : {}),
-        ...(durationSec ? { durationSec } : {}),
+        ...(mm ? { mediaId: mm.id } : {}),
+        ...(dur ? { durationSec: dur } : {}),
       };
       return initial
         ? api.patch(`/admin/packages/${packageId}/sections/${initial.id}`, body)
@@ -104,7 +106,7 @@ export function SectionEditor({
           <Button variant="ghost" onClick={onClose}>
             انصراف
           </Button>
-          <Button loading={m.isPending} disabled={!canSave} onClick={() => m.mutate()}>
+          <Button loading={m.isPending} disabled={!canSave} onClick={() => m.mutate(undefined)}>
             ذخیره قسمت
           </Button>
         </>
@@ -239,6 +241,18 @@ export function SectionEditor({
             });
             if (!title.trim()) setTitle(it.title);
             setPicking(false);
+            // A new section is created right away — choosing the file IS the decision. (When
+            // editing an existing section the admin still confirms with «ذخیره قسمت».)
+            if (!initial && mediaType === it.kind)
+              m.mutate({
+                id: it.id,
+                kind: it.kind,
+                status: 'ready',
+                mime: it.mime,
+                sizeBytes: it.sizeBytes,
+                durationSec: it.durationSec,
+                originalName: it.title,
+              });
           }}
         />
       )}

@@ -27,7 +27,8 @@ export function MediaPicker({
   onPick,
   onClose,
 }: {
-  kind: 'video' | 'audio';
+  /** Omit to list both videos and audio. */
+  kind?: 'video' | 'audio';
   brandId?: string | null;
   currentId?: string | null;
   onPick: (item: LibraryItem) => void;
@@ -38,8 +39,9 @@ export function MediaPicker({
   const [search, setSearch] = useState('');
 
   const list = useQuery({
-    queryKey: ['admin', 'media-library', 'picker', kind],
-    queryFn: ({ signal }) => api.get<LibraryItem[]>(`/admin/media/library?kind=${kind}`, signal),
+    queryKey: ['admin', 'media-library', 'picker', kind ?? 'all'],
+    queryFn: ({ signal }) =>
+      api.get<LibraryItem[]>(`/admin/media/library${kind ? `?kind=${kind}` : ''}`, signal),
   });
 
   const visible = (items: LibraryItem[]) => {
@@ -55,7 +57,13 @@ export function MediaPicker({
     <Modal
       open
       onClose={onClose}
-      title={kind === 'video' ? 'انتخاب ویدیو از کتابخانه' : 'انتخاب صوت از کتابخانه'}
+      title={
+        kind === 'video'
+          ? 'انتخاب ویدیو از کتابخانه'
+          : kind === 'audio'
+            ? 'انتخاب صوت از کتابخانه'
+            : 'انتخاب از کتابخانه رسانه'
+      }
       size="lg"
       footer={
         <Button variant="ghost" onClick={onClose}>
