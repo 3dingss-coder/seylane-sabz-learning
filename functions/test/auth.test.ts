@@ -61,20 +61,80 @@ describe('auth (PROMPT 002)', () => {
   });
 
   it('phone-register signs the new marketer in directly, then phone login works', async () => {
-    const reg = await ctx
-      .api()
-      .post('/v1/auth/phone-register', { name: 'نیلوفر', phone: '۰۹۳۶۱۱۱۲۲۳۳' });
+    const reg = await ctx.api().post('/v1/auth/phone-register', {
+      name: 'نیلوفر',
+      phone: '۰۹۳۶۱۱۱۲۲۳۳',
+      province: 'خراسان رضوی',
+      city: 'مشهد',
+    });
     expect(reg.status).toBe(201);
     expect(reg.body.data.user.role).toBe('marketer');
     expect(reg.body.data.user.phone).toBe('09361112233');
+    expect(reg.body.data.user.province).toBe('خراسان رضوی');
+    expect(reg.body.data.user.city).toBe('مشهد');
     expect((await ctx.api(reg.body.data.idToken).get('/v1/me')).status).toBe(200);
+    expect((await ctx.api(reg.body.data.idToken).get('/v1/me')).body.data.city).toBe('مشهد');
     expect((await ctx.api().post('/v1/auth/phone-login', { phone: '09361112233' })).status).toBe(
       200,
     );
     expect(
-      (await ctx.api().post('/v1/auth/phone-register', { name: 'دوباره', phone: '09361112233' }))
-        .status,
+      (
+        await ctx.api().post('/v1/auth/phone-register', {
+          name: 'دوباره',
+          phone: '09361112233',
+          province: 'خراسان رضوی',
+          city: 'مشهد',
+        })
+      ).status,
     ).toBe(409);
+  });
+
+  it('phone-register requires the residence and rejects a city outside the province', async () => {
+    const missing = await ctx
+      .api()
+      .post('/v1/auth/phone-register', { name: 'بی‌استان', phone: '09361112244' });
+    expect(missing.status).toBe(400);
+    expect(missing.body.error.details.map((d: { field: string }) => d.field)).toContain('province');
+
+    const wrongCity = await ctx.api().post('/v1/auth/phone-register', {
+      name: 'شهر اشتباه',
+      phone: '09361112255',
+      province: 'یزد',
+      city: 'مشهد',
+    });
+    expect(wrongCity.status).toBe(400);
+    const detail = wrongCity.body.error.details.find((d: { field: string }) => d.field === 'city');
+    expect(detail?.message).toContain('مشهد');
+    expect(detail?.message).toContain('یزد');
+
+    const unknownProvince = await ctx.api().post('/v1/auth/phone-register', {
+      name: 'استان ناشناس',
+      phone: '09361112266',
+      province: 'تهران بزرگ',
+      city: 'تهران',
+    });
+    expect(unknownProvince.status).toBe(400);
+    expect(unknownProvince.body.error.details.map((d: { field: string }) => d.field)).toContain(
+      'province',
+    );
+  });
+
+  it('stores the canonical residence names, not the spelling the client sent', async () => {
+    const reg = await ctx.api().post('/v1/auth/phone-register', {
+      name: 'فاطمه',
+      phone: '09361112277',
+      // The post-office spelling of this province has no space before «و»; the picker shows the
+      // fixed one, and that is what must land in the database.
+      province: 'سیستان وبلوچستان',
+      city: 'زاهدان',
+    });
+    expect(reg.status).toBe(201);
+    expect(reg.body.data.user.province).toBe('سیستان و بلوچستان');
+    const stored = await ctx.deps.store.get<{ province: string; city: string }>(
+      `users/${reg.body.data.user.id}`,
+    );
+    expect(stored?.province).toBe('سیستان و بلوچستان');
+    expect(stored?.city).toBe('زاهدان');
   });
 
   it('registers with phone (Persian digits) → marketer + tokens, then logs in', async () => {

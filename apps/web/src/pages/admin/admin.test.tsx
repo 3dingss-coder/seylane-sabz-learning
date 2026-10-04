@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
 import type { AdminPackageDetail, AdminSection, Me } from '@/lib/types';
@@ -374,6 +374,39 @@ describe('admin: everything understandable at a glance', () => {
     expect(await screen.findByText('همه مسیرها و مخاطبان')).toBeInTheDocument();
     expect(await screen.findByText('تیم: تیم تهران')).toBeInTheDocument();
     expect(await screen.findByText(/این آموزش کامل است/)).toBeInTheDocument();
+  });
+
+  it('users page shows the sign-up residence, searches by it and lets the admin correct it', async () => {
+    const withResidence: Me = { ...marketer, province: 'خراسان رضوی', city: 'نیشابور' };
+    const without: Me = { ...marketer, id: 'u2', name: 'حسن بی‌شهر', province: null, city: null };
+    const { calls } = mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/users': () => ({ data: [withResidence, without] }),
+    });
+    renderApp('/admin/users');
+    expect(await screen.findByText('خراسان رضوی • نیشابور')).toBeInTheDocument();
+    // Accounts created before the field existed show a dash, never «null».
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+
+    // Searching by city narrows the table down to that marketer.
+    fireEvent.change(screen.getByLabelText('جستجو'), { target: { value: 'نیشابور' } });
+    expect(screen.queryByText('حسن بی‌شهر')).toBeNull();
+
+    // The edit dialog carries the residence and sends it back (null clears the pair).
+    // (DataTable renders a desktop table and a mobile card list, hence «all».)
+    const [editButton] = screen.getAllByRole('button', { name: `ویرایش ${withResidence.name}` });
+    if (!editButton) throw new Error('edit button not rendered');
+    fireEvent.click(editButton);
+    const dialog = await screen.findByRole('dialog', { name: `ویرایش ${withResidence.name}` });
+    expect(within(dialog).getByLabelText('محل سکونت')).toHaveTextContent('خراسان رضوی');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'پاک کردن محل سکونت' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'ذخیره' }));
+    await waitFor(() =>
+      expect(calls.find((c) => c.key === 'PATCH /v1/admin/users/u1')?.body).toMatchObject({
+        province: null,
+        city: null,
+      }),
+    );
   });
 
   it('paths page leads with learning paths and explains the two ways to reach marketers', async () => {

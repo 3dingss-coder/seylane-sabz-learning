@@ -6,6 +6,9 @@ export interface Me {
   name: string;
   phone: string | null;
   email: string | null;
+  /** Residence («محل سکونت») captured at sign-up; null on accounts created before it existed. */
+  province: string | null;
+  city: string | null;
   role: Role;
   teamId: string | null;
   brandIds: string[];

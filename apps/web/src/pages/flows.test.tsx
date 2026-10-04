@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
 import { home, marketer, quiz, sectionDetail } from '@/test/fixtures';
@@ -70,6 +70,65 @@ describe('M1 login → M3 home', () => {
     expect(await screen.findByRole('button', { name: 'ثبت‌نام و ورود' })).toBeInTheDocument();
     expect(screen.getByLabelText('شماره موبایل')).toHaveValue('09120000004');
     expect(screen.getByLabelText('نام و نام خانوادگی')).toBeInTheDocument();
+    expect(screen.getByLabelText('انتخاب محل سکونت')).toBeInTheDocument();
+  });
+
+  it('signs up with name, phone and محل سکونت (province → city) in one step', async () => {
+    const { calls } = mockApi({
+      'POST /v1/auth/phone-register': () => ({
+        data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
+      }),
+      'GET /v1/me/home': () => ({ data: home }),
+      'GET /v1/me/notifications': () => ({ data: { unread: 0, items: [] } }),
+      'GET /v1/me/mentor/nudges': () => ({ data: [] }),
+    });
+    renderApp('/register');
+    fireEvent.change(await screen.findByLabelText('نام و نام خانوادگی'), {
+      target: { value: 'نگار محمدی' },
+    });
+    fireEvent.change(screen.getByLabelText('شماره موبایل'), {
+      target: { value: '۰۹۱۲۰۰۰۰۱۱۱' },
+    });
+
+    // Province: search inside the long list, then pick — this reveals the city field.
+    expect(screen.queryByLabelText('شهر')).toBeNull();
+    fireEvent.click(screen.getByLabelText('انتخاب محل سکونت'));
+    const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
+    await waitFor(() => expect(within(provinces).getAllByRole('option')).toHaveLength(31));
+    fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
+      target: { value: 'خراسان رضوی' },
+    });
+    fireEvent.click(within(provinces).getByRole('option', { name: 'خراسان رضوی' }));
+    expect(screen.getByLabelText('شهر')).toBeInTheDocument();
+
+    // City: only خراسان رضوی cities are offered.
+    fireEvent.click(screen.getByLabelText('شهر'));
+    const cities = await screen.findByRole('listbox', { name: 'شهرهای استان خراسان رضوی' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی شهر' }), {
+      target: { value: 'سبزوار' },
+    });
+    fireEvent.click(within(cities).getByRole('option', { name: 'سبزوار' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'ثبت‌نام و ورود' }));
+    expect(await screen.findByTestId('next-item')).toBeInTheDocument();
+    expect(calls.find((c) => c.key === 'POST /v1/auth/phone-register')?.body).toEqual({
+      name: 'نگار محمدی',
+      phone: '09120000111',
+      province: 'خراسان رضوی',
+      city: 'سبزوار',
+    });
+  });
+
+  it('will not sign up without a residence', async () => {
+    const { calls } = mockApi({});
+    renderApp('/register');
+    fireEvent.change(await screen.findByLabelText('نام و نام خانوادگی'), {
+      target: { value: 'نگار محمدی' },
+    });
+    fireEvent.change(screen.getByLabelText('شماره موبایل'), { target: { value: '09120000111' } });
+    fireEvent.click(screen.getByRole('button', { name: 'ثبت‌نام و ورود' }));
+    expect(await screen.findByText('استان محل سکونت را انتخاب کنید.')).toBeInTheDocument();
+    expect(calls.some((c) => c.key === 'POST /v1/auth/phone-register')).toBe(false);
   });
 
   it('home shows empty state when nothing is assigned', async () => {

@@ -7,6 +7,9 @@ export interface User {
   name: string;
   phone: string | null;
   email: string | null;
+  /** Residence («محل سکونت»), captured at sign-up; null on accounts created before it existed. */
+  province: string | null;
+  city: string | null;
   firebaseUid: string;
   role: Role;
   teamId: string | null;

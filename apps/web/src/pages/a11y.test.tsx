@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import axe from 'axe-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
@@ -44,6 +44,28 @@ describe('a11y (axe, jsdom)', () => {
     mockApi({});
     const { container } = renderApp('/login');
     await screen.findByRole('button', { name: 'ورود' });
+    expect(await violations(container)).toEqual([]);
+  });
+
+  it('sign-up page, including the open province list', async () => {
+    mockApi({});
+    const { container } = renderApp('/register');
+    fireEvent.click(await screen.findByLabelText('انتخاب محل سکونت'));
+    await screen.findByRole('listbox', { name: 'استان‌های ایران' });
+    expect(await violations(container)).toEqual([]);
+  });
+
+  it('sign-up page with the city list open', async () => {
+    mockApi({});
+    const { container } = renderApp('/register');
+    fireEvent.click(await screen.findByLabelText('انتخاب محل سکونت'));
+    const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
+      target: { value: 'یزد' },
+    });
+    fireEvent.click(within(provinces).getByRole('option', { name: 'یزد' }));
+    fireEvent.click(screen.getByLabelText('شهر'));
+    await screen.findByRole('listbox', { name: 'شهرهای استان یزد' });
     expect(await violations(container)).toEqual([]);
   });
 
