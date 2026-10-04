@@ -67,7 +67,9 @@ function Player({ d }: { d: SectionDetail }) {
   };
   const tracker = usePlaybackTracker(s.id, onResult);
 
-  const quizReady = !s.quizPassed;
+  const quizRequired = s.quizRequired !== false;
+  const quizReady = quizRequired && !s.quizPassed;
+  const sectionDone = quizRequired ? s.quizPassed : progress.completed;
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -137,7 +139,7 @@ function Player({ d }: { d: SectionDetail }) {
                   <CheckCircle2 className="size-4" aria-hidden /> این قسمت را کامل کردی.
                 </span>
               ) : (
-                `آزمون این قسمت همیشه باز است. برای کامل شدن قسمت، حداقل ${faPercent(d.completionThreshold)} را ببین یا بشنو. (${faPercent(progress.percent)})`
+                `${quizRequired ? 'آزمون این قسمت همیشه باز است. ' : ''}برای کامل شدن قسمت، حداقل ${faPercent(d.completionThreshold)} را ببین یا بشنو. (${faPercent(progress.percent)})`
               )}
             </p>
           </Card>
@@ -152,11 +154,11 @@ function Player({ d }: { d: SectionDetail }) {
             >
               شروع آزمون
             </Button>
-          ) : s.quizPassed && d.nextSectionId ? (
+          ) : sectionDone && d.nextSectionId ? (
             <Button size="lg" block onClick={() => nav(`/sections/${d.nextSectionId}`)}>
               قسمت بعد
             </Button>
-          ) : s.quizPassed ? (
+          ) : sectionDone ? (
             <Button size="lg" block variant="secondary" onClick={() => nav(`/packages/${p.id}`)}>
               بازگشت به بسته
             </Button>

@@ -32,6 +32,8 @@ export interface SectionView {
   mediaType: 'video' | 'audio';
   durationSec: number;
   quizId: string;
+  /** false = no quiz gates this section (the package quiz is on another section). */
+  quizRequired: boolean;
   percent: number;
   mediaCompleted: boolean;
   quizPassed: boolean;
@@ -107,9 +109,9 @@ export function assignedPackageIds(
 }
 
 export function sectionScore(
-  s: Pick<SectionView, 'mediaCompleted' | 'quizPassed' | 'percent'>,
+  s: Pick<SectionView, 'mediaCompleted' | 'quizPassed' | 'percent'> & { quizRequired?: boolean },
 ): number {
-  if (s.mediaCompleted && s.quizPassed) return 100;
+  if (s.mediaCompleted && (s.quizPassed || s.quizRequired === false)) return 100;
   return Math.min(90, Math.round(s.percent * 0.9));
 }
 
@@ -156,12 +158,14 @@ export function computePackageView(
     if (s.archived && !p) continue;
     const mediaCompleted = !!p?.completed;
     const quizPassed = !!p?.quizPassed;
-    const done = mediaCompleted && quizPassed;
+    const quizRequired = s.quizRequired !== false;
+    const done = mediaCompleted && (quizPassed || !quizRequired);
     let state: SectionState;
     const lockReason: string | null = null;
     // No sequential lock: every section is open regardless of earlier sections' progress.
     if (done) state = 'completed';
-    else if (mediaCompleted) state = 'quiz';
+    else if (mediaCompleted)
+      state = 'quiz'; // only reachable when quizRequired
     else if ((p?.playedSeconds ?? 0) > 0) state = 'in_progress';
     else state = 'open';
     sections.push({
@@ -171,6 +175,7 @@ export function computePackageView(
       mediaType: s.mediaType,
       durationSec: s.durationSec,
       quizId: s.quizId,
+      quizRequired,
       percent: p?.percent ?? 0,
       mediaCompleted,
       quizPassed,

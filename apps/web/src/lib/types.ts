@@ -47,6 +47,8 @@ export interface SectionView {
   mediaType: 'video' | 'audio';
   durationSec: number;
   quizId: string;
+  /** false = no quiz on this section (the package quiz is on its podcast section). */
+  quizRequired?: boolean;
   percent: number;
   mediaCompleted: boolean;
   quizPassed: boolean;

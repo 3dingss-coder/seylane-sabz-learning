@@ -123,7 +123,7 @@ CI (`.github/workflows/ci.yml`) also runs: Playwright on Chromium (desktop + Pix
 - Storage layout used by the seed script (PROMPT 003): `brands/{brandId}/logo.*` and `products/{productId}/main.*`. The same paths are mirrored locally under `/catalog/...`.
 - Sample training media → brand/product mapping, plus open questions: [`docs/RESOURCE-MAP.md`](./docs/RESOURCE-MAP.md) §3.
 - Seed: `npm run seed -w functions -- [--memory] [--demo] [--force] [--report docs/SEED-REPORT.md]`. It is idempotent and targets memory, the emulator or a real project (see the header of `scripts/seed-catalog.ts` and `docs/RELEASE.md`). Result: [`docs/SEED-REPORT.md`](./docs/SEED-REPORT.md).
-- Product quizzes: `data/skincare-products-quiz.json` (60 client questions for 6 skincare products) is exported verbatim from `skincare_products_quiz.xlsx` / `.docx` with `tools/export_quiz_bank.py`; the seed attaches them to each package's sections per its `quizKey` in `data/catalog-supplement.json`. Products without bank coverage keep sample `needsReview` questions (changelog 2026-10-03).
+- Product quizzes: `data/skincare-products-quiz.json` (70 client questions for 7 skincare products, one correct option each) is exported verbatim from `skincare_products_quiz_v3.csv` with `tools/export_quiz_bank.py`. Each package has exactly ONE quiz: the product's full bank sits on the package's podcast (audio) section (first section if it has no audio); the other sections have `quizRequired: false`. Packages have no deadline. Products without bank coverage keep sample `needsReview` questions (changelog 2026-10-04).
 - Helper UI kit → page mapping: [`docs/RESOURCE-MAP.md`](./docs/RESOURCE-MAP.md) §4.
 
 ## Analytics & monitoring (spec §25, §22.3)

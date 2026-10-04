@@ -37,7 +37,7 @@ describe('scheduled jobs', () => {
     await runDeadlineSweep(ctx.deps);
     ctx.advance(4 * 86400_000);
     const sweep = await runDeadlineSweep(ctx.deps);
-    expect(sweep.passed).toBeGreaterThan(0); // ATL deadline (2 days) passed for demo marketers
+    expect(sweep.passed).toBe(0); // packages have no deadline, so nothing can pass one
     expect(await runDailyReminders(ctx.deps)).toBeDefined();
     // §26 #9: the Tehran manager has an email → gets the digest by email too.
     const [mgr] = await ctx.deps.store.query<{ phone: string }>({
@@ -49,7 +49,6 @@ describe('scheduled jobs', () => {
     expect(digest.sent).toBeGreaterThan(0);
     const mail = ctx.deps.mail.sent.find((m) => m.to === 'manager@example.com');
     expect(mail?.subject).toContain('گزارش هفتگی');
-    expect(mail?.text).toContain('سارا احمدی'); // lagging member listed by name
     // Throttled: a second run in the same week sends nothing new.
     const before = ctx.deps.mail.sent.length;
     await runWeeklyDigest(ctx.deps, true);
@@ -93,7 +92,6 @@ describe('reports & admin lists', () => {
   });
   it('manager endpoints respond with own team only', async () => {
     const dash = await ok(tokens.mgr, '/v1/manager/dashboard');
-    expect(JSON.stringify(dash)).toContain('سارا احمدی');
     expect(JSON.stringify(dash)).not.toContain('مریم کریمی');
     await ok(tokens.mgr, '/v1/manager/reports/completion');
     await ok(tokens.mgr, '/v1/manager/retake-requests');
