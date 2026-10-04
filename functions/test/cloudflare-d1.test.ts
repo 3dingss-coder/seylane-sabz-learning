@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { completeLibraryUpload, startLibraryUpload } from '../src/services/media-library';
 import { fakeMp4 } from './support/ctx';
 import { D1Store, type D1Database, type D1PreparedStatement, type D1Result } from '../src/store/d1';
@@ -98,6 +98,37 @@ const seedSnapshot: Record<string, Record<string, Data>> | undefined = fs.exists
   : undefined;
 
 describe('Cloudflare D1 + Web Fetch Handler', () => {
+  it('keeps the app starting when mentor guide seeding fails, and retries on the next start', async () => {
+    const db = createSqliteD1();
+    await new D1Store(db).ensureReady();
+    await db
+      .prepare('INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)')
+      .bind('brands', 'broken-brand', 'brands', '{not valid json', '2026-10-04T00:00:00.000Z')
+      .run();
+    const snapshot: Record<string, Record<string, Data>> = {
+      mentor_guides: {
+        'brand:broken-brand': {
+          kind: 'brand',
+          targetId: 'broken-brand',
+          title: 'راهنما',
+          summary: 'x',
+        },
+      },
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const store = new D1Store(db, snapshot);
+      await expect(store.ensureReady()).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalled();
+      // The store still works, and no "already applied" marker was written.
+      await store.set('probe/1', { ok: true });
+      expect(await store.get('probe/1')).toMatchObject({ ok: true });
+      expect(await store.get('knowledge_meta/mentor_guides_seed_version')).toBeNull();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('adds missing mentor guides to an existing D1, remaps brand IDs by exact name, and preserves admin guides', async () => {
     const db = createSqliteD1();
     await new D1Store(db).ensureReady();

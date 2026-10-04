@@ -132,7 +132,15 @@ export class D1Store implements DocStore {
       .bind('brands')
       .first<{ id: string }>();
     if (existing) {
-      await this.seedMissingMentorGuides();
+      // Additive and optional: a problem here must never keep the whole app from starting.
+      // Nothing is marked as applied on failure, so the next cold start simply tries again.
+      try {
+        await this.seedMissingMentorGuides();
+      } catch (err) {
+        console.warn(
+          `[d1] mentor guide seeding skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
       return;
     }
 
