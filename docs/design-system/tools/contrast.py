@@ -1,97 +1,89 @@
 #!/usr/bin/env python3
 """
-WCAG 2.1 contrast checker for the Seylane × Duolingo token set.
+WCAG 2.1 contrast gate — v3 (green/white house + purple mascot accent).
 
     python3 docs/design-system/tools/contrast.py
 
-Exit 0 = every pair the design system *relies on* clears the ratio it claims.
+Direction (PHASE-0.5 consensus D-101..D-107):
+  • House & action = corporate green + white + light-green (professional, on-brand).
+  • Purple = ONLY the official mascot and its aura (celebration / mastery), never a CTA.
 Every «X:1» number quoted in the phase docs is the output of this script.
-
-v2 — palette re-derived from the OFFICIAL brand mascot (repo root «مسکات.png»,
-mirrored at docs/design-system/assets/mascot-official.png). The mascot is a
-purple bird with a red crest and green eyes; the corporate green (#177A50)
-remains for brand/success/admin surfaces. Dominant mascot hexes measured with
-ImageMagick: body #7048A3 / deep #472475 / glow #9455A9, crest #C55D41,
-beak #DDB8AB, feet #E29B55, eye #798B25.
 """
 
 from __future__ import annotations
 
 import sys
 
-# ---------------------------------------------------------------- tokens ----
 TOKENS: dict[str, str] = {
-    # corporate green (unchanged — brand / success / admin)
-    "sl-green-600": "#177A50",
-    "sl-green-100": "#DFF5E9",
-    "sl-green-700": "#115E3D",
-    "sl-green-800": "#0E4630",
-    # MASCOT purple = energy / character layer (marketer learning app)
-    "ms-energy": "#7048A3",   # body mid — CTA fill (white text 6.68:1)
-    "ms-lip": "#472475",      # body deep — 3D lip / pressed / text on light
-    "ms-glow": "#9455A9",     # highlight / hover (decorative)
-    "ms-100": "#EFE7F9",      # light purple — chips, feedback bar bg
-    "ms-950": "#2A1447",      # dark-mode hero bg
-    # crest red = streak / celebration (fill & icon only)
-    "ms-crest": "#C55D41",
-    "ms-crest-100": "#FBEAE4",
-    "ms-crest-deep": "#8A3423",
-    # beak cream = soft warm surface
-    "ms-beak": "#DDB8AB",
-    "ms-beak-ink": "#3C1E59",
-    # reward / neutrals / app semantic (verified before)
-    "sl-bee": "#FFC800",
-    "sl-bee-900": "#4A3600",
-    "sl-ink": "#0F172A",
-    "sl-ink-2": "#475569",
-    "sl-ink-3": "#64748B",
-    "sl-swan": "#E2E8F0",
-    "sl-polar": "#F8FAFC",
-    "sl-surface": "#FFFFFF",
-    "app-accent-light": "#FEF3C7",
-    "app-accent-fg": "#92400E",
-    "app-danger-light": "#FEE2E2",
-    "app-danger-fg": "#B91C1C",
-    # Duolingo reference (measured as published)
+    # house / action — corporate green
+    "g-600": "#177A50",   # CTA / text / link / progress (white 5.34:1)
+    "g-700": "#115E3D",   # 3D lip for green button / feedback text on 100
+    "g-100": "#DFF5E9",   # light-green chip / feedback bg
+    "g-mint": "#E7F5EE",  # soft mint surface
+    "g-800": "#0E4630",   # dark hero (admin)
+    "g-leaf": "#21A55F",  # bright green — fills / icons / glow (decorative)
+    # mascot accent — purple (mascot + aura only)
+    "p-500": "#7048A3",   # mascot body; white celebration text 6.68:1
+    "p-700": "#472475",   # purple text on light/white 6.68:1
+    "p-100": "#EFE7F9",   # mascot halo (very light purple)
+    "p-950": "#2A1447",
+    "p-mastery": "#6D28D9",  # rare mastery moment (7.10:1)
+    # crest red (streak / celebration, fill & icon only)
+    "crest": "#C55D41",
+    "crest-100": "#FBEAE4",
+    "crest-deep": "#8A3423",
+    # warm
+    "beak": "#DDB8AB",
+    "beak-ink": "#3C1E59",
+    # reward
+    "reward": "#FFC800",
+    "reward-fg": "#4A3600",
+    # neutrals + app semantic
+    "ink": "#0F172A",
+    "ink-2": "#475569",
+    "ink-3": "#64748B",
+    "swan": "#E2E8F0",
+    "surface": "#FFFFFF",
+    "accent-light": "#FEF3C7",
+    "accent-fg": "#92400E",
+    "danger-light": "#FEE2E2",
+    "danger-fg": "#B91C1C",
     "duo-feather": "#58CC02",
 }
 
 PAIRS: list[tuple[str, str, str, float]] = [
-    # corporate green as text
-    ("برند green-600 روی سفید", "sl-green-600", "sl-surface", 4.5),
-    ("green-700 روی green-100 (بازخورد درست)", "sl-green-700", "sl-green-100", 4.5),
-    ("سفید روی green-800 (hero ادمین)", "sl-surface", "sl-green-800", 4.5),
+    # house green
+    ("سفید روی CTA سبز g-600", "surface", "g-600", 4.5),
+    ("g-600 روی سفید (متن/لینک)", "g-600", "surface", 4.5),
+    ("g-700 روی g-100 (بازخورد)", "g-700", "g-100", 4.5),
+    ("سفید روی g-800 (hero ادمین)", "surface", "g-800", 4.5),
+    ("نوار پیشرفت g-600 روی swan (1.4.11)", "g-600", "swan", 3.0),
     # neutrals
-    ("متن اصلی روی سفید", "sl-ink", "sl-surface", 4.5),
-    ("متن فرعی روی سفید", "sl-ink-2", "sl-surface", 4.5),
-    ("متن خاموش روی سفید", "sl-ink-3", "sl-surface", 4.5),
-    # MASCOT purple energy
-    ("سفید روی CTA بنفش ms-energy", "sl-surface", "ms-energy", 4.5),
-    ("سفید روی لبه ms-lip", "sl-surface", "ms-lip", 4.5),
-    ("ms-lip روی ms-100 (بازخورد/چیپ)", "ms-lip", "ms-100", 4.5),
-    ("سفید روی ms-950 (hero تاریک)", "sl-surface", "ms-950", 4.5),
-    ("ms-energy روی سفید (متن/لینک بنفش)", "ms-energy", "sl-surface", 4.5),
-    # crest red (text goes on the light tint, not the fill)
-    ("ms-crest-deep روی ms-crest-100 (چیپ streak)", "ms-crest-deep", "ms-crest-100", 4.5),
-    ("آیکون شعله ms-crest روی سفید (1.4.11)", "ms-crest", "sl-surface", 3.0),
-    # beak cream surface
-    ("ms-beak-ink روی ms-beak (متن روی کرم)", "ms-beak-ink", "ms-beak", 4.5),
-    # reward
-    ("sl-bee-900 روی sl-bee (چیپ امتیاز)", "sl-bee-900", "sl-bee", 4.5),
-    ("app-accent-fg روی accent-light", "app-accent-fg", "app-accent-light", 4.5),
-    ("app-danger-fg روی danger-light", "app-danger-fg", "app-danger-light", 4.5),
-    # non-text
-    ("حاشیه فیلد ink-3 روی سفید (1.4.11)", "sl-ink-3", "sl-surface", 3.0),
-    ("نوار پیشرفت ms-energy روی swan (1.4.11)", "ms-energy", "sl-swan", 3.0),
-]
-
-REFS: list[tuple[str, str, str]] = [
-    ("سفید روی Feather Green #58CC02 (CTA دولینگو)", "sl-surface", "duo-feather"),
+    ("متن اصلی روی سفید", "ink", "surface", 4.5),
+    ("متن فرعی روی سفید", "ink-2", "surface", 4.5),
+    ("متن خاموش روی سفید", "ink-3", "surface", 4.5),
+    ("حاشیه فیلد ink-3 روی سفید (1.4.11)", "ink-3", "surface", 3.0),
+    # purple = mascot accent (celebration / mastery), not CTA
+    ("سفید روی p-500 (تیتر جشن/هالهٔ مسکات)", "surface", "p-500", 4.5),
+    ("p-700 روی سفید (متن استادی)", "p-700", "surface", 4.5),
+    ("p-700 روی p-100 (حباب مسکات)", "p-700", "p-100", 4.5),
+    # crest / warm / reward
+    ("crest-deep روی crest-100 (چیپ streak)", "crest-deep", "crest-100", 4.5),
+    ("آیکون شعله crest روی سفید (1.4.11)", "crest", "surface", 3.0),
+    ("beak-ink روی beak", "beak-ink", "beak", 4.5),
+    ("reward-fg روی reward (چیپ امتیاز)", "reward-fg", "reward", 4.5),
+    ("accent-fg روی accent-light", "accent-fg", "accent-light", 4.5),
+    ("danger-fg روی danger-light", "danger-fg", "danger-light", 4.5),
 ]
 
 INFO: list[tuple[str, str, str]] = [
-    ("سفید روی ms-crest (فقط fill/آیکن — متن نیاید)", "sl-surface", "ms-crest"),
-    ("ms-glow روی سفید (تزئینی)", "ms-glow", "sl-surface"),
+    ("g-leaf روی swan (چرا پرِ نوار نیست — تزئینی)", "g-leaf", "swan"),
+    ("سفید روی crest (فقط fill/آیکن)", "surface", "crest"),
+    ("p-500 روی g-mint (مسکات روی مغ سبز — پل هماهنگی)", "p-500", "g-mint"),
+]
+
+REFS: list[tuple[str, str, str]] = [
+    ("سفید روی Feather Green دولینگو", "surface", "duo-feather"),
 ]
 
 
@@ -114,7 +106,7 @@ def ratio(fg: str, bg: str) -> float:
 
 def main() -> int:
     failures = 0
-    print("GATED — the design system depends on these")
+    print("GATED")
     for label, fg, bg, need in PAIRS:
         r = ratio(TOKENS[fg], TOKENS[bg])
         ok = r >= need

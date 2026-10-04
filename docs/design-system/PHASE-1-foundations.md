@@ -2,7 +2,9 @@
 
 > **ورودی:** `PHASE-0-duolingo-teardown.md` + `apps/web/src/styles/index.css` (توکن‌های فعلی) + `PRODUCT-MASTER-SPEC.md` §16
 > **خروجی:** یک لایهٔ توکن **افزودنی** (نه جایگزین) + فایل‌های ماشین‌خوان در `tokens/`
-> **ابزار تأیید:** `python3 docs/design-system/tools/contrast.py` → `tools/CONTRAST-REPORT.txt` (۳۰ جفت، ۰ خطا)
+> **ابزار تأیید:** `python3 docs/design-system/tools/contrast.py` → `tools/CONTRAST-REPORT.txt` (v3: ۱۸ جفت، ۰ خطا)
+>
+> ⚠️ **وضعیت v3:** جهت رنگی این فاز پس از سند اجماع [`PHASE-0.5-pm-design-consensus.md`](./PHASE-0.5-pm-design-consensus.md) به‌روزرسانی شد: **خانه = سبز/سفید + سبز روشن پویا؛ بنفش فقط مسکات.** توکن‌های نهایی در `tokens/seylane-theme.css` (برچسب v3) هستند؛ جدول‌های پایین که «انرژی بنفش» می‌گویند با §۴٫۳ سند اجماع جایگزین می‌شوند.
 
 ---
 
