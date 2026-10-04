@@ -36,6 +36,8 @@ export function summarize(members: MemberLearning[], now: Date) {
   const laggards: Array<{
     userId: string;
     name: string;
+    province: string | null;
+    city: string | null;
     packageId: string;
     packageTitle: string;
     percent: number;
@@ -60,6 +62,8 @@ export function summarize(members: MemberLearning[], now: Date) {
         laggards.push({
           userId: m.user.id,
           name: m.user.name,
+          province: m.user.province,
+          city: m.user.city,
           packageId: p.id,
           packageTitle: p.title,
           percent: p.percent,
@@ -147,6 +151,8 @@ export const reportQuery = z.object({
   user: z.string().max(80).optional(),
   team: z.string().max(80).optional(),
   status: z.enum(['new', 'in_progress', 'completed', 'overdue']).optional(),
+  city: z.string().max(80).optional(),
+  province: z.string().max(80).optional(),
 });
 
 export function completionRows(
@@ -161,6 +167,8 @@ export function completionRows(
   const rows = [];
   for (const m of members) {
     if (f.user && m.user.id !== f.user) continue;
+    if (f.city && m.user.city !== f.city) continue;
+    if (f.province && m.user.province !== f.province) continue;
     for (const p of m.packages) {
       if (f.brand && p.brand?.id !== f.brand) continue;
       if (f.product && p.product?.id !== f.product) continue;
@@ -173,6 +181,8 @@ export function completionRows(
         userId: m.user.id,
         userName: m.user.name,
         teamId: m.user.teamId,
+        province: m.user.province,
+        city: m.user.city,
         packageId: p.id,
         packageTitle: p.title,
         brandId: p.brand?.id ?? null,
@@ -341,10 +351,12 @@ export async function listRetakes(
     where.push(['teamId', '==', viewer.teamId]);
   }
   const list = await d.store.query<RetakeRequest>({ collection: 'retake_requests', where });
-  const users = await d.store.getMany<User>(
-    [...new Set(list.map((r) => r.userId))].map((id) => `users/${id}`),
-  );
-  const names = new Map(users.filter((u): u is Doc<User> => !!u).map((u) => [u.id, u.name]));
+  const userDocs = (
+    await d.store.getMany<User>(
+      [...new Set(list.map((r) => r.userId))].map((id) => `users/${id}`),
+    )
+  ).filter((u): u is Doc<User> => !!u);
+  const names = new Map(userDocs.map((u) => [u.id, u.name]));
   const out = [];
   for (const r of list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))) {
     const attempts = await d.store.query<Attempt>({
@@ -358,9 +370,12 @@ export async function listRetakes(
       title: string;
       sections: Array<{ id: string; title: string }>;
     }>(`packages/${r.packageId}`);
+    const requester = userDocs.find((u) => u.id === r.userId);
     out.push({
       ...r,
       userName: names.get(r.userId) ?? '—',
+      userProvince: requester?.province ?? null,
+      userCity: requester?.city ?? null,
       packageTitle: pkg?.title ?? '',
       sectionTitle: pkg?.sections.find((s) => s.id === r.sectionId)?.title ?? '',
       scores: attempts
@@ -429,6 +444,8 @@ export async function reviewRetake(
 export async function adminCompletion(d: Deps, f: z.infer<typeof reportQuery>) {
   const where: Array<[string, '==', unknown]> = [['role', '==', 'marketer']];
   if (f.team) where.push(['teamId', '==', f.team]);
+  if (f.city) where.push(['city', '==', f.city]);
+  if (f.province) where.push(['province', '==', f.province]);
   const users = await d.store.query<User>({ collection: 'users', where });
   const members = await loadMembers(d, users);
   return { rows: completionRows(members, f, d.clock()), ...summarize(members, d.clock()) };

@@ -50,7 +50,7 @@ describe('a11y (axe, jsdom)', () => {
   it('sign-up page, including the open province list', async () => {
     mockApi({});
     const { container } = renderApp('/register');
-    fireEvent.click(await screen.findByLabelText('انتخاب محل سکونت'));
+    fireEvent.click(await screen.findByLabelText('انتخاب محل فعالیت شما'));
     await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     expect(await violations(container)).toEqual([]);
   });
@@ -58,7 +58,7 @@ describe('a11y (axe, jsdom)', () => {
   it('sign-up page with the city list open', async () => {
     mockApi({});
     const { container } = renderApp('/register');
-    fireEvent.click(await screen.findByLabelText('انتخاب محل سکونت'));
+    fireEvent.click(await screen.findByLabelText('انتخاب محل فعالیت شما'));
     const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
       target: { value: 'یزد' },

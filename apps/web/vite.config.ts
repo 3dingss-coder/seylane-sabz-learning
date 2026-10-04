@@ -25,9 +25,9 @@ export default defineConfig(({ mode }) => {
         injectRegister: false,
         includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
         manifest: {
-          name: 'سیلانه‌سبز لرنینگ',
-          short_name: 'سیلانه‌سبز لرنینگ',
-          description: 'آموزش محصولات سیلانه‌سبز برای بازاریاب‌ها',
+          name: 'آکادمی سیلانه',
+          short_name: 'آکادمی سیلانه',
+          description: 'آموزش محصولات آکادمی سیلانه برای بازاریاب‌ها',
           lang: 'fa',
           dir: 'rtl',
           start_url: '/',

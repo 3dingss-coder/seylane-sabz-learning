@@ -447,6 +447,8 @@ export interface TeamKpis {
 export interface Laggard {
   userId: string;
   name: string;
+  province: string | null;
+  city: string | null;
   packageId: string;
   packageTitle: string;
   percent: number;
@@ -465,6 +467,8 @@ export interface CompletionRow {
   userId: string;
   userName: string;
   teamId: string | null;
+  province: string | null;
+  city: string | null;
   packageId: string;
   packageTitle: string;
   brandId: string | null;
@@ -512,6 +516,8 @@ export interface RetakeItem {
   id: string;
   userId: string;
   userName: string;
+  userProvince: string | null;
+  userCity: string | null;
   quizId: string;
   sectionTitle: string;
   packageTitle: string;

@@ -70,10 +70,10 @@ describe('M1 login → M3 home', () => {
     expect(await screen.findByRole('button', { name: 'ثبت‌نام و ورود' })).toBeInTheDocument();
     expect(screen.getByLabelText('شماره موبایل')).toHaveValue('09120000004');
     expect(screen.getByLabelText('نام و نام خانوادگی')).toBeInTheDocument();
-    expect(screen.getByLabelText('انتخاب محل سکونت')).toBeInTheDocument();
+    expect(screen.getByLabelText('انتخاب محل فعالیت شما')).toBeInTheDocument();
   });
 
-  it('signs up with name, phone and محل سکونت (province → city) in one step', async () => {
+  it('signs up with name, phone and محل فعالیت (province → city) in one step', async () => {
     const { calls } = mockApi({
       'POST /v1/auth/phone-register': () => ({
         data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
@@ -92,7 +92,7 @@ describe('M1 login → M3 home', () => {
 
     // Province: search inside the long list, then pick — this reveals the city field.
     expect(screen.queryByLabelText('شهر')).toBeNull();
-    fireEvent.click(screen.getByLabelText('انتخاب محل سکونت'));
+    fireEvent.click(screen.getByLabelText('انتخاب محل فعالیت شما'));
     const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     await waitFor(() => expect(within(provinces).getAllByRole('option')).toHaveLength(31));
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
@@ -127,7 +127,7 @@ describe('M1 login → M3 home', () => {
     });
     fireEvent.change(screen.getByLabelText('شماره موبایل'), { target: { value: '09120000111' } });
     fireEvent.click(screen.getByRole('button', { name: 'ثبت‌نام و ورود' }));
-    expect(await screen.findByText('استان محل سکونت را انتخاب کنید.')).toBeInTheDocument();
+    expect(await screen.findByText('استان محل فعالیت خود را انتخاب کنید.')).toBeInTheDocument();
     expect(calls.some((c) => c.key === 'POST /v1/auth/phone-register')).toBe(false);
   });
 

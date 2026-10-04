@@ -47,7 +47,7 @@ export function StaffLoginPage({ panel }: { panel: 'admin' | 'manager' }) {
             className="h-14 w-auto"
           />
         </span>
-        <h1 className="text-2xl font-extrabold text-white">سیلانه‌سبز لرنینگ</h1>
+        <h1 className="text-2xl font-extrabold text-white">آکادمی سیلانه</h1>
         <p className="text-sm text-white/85">{TITLE[panel]}</p>
       </div>
       <Card className="animate-fade-up relative mt-6 w-full max-w-[400px] p-6 shadow-lg">

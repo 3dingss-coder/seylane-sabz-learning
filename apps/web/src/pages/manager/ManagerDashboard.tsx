@@ -112,7 +112,14 @@ export function ManagerDashboard() {
                         {
                           key: 'name',
                           header: 'نام',
-                          cell: (r) => <span className="font-bold">{r.name}</span>,
+                          cell: (r) => (
+                            <div>
+                              <div className="font-bold">{r.name}</div>
+                              {r.city && (
+                                <div className="text-xs text-text-secondary">{r.city}</div>
+                              )}
+                            </div>
+                          ),
                         },
                         { key: 'pkg', header: 'آموزش', cell: (r) => r.packageTitle },
                         {

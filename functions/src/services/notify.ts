@@ -19,7 +19,7 @@ export const DEFAULT_TEMPLATES: Record<
   { title: string; body: string; push: boolean; vars: string[] }
 > = {
   welcome: {
-    title: 'به سیلانه‌سبز لرنینگ خوش آمدی!',
+    title: 'به آکادمی سیلانه خوش آمدی!',
     body: 'سلام {name}! آموزش‌هایت در صفحه خانه منتظرت هستند. از «کار بعدی» شروع کن.',
     push: false,
     vars: ['name'],
