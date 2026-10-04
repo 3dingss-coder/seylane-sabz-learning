@@ -446,6 +446,7 @@ function Editor({ d }: { d: AdminPackageDetail }) {
           open
           onClose={() => setSection(null)}
           packageId={p.id}
+          brandId={p.brandId}
           initial={section === 'new' ? undefined : section}
         />
       )}

@@ -86,6 +86,24 @@ const detail = (over: Partial<AdminPackageDetail['package']> = {}, sections = [s
   publishIssues: [] as string[],
 });
 
+const libItem = (over: Record<string, unknown> = {}) => ({
+  id: 'lib1',
+  kind: 'video',
+  title: 'آموزش کامل فیلر شات دارت',
+  originalName: 'dart.mp4',
+  mime: 'video/mp4',
+  sizeBytes: 7 * 1024 * 1024,
+  durationSec: 451,
+  createdAt: '2026-10-03T00:00:00.000Z',
+  brandId: 'b1',
+  productId: null,
+  brandName: 'آتل',
+  productName: null,
+  assignmentInferred: false,
+  usedBy: [],
+  ...over,
+});
+
 describe('admin: everything understandable at a glance', () => {
   it('dashboard shows the 4-step publish guide and the «انتشار آموزش جدید» shortcut', async () => {
     mockApi({
@@ -123,6 +141,89 @@ describe('admin: everything understandable at a glance', () => {
       '/admin/quizzes/q1',
     );
     expect(screen.getByTestId('audience-card')).toHaveTextContent('بعد از انتشار');
+  });
+
+  it('a new section can use a file already in the media library', async () => {
+    let posted: Record<string, unknown> | null = null;
+    mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/packages/p1': () => ({ data: detail({}, []) }),
+      'GET /v1/admin/assignments': () => ({ data: [] }),
+      'GET /v1/admin/media/library?kind=video': () => ({
+        data: [
+          libItem(),
+          libItem({ id: 'lib2', title: 'ویدیوی برند دیگر', brandId: 'b2', brandName: 'پیکسل' }),
+          libItem({ id: 'lib3', title: 'ویدیوی بدون برند', brandId: null, brandName: null }),
+        ],
+      }),
+      'POST /v1/admin/packages/p1/sections': (body) => {
+        posted = body as Record<string, unknown>;
+        return { status: 201, data: { id: 's9' } };
+      },
+    });
+    renderApp('/admin/packages/p1');
+    fireEvent.click(
+      (await screen.findAllByRole('button', { name: 'افزودن قسمت' }))[0] as HTMLElement,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'انتخاب از کتابخانه رسانه' }));
+
+    // Opens filtered to the package's brand: same-brand and unassigned files, not other brands.
+    expect(await screen.findByText('آموزش کامل فیلر شات دارت')).toBeInTheDocument();
+    expect(screen.getByText('ویدیوی بدون برند')).toBeInTheDocument();
+    expect(screen.queryByText('ویدیوی برند دیگر')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('آموزش کامل فیلر شات دارت'));
+    // The title is prefilled and the section can be saved without uploading anything.
+    expect(await screen.findByDisplayValue('آموزش کامل فیلر شات دارت')).toBeInTheDocument();
+    expect(screen.getByText(/آپلود شد/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره قسمت' }));
+    await screen.findByText(/قسمت اضافه شد/);
+    expect(posted).toMatchObject({
+      mediaId: 'lib1',
+      mediaType: 'video',
+      mediaSource: 'file',
+      durationSec: 451,
+    });
+  });
+
+  it('a library file can be added to a training from the library', async () => {
+    let posted: Record<string, unknown> | null = null;
+    mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/media/library': () => ({ data: [libItem()] }),
+      'GET /v1/admin/media/library/lib1/preview-url': () => ({
+        data: { url: '/x.mp4', mime: 'video/mp4', kind: 'video' },
+      }),
+      'GET /v1/admin/packages?brandId=b1': () => ({
+        data: [
+          { id: 'p1', title: 'آموزش آتل', brandId: 'b1', productId: null, status: 'draft' },
+          { id: 'p2', title: 'قدیمی', brandId: 'b1', productId: null, status: 'archived' },
+        ],
+      }),
+      'POST /v1/admin/packages/p1/sections': (body) => {
+        posted = body as Record<string, unknown>;
+        return { status: 201, data: { id: 's9' } };
+      },
+    });
+    renderApp('/admin/media');
+    fireEvent.click(await screen.findByText('آموزش کامل فیلر شات دارت'));
+    const select = await screen.findByLabelText('آموزش');
+    await screen.findByRole('option', { name: /آموزش آتل/ });
+    expect(screen.queryByRole('option', { name: /قدیمی/ })).not.toBeInTheDocument(); // archived hidden
+    fireEvent.change(select, { target: { value: 'p1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'افزودن به آموزش' }));
+    expect(await screen.findByText(/به آموزش «آموزش آتل» اضافه شد/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'رفتن به آموزش' })).toHaveAttribute(
+      'href',
+      '/admin/packages/p1',
+    );
+    expect(posted).toMatchObject({
+      title: 'آموزش کامل فیلر شات دارت',
+      mediaId: 'lib1',
+      mediaType: 'video',
+      mediaSource: 'file',
+      durationSec: 451,
+    });
   });
 
   it('published package nobody sees shows a warning and one click makes it visible to everyone', async () => {

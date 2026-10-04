@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Link2, Upload } from 'lucide-react';
+import { CheckCircle2, Library, Link2, Upload } from 'lucide-react';
 import { Button, Input, Modal, useToast } from '@/components/ui';
 import { Select, Tabs, Textarea } from '@/components/common/Field';
+import { MediaPicker } from '@/components/admin/MediaPicker';
 import { Uploader } from '@/components/admin/Uploader';
 import { ApiError, api } from '@/lib/api';
 import { toPersianDigits } from '@/lib/digits';
@@ -17,11 +18,14 @@ export function SectionEditor({
   open,
   onClose,
   packageId,
+  brandId,
   initial,
 }: {
   open: boolean;
   onClose: () => void;
   packageId: string;
+  /** The package's brand — the library picker opens filtered to it. */
+  brandId?: string | null;
   initial?: AdminSection;
 }) {
   const [title, setTitle] = useState(initial?.title ?? '');
@@ -31,6 +35,7 @@ export function SectionEditor({
   const [source, setSource] = useState<'youtube' | 'file'>(initial?.mediaSource ?? 'file');
   const [youtubeUrl, setYoutubeUrl] = useState(initial?.youtubeUrl ?? '');
   const [media, setMedia] = useState<UploadedMedia | null>(null);
+  const [picking, setPicking] = useState(false);
   const [minutes, setMinutes] = useState(
     initial?.durationSec ? String(Math.round((initial.durationSec / 60) * 10) / 10) : '',
   );
@@ -171,6 +176,13 @@ export function SectionEditor({
               label={hasFile ? 'جایگزینی فایل' : 'انتخاب فایل'}
               onUploaded={(u) => setMedia(u)}
             />
+            <Button
+              variant="secondary"
+              onClick={() => setPicking(true)}
+              icon={<Library className="size-4" aria-hidden />}
+            >
+              انتخاب از کتابخانه رسانه
+            </Button>
             {errors.mediaId && <p className="text-xs text-danger">{errors.mediaId}</p>}
           </div>
         )}
@@ -209,6 +221,27 @@ export function SectionEditor({
           className="min-h-32"
         />
       </div>
+      {picking && (
+        <MediaPicker
+          kind={mediaType}
+          brandId={brandId}
+          currentId={media?.id ?? initial?.mediaId}
+          onClose={() => setPicking(false)}
+          onPick={(it) => {
+            setMedia({
+              id: it.id,
+              kind: it.kind,
+              status: 'ready',
+              mime: it.mime,
+              sizeBytes: it.sizeBytes,
+              durationSec: it.durationSec,
+              originalName: it.title,
+            });
+            if (!title.trim()) setTitle(it.title);
+            setPicking(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }

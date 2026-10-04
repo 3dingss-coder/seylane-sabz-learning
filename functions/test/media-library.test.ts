@@ -245,4 +245,52 @@ describe('media library (resumable uploads)', () => {
     const list = await ctx.api(admin.token).get('/v1/admin/media/library');
     expect(list.body.data).toHaveLength(0);
   });
+
+  it('a library file becomes a section of a brand package and the section can carry the same file twice', async () => {
+    const body = bigMp4(300, 1.2 * 1024 * 1024);
+    const s = await start(body, { brandId: 'b1', title: 'ویدیوی برند یک' });
+    const { mediaId } = s.body.data as { mediaId: string };
+    await sendParts(mediaId, body);
+    const done = await ctx
+      .api(admin.token)
+      .post(`/v1/admin/media/library/uploads/${mediaId}/complete`, { durationSec: 300 });
+    expect(done.status).toBe(200);
+
+    const pkg = await ctx.api(admin.token).post('/v1/admin/packages', {
+      title: 'آموزش برند یک',
+      brandId: 'b1',
+    });
+    expect(pkg.status).toBe(201);
+    const packageId = (pkg.body.data as { id: string }).id;
+
+    const sec = await ctx.api(admin.token).post(`/v1/admin/packages/${packageId}/sections`, {
+      title: 'قسمت از کتابخانه',
+      description: '',
+      transcript: '',
+      mediaType: 'video',
+      mediaSource: 'file',
+      youtubeUrl: null,
+      mediaId,
+      durationSec: 300,
+    });
+    expect(sec.status).toBe(201);
+    expect(sec.body.data).toMatchObject({ mediaId, mediaType: 'video', durationSec: 300 });
+
+    // The library now reports where the file is used.
+    const lib = await ctx.api(admin.token).get('/v1/admin/media/library?kind=video');
+    const item = (
+      lib.body.data as Array<{ id: string; usedBy: Array<{ packageId: string }> }>
+    ).find((i) => i.id === mediaId);
+    expect(item?.usedBy.map((u) => u.packageId)).toEqual([packageId]);
+
+    // Wrong media kind for the section type is refused with a clear message.
+    const bad = await ctx.api(admin.token).post(`/v1/admin/packages/${packageId}/sections`, {
+      title: 'نوع اشتباه',
+      mediaType: 'audio',
+      mediaSource: 'file',
+      mediaId,
+      durationSec: 300,
+    });
+    expect(bad.status).toBe(400);
+  });
 });
