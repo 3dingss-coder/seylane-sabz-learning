@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AppLogo } from '@/components/brand/AppLogo';
 import { BrandLogo } from '@/components/brand/BrandLogo';
+import { ResidencePicker, type Residence } from '@/components/common/ResidencePicker';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { Sidebar } from '@/components/layout/Sidebar';
 import {
@@ -35,6 +36,12 @@ import { fetchCatalogManifest, type CatalogManifest } from '@/lib/catalog-manife
 import { toPersianDigits } from '@/lib/digits';
 
 const HOUR = 3_600_000;
+
+/** «محل سکونت» (province → city) as the sign-up form shows it — live, searchable, scrollable. */
+function ResidencePickerDemo() {
+  const [value, setValue] = useState<Residence>({ province: '', city: '' });
+  return <ResidencePicker value={value} onChange={setValue} />;
+}
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -166,6 +173,9 @@ export function GalleryPage() {
                 icon={<Phone className="size-4" aria-hidden />}
                 error="این شماره قبلاً ثبت شده است."
               />
+            </div>
+            <div className="mt-4 max-w-md">
+              <ResidencePickerDemo />
             </div>
           </Section>
 

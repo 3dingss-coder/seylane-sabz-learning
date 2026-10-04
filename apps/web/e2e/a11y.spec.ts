@@ -54,6 +54,23 @@ test('login page', async ({ page }) => {
   await expectNoViolations(page);
 });
 
+test('sign-up page: residence picker, province and city lists open', async ({ page }) => {
+  await page.goto('/register');
+  await expect(page.getByRole('button', { name: 'ثبت‌نام و ورود' })).toBeVisible();
+  await expectNoViolations(page);
+
+  // The long province list is opened (contrast of the option rows is measured in a real browser).
+  await page.getByLabel('انتخاب محل سکونت').click();
+  await expect(page.getByRole('listbox', { name: 'استان‌های ایران' })).toBeVisible();
+  await expectNoViolations(page);
+
+  await page.getByRole('combobox', { name: 'جستجوی استان' }).fill('یزد');
+  await page.getByRole('option', { name: 'یزد', exact: true }).click();
+  await page.getByLabel('شهر').click();
+  await expect(page.getByRole('listbox', { name: 'شهرهای استان یزد' })).toBeVisible();
+  await expectNoViolations(page);
+});
+
 test('marketer: home, catalog, package page', async ({ page }) => {
   // User 05 has demo progress, so cards, progress bars and badges are all rendered.
   await login(page, '09120000005');

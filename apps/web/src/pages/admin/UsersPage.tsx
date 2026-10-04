@@ -13,6 +13,7 @@ import {
 } from '@/components/ui';
 import { Select } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
+import { ResidencePicker, type Residence } from '@/components/common/ResidencePicker';
 import { QueryState } from '@/components/common/QueryState';
 import { DataTable } from '@/components/admin/DataTable';
 import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
@@ -74,7 +75,10 @@ export function UsersPage() {
               (!needle ||
                 u.name.includes(needle) ||
                 (u.phone ?? '').includes(needle) ||
-                (u.email ?? '').includes(needle)) &&
+                (u.email ?? '').includes(needle) ||
+                // «مشهد» or «خراسان» finds the marketers of that region.
+                (u.province ?? '').includes(needle) ||
+                (u.city ?? '').includes(needle)) &&
               (!role || u.role === role) &&
               (!team || (team === 'none' ? !u.teamId : u.teamId === team)),
           );
@@ -99,6 +103,13 @@ export function UsersPage() {
                   key: 'p',
                   header: 'موبایل/ایمیل',
                   cell: (u) => <span dir="ltr">{toPersianDigits(u.phone ?? u.email ?? '')}</span>,
+                },
+                {
+                  key: 'loc',
+                  header: 'محل سکونت',
+                  // Stored at sign-up («انتخاب محل سکونت») — the region each marketer sells in.
+                  cell: (u) => (u.province ? `${u.province} • ${u.city ?? ''}` : '—'),
+                  hideOnMobile: true,
                 },
                 { key: 'r', header: 'نقش', cell: (u) => ROLE_LABEL[u.role] },
                 {
@@ -151,6 +162,10 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
   const [teamId, setTeamId] = useState(user.teamId ?? '');
   const [status, setStatus] = useState(user.status);
   const [brandIds, setBrandIds] = useState<string[]>(user.brandIds);
+  const [residence, setResidence] = useState<Residence>({
+    province: user.province ?? '',
+    city: user.city ?? '',
+  });
   const [reset, setReset] = useState(false);
   const [tempPwd, setTempPwd] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -165,6 +180,9 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
         teamId: teamId || null,
         status,
         brandIds,
+        // null clears the pair (the API rejects a stray city without its province).
+        province: residence.province || null,
+        city: residence.city || null,
       }),
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: ['admin'] });
@@ -193,6 +211,13 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
     },
     onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
   });
+  const submit = () => {
+    if (residence.province && !residence.city) {
+      setErrors({ city: 'شهر را انتخاب کنید.' });
+      return;
+    }
+    save.mutate();
+  };
   return (
     <Modal
       open
@@ -208,7 +233,7 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
           >
             بازتنظیم رمز
           </Button>
-          <Button loading={save.isPending} onClick={() => save.mutate()}>
+          <Button loading={save.isPending} onClick={submit}>
             ذخیره
           </Button>
         </>
@@ -274,6 +299,13 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
             <option value="inactive">غیرفعال</option>
           </Select>
         </div>
+        <ResidencePicker
+          value={residence}
+          onChange={setResidence}
+          label="محل سکونت"
+          cityError={errors.city}
+          clearable
+        />
         <fieldset>
           <legend className="mb-1 text-sm font-medium">برندهای مرتبط (برای انتساب برندی)</legend>
           <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">

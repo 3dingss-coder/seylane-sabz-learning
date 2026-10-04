@@ -81,7 +81,13 @@ export function authRouter(d: Deps, limiter: RateLimiter): LightRouter {
         const team = await d.store.get('teams/team-seylane');
         const user = await users.register(
           d,
-          { name: input.name, identifier: input.phone, password },
+          {
+            name: input.name,
+            identifier: input.phone,
+            password,
+            province: input.province,
+            city: input.city,
+          },
           'marketer',
           team ? { teamId: 'team-seylane' } : {},
         );
