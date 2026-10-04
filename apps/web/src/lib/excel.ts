@@ -1,11 +1,11 @@
 /**
  * Professional RTL Excel export with Vazirmatn font, proper column widths,
  * branded header styling, borders, alternating row colors and number formatting.
- * Uses exceljs (bundles to ~120KB gzipped). Design mirrors the app's visual language:
+ * Uses exceljs (dynamic import, so it only loads when the user clicks Excel export
+ * — marketers never pay the cost). Design mirrors the app's visual language:
  * green primary (#177A50), soft background (#F8FAFC), white cards, muted borders (#E2E8F0).
  */
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+import type ExcelJS from 'exceljs';
 
 export interface ExcelColumn {
   /** Column header (Persian, rendered in the styled header row). */
@@ -45,9 +45,9 @@ const BRAND = {
   muted: '64748B',
 };
 
-// Vazirmatn is a Persian web font. We embed the font metadata and register it on the workbook
-// so Excel (which doesn't ship Vazirmatn) will still show RTL correctly with its default Arabic font
-// (e.g. Tahoma), while if the user has Vazirmatn installed they see the designed look.
+// ExcelJS stores this font name in cell styles but XLSX does not embed font files. Users with
+// Vazirmatn installed get the intended typography; other systems use their configured fallback.
+// RTL layout, alignment and readable column sizing do not depend on Vazirmatn being installed.
 const FONT_NAME = 'Vazirmatn';
 
 function persianDigits(v: string | number): string {
@@ -56,6 +56,10 @@ function persianDigits(v: string | number): string {
 }
 
 export async function exportExcel(opts: ExcelOptions): Promise<void> {
+  const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
+    import('exceljs'),
+    import('file-saver'),
+  ]);
   const wb = new ExcelJS.Workbook();
   wb.creator = 'آکادمی سیلانه';
   wb.lastModifiedBy = 'آکادمی سیلانه';

@@ -352,9 +352,7 @@ export async function listRetakes(
   }
   const list = await d.store.query<RetakeRequest>({ collection: 'retake_requests', where });
   const userDocs = (
-    await d.store.getMany<User>(
-      [...new Set(list.map((r) => r.userId))].map((id) => `users/${id}`),
-    )
+    await d.store.getMany<User>([...new Set(list.map((r) => r.userId))].map((id) => `users/${id}`))
   ).filter((u): u is Doc<User> => !!u);
   const names = new Map(userDocs.map((u) => [u.id, u.name]));
   const out = [];

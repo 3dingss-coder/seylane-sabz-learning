@@ -15,15 +15,7 @@ import type { CompletionRow } from '@/lib/types';
 
 const STATUS_LABEL = { new: 'شروع‌نشده', in_progress: 'در حال انجام', completed: 'تکمیل' } as const;
 type Filter =
-  | 'brand'
-  | 'product'
-  | 'user'
-  | 'status'
-  | 'team'
-  | 'province'
-  | 'city'
-  | 'from'
-  | 'to';
+  'brand' | 'product' | 'user' | 'status' | 'team' | 'province' | 'city' | 'from' | 'to';
 
 /** W2 / A-reports — completion report with filters (URL-synced), city filter and professional Excel export. */
 export function CompletionReport({
@@ -38,6 +30,7 @@ export function CompletionReport({
   const [sp, setSp] = useSearchParams();
   const nav = useNavigate();
   const f = (k: Filter) => sp.get(k) ?? '';
+  const provinceFilter = f('province');
   const set = (k: Filter, v: string) => {
     const next = new URLSearchParams(sp);
     if (v) next.set(k, v);
@@ -60,8 +53,9 @@ export function CompletionReport({
       users.set(r.userId, r.userName);
       if (r.province) {
         provinces.add(r.province);
-        if (!citiesByProvince.has(r.province)) citiesByProvince.set(r.province, new Set());
-        if (r.city) citiesByProvince.get(r.province)!.add(r.city);
+        const citySet = citiesByProvince.get(r.province) ?? new Set<string>();
+        if (!citiesByProvince.has(r.province)) citiesByProvince.set(r.province, citySet);
+        if (r.city) citySet.add(r.city);
       }
     }
     return {
@@ -69,9 +63,9 @@ export function CompletionReport({
       products: [...products],
       users: [...users],
       provinces: [...provinces].sort(),
-      cities: f('province') ? [...(citiesByProvince.get(f('province')) ?? [])].sort() : [],
+      cities: provinceFilter ? [...(citiesByProvince.get(provinceFilter) ?? [])].sort() : [],
     };
-  }, [rows, f('province')]);
+  }, [rows, provinceFilter]);
 
   const filtered = useMemo(() => {
     const fromStart = fromZonedInput(f('from'));

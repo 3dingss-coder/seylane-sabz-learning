@@ -1,53 +1,53 @@
 /**
  * Loads the product knowledge files in `mentor-behavior/` (the «فایل رفتار منتور» zip
  * the client supplied) into mentor_guides, one per brand/product. Idempotent: existing
- * admin-authored guides win (we never overwrite admin edits).
+ * admin-authored guides win (we never overwrite admin edits), and content merges for the
+ * global guide are deduplicated by content hash so re-running seed never duplicates text.
  *
- * Each .md file has a Persian header like `# فورمی | ست آبرسان ۴ME` followed by the
- * knowledge structure defined in 00_README.md. We store the body verbatim as the
- * guide's `summary` and `keyPoints`/etc. fields so the mentor can answer product
- * questions grounded in these files.
+ * Known catalog IDs are declared per file, while D1's additive import remaps IDs to an exact
+ * Persian/Latin brand-name match when the live catalog uses different IDs. Dart targets the
+ * existing live brand ID `brand-b9jgxnnlhx`; it is never folded into the global guide.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import type { Deps } from '../services/context';
 import * as guides from '../services/mentor-guides';
+import { markKnowledgeDirty } from '../services/knowledge';
 import { normalizeFa } from '../services/mentor';
+import type { Brand, MentorGuide } from '../domain/types';
+import type { Doc } from '../store/types';
 
 export interface BehaviorFileMapping {
   file: string;
-  /** 'brand' or 'product' */
-  kind: 'brand' | 'product';
-  /** Brand id (for kind='product' this is the brand the product belongs to). */
-  brandId?: string | null;
-  /** Product id (for kind='product'). */
-  productId?: string | null;
-  /** Override guide title (otherwise derived from the markdown H1). */
-  title?: string;
+  /** Stable catalog ID when this brand is included in the repository seed. */
+  brandId?: string;
+  /** Exact Persian/Latin name aliases used when a live catalog has a different ID. */
+  brandNames: string[];
 }
 
 /**
- * Mapping from mentor-behavior/*.md files to their brand/product targets.
- * File names (01_Formi, ...) correspond to the SKU order in 00_README.md.
- * Product IDs are taken from catalog-supplement.json and brands.csv.
+ * Product knowledge is stored as a brand guide, since every file is primarily about one
+ * brand's sales behavior. Stable IDs are used when known; the D1 incremental import maps
+ * those IDs to the live catalog by exact Persian/Latin brand names if IDs differ.
  */
 export const BEHAVIOR_FILES: BehaviorFileMapping[] = [
-  // 01 Formi — 4ME hydration set → brand-sb-formi / sb-310350101
-  { file: '01_Formi.md', kind: 'brand', brandId: 'brand-sb-formi' },
-  // 02 Zen — Zen Body Oil → brand-sb-zen / sb-290252101
-  { file: '02_Zen.md', kind: 'brand', brandId: 'brand-sb-zen' },
-  // 03 As — With Us heel cream → brand-sb-vitas / sb-340122101
-  { file: '03_As.md', kind: 'brand', brandId: 'brand-sb-vitas' },
-  // 04 Atel — ATL quick fix → brand-sb-atl / sb-220306101
-  { file: '04_Atel.md', kind: 'brand', brandId: 'brand-sb-atl' },
-  // 05 Collamin — Collagen bank → brand-sb-11 (کالمین)
-  { file: '05_Collamin.md', kind: 'brand', brandId: 'brand-sb-11' },
-  // 06 IceBall — Ice Ball brand → brand-sb-10 (آیس بال)
-  { file: '06_IceBall.md', kind: 'brand', brandId: 'brand-sb-10' },
-  // 07 Bubble — ICE BUBBLE foam cleanser → brand-sb-icebubble / sb-370276101
-  { file: '07_Bubble.md', kind: 'brand', brandId: 'brand-sb-icebubble' },
-  // 08 Dart — Filler Shot (no brand yet); merged into the global mentor guide.
-  { file: '08_Dart.md', kind: 'brand', brandId: null },
+  { file: '01_Formi.md', brandId: 'brand-sb-formi', brandNames: ['فورمی', 'Formi', '4ME'] },
+  { file: '02_Zen.md', brandId: 'brand-sb-zen', brandNames: ['زِن', 'زن', 'Zen'] },
+  {
+    file: '03_As.md',
+    brandId: 'brand-sb-vitas',
+    brandNames: ['ویت آس', 'WITH US', 'With Us', 'Vitas'],
+  },
+  { file: '04_Atel.md', brandId: 'brand-sb-atl', brandNames: ['آتل', 'ATL'] },
+  { file: '05_Collamin.md', brandId: 'brand-sb-11', brandNames: ['کلامین', 'کالمین', 'Collamin'] },
+  { file: '06_IceBall.md', brandId: 'brand-sb-10', brandNames: ['آیس بال', 'Ice Ball', 'Iceball'] },
+  {
+    file: '07_Bubble.md',
+    brandId: 'brand-sb-icebubble',
+    brandNames: ['آیس بابل', 'بابل', 'Bubble', 'ICE BUBBLE'],
+  },
+  { file: '08_Dart.md', brandId: 'brand-b9jgxnnlhx', brandNames: ['دارت', 'Dart'] },
 ];
 
 /** Parsed content of one mentor-behavior markdown file. */
@@ -63,94 +63,132 @@ interface ParsedBehavior {
 }
 
 function parseBehaviorMarkdown(raw: string): ParsedBehavior {
-  // Title from first H1 line
   const lines = raw.split(/\r?\n/);
-  let title = '';
-  const bodyLines: string[] = [];
-  let inBody = false;
-  for (const line of lines) {
-    if (!title && line.startsWith('# ')) {
-      title = line.replace(/^#\s+/, '').trim();
-      inBody = true;
-      continue;
+  const titleLine = lines.find((line) => line.startsWith('# '));
+  const title = titleLine?.replace(/^#\s+/, '').trim() ?? '';
+  const bodyLines = lines.slice(Math.max(0, lines.findIndex((line) => line.startsWith('# ')) + 1));
+  const sections: Array<{ heading: string; content: string }> = [];
+  let current: { heading: string; lines: string[] } | null = null;
+  for (const line of bodyLines) {
+    const heading = line.match(/^##\s+(.+?)\s*$/);
+    if (heading?.[1]) {
+      if (current)
+        sections.push({ heading: current.heading, content: current.lines.join('\n').trim() });
+      current = { heading: heading[1].trim(), lines: [] };
+    } else if (current) {
+      current.lines.push(line);
     }
-    if (inBody) bodyLines.push(line);
   }
-  const body = bodyLines.join('\n');
+  if (current)
+    sections.push({ heading: current.heading, content: current.lines.join('\n').trim() });
 
-  // Extract key sections by ## headers
-  const section = (heading: string): string => {
-    const re = new RegExp(`##\\s+${escapeReg(heading)}[\\s\\S]*?(?=\\n##\\s|$)`, 'm');
-    const m = body.match(re);
-    return m ? m[0].replace(new RegExp(`##\\s+${escapeReg(heading)}\\s*\\n?`), '').trim() : '';
-  };
+  const headingText = (section: { heading: string }) => normalizeFa(section.heading).toLowerCase();
+  const core = sections.filter((section) =>
+    /مسئله|مشکل|نیاز|ویژگی|ترکیب|کارکرد|مخاطب|مصرف|انتظار|ارزش|داستان|جایگاه|نتیجه/.test(
+      headingText(section),
+    ),
+  );
+  const sales = sections.filter((section) => /پرزنت|فروش|کشف نیاز/.test(headingText(section)));
+  const qaSections = sections.filter((section) =>
+    /اعتراض|سؤال|سوال|پرسش|پاسخ|رایج|محتمل/.test(headingText(section)),
+  );
+  const safety = sections.filter((section) =>
+    /ایمنی|هشدار|مرزبندی|خط قرمز|کمبود اطلاعات|نامعلوم|تمایز/.test(headingText(section)),
+  );
+  const summarySections = [...core, ...safety];
+  const summarySource = summarySections
+    .map((section) => `## ${section.heading}\n${section.content}`)
+    .join('\n\n');
+  const summary = clipText(summarySource || bodyLines.join('\n').trim(), 3800);
 
-  const problem = section('مسئله و (?:ارزش پیشنهادی|داستان محصول) \\[مستند\\]') || section('مسئله و ارزش پیشنهادی');
-  const features = section('ترکیب، کارکرد و مخاطب \\[مستند\\]') || section('ویژگی و مخاطب \\[مستند\\]');
-  const usage = section('شیوهٔ مصرف بر اساس هدف \\[مستند\\]') || section('مصرف و انتخاب \\[مستند\\]');
-  const sales = section('کشف نیاز و پرزنت \\[پیشنهاد فروش\\]') || section('گفت‌وگوی فروش \\[پیشنهاد فروش\\]');
-  const qa = section('سؤال‌ها و اعتراض‌های مححتمل') || section('پاسخ‌های کاربردی');
-  const safety = section('ایمنی، تمایز و پیشنهاد همراه') || section('خط قرمز و تمایز');
+  const keyPoints = core
+    .map((section) => summarize(`${section.heading}: ${section.content}`, 380))
+    .filter(Boolean)
+    .slice(0, 10);
+  const sellingPoints = sales.flatMap((section) => {
+    const bullets = section.content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => /^[-*]\s+/.test(line))
+      .map(cleanBullet);
+    return bullets.length ? bullets.slice(0, 8) : [summarize(section.content, 360)];
+  });
 
-  const keyPoints: string[] = [];
-  if (problem) keyPoints.push(summarize(problem, 280));
-  if (features) keyPoints.push(summarize(features, 320));
-  if (usage) keyPoints.push(summarize(usage, 280));
-
-  const sellingPoints: string[] = [];
-  if (sales) {
-    // Extract bullet lines
-    const bullets = sales.split(/\n/).map((l) => l.trim()).filter((l) => l.startsWith('-'));
-    if (bullets.length) sellingPoints.push(...bullets.map(cleanBullet).slice(0, 6));
-    else sellingPoints.push(summarize(sales, 280));
-  }
-
-  // Parse objections from Q&A
   const objections: Array<{ objection: string; answer: string }> = [];
-  if (qa) {
-    const lines = qa.split(/\n/);
-    let currentQ = '';
-    let currentA = '';
-    for (const line of lines) {
-      const m = line.match(/^[-*]\s*[«"]?([^«»":؟?]+)[»"]?\s*(?:پاسخ:|:)\s*(.+)$/);
-      if (m && m[1] && m[2]) {
-        if (currentQ) objections.push({ objection: currentQ.trim(), answer: currentA.trim() });
-        currentQ = m[1].replace(/^«|»$/g, '').trim();
-        currentA = m[2].trim();
-      } else {
-        const mm = line.match(/^[-*]\s*«([^»]+)»\s*:?\s*(.*)$/);
-        if (mm && mm[1]) {
-          if (currentQ) objections.push({ objection: currentQ.trim(), answer: currentA.trim() });
-          currentQ = mm[1].trim();
-          currentA = (mm[2] ?? '').trim();
-        } else if (currentQ && line.trim() && !line.startsWith('#')) {
-          currentA += ' ' + line.trim();
-        }
-      }
-    }
-    if (currentQ) objections.push({ objection: currentQ.trim(), answer: currentA.trim() });
+  const faq: Array<{ question: string; answer: string }> = [];
+  for (const section of qaSections) {
+    const entries = parseQuestionAnswers(section.content);
+    if (/اعتراض/.test(headingText(section))) objections.push(...entries);
+    else faq.push(...entries.map((entry) => ({ question: entry.objection, answer: entry.answer })));
   }
 
-  const dos: string[] = [];
-  const donts: string[] = [];
-  if (safety) {
-    // Pull out negative imperatives as donts
-    const negMatches = safety.match(/(?:استفاده نشود|نکنید?|نگو|ممنوع|نباشد|پرهیز)[^.؟!]*/g);
-    if (negMatches) donts.push(...negMatches.slice(0, 6).map((s) => s.trim()));
-    const posMatches = safety.match(/(?:پیشنهاد|معرفی کن|بگو|استفاده شود|تأکید)[^.؟!]*/g);
-    if (posMatches) dos.push(...posMatches.slice(0, 6).map((s) => s.trim()));
-  }
+  const safetyLines = safety.flatMap((section) =>
+    section.content
+      .split(/\r?\n|(?<=[؛.!؟])\s+/)
+      .map((line) => line.replace(/^[-*]\s*/, '').trim())
+      .filter(Boolean),
+  );
+  const prohibition = /نکن|ممنوع|نساز|خودداری|پرهیز|نگو|نباید|توصیه نمی|استفاده نشود/;
+  const donts = safetyLines.filter((line) => prohibition.test(line)).slice(0, 8);
+  const dos = safetyLines
+    .filter((line) => !prohibition.test(line) && /بگو|پیشنهاد|تأکید|معرفی|استفاده/.test(line))
+    .slice(0, 8);
 
   return {
     title: title || 'راهنمای محصول',
-    summary: [problem, features].filter(Boolean).join('\n\n').slice(0, 3000),
-    keyPoints: keyPoints.filter(Boolean).slice(0, 10),
-    sellingPoints: sellingPoints.filter(Boolean).slice(0, 10),
-    objections: objections.filter((o) => o.objection).slice(0, 10),
-    faq: [],
-    dos: dos.filter(Boolean).slice(0, 8),
-    donts: donts.filter(Boolean).slice(0, 8),
+    summary,
+    keyPoints,
+    sellingPoints: [...new Set(sellingPoints.filter(Boolean))].slice(0, 10),
+    objections: uniqueQa(objections).slice(0, 10),
+    faq: uniqueQa(faq).slice(0, 10),
+    dos,
+    donts,
   };
+}
+
+function parseQuestionAnswers(content: string): Array<{ objection: string; answer: string }> {
+  const out: Array<{ objection: string; answer: string }> = [];
+  let active: { objection: string; answer: string } | null = null;
+  const save = () => {
+    if (active?.objection) out.push({ objection: active.objection, answer: active.answer.trim() });
+  };
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const question = line.match(/^[-*]\s*[«“"](.+?)[»”"]\s*(.*)$/);
+    if (question?.[1]) {
+      save();
+      active = {
+        objection: question[1].trim(),
+        answer: (question[2] ?? '').replace(/^[؟?:：–—-]\s*/, '').trim(),
+      };
+    } else if (active && line && !line.startsWith('#')) {
+      active.answer = `${active.answer} ${line}`.trim();
+    }
+  }
+  save();
+  return out;
+}
+
+function uniqueQa<T extends { objection?: string; question?: string; answer: string }>(
+  rows: T[],
+): T[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = normalizeFa(row.objection ?? row.question ?? '').toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function clipText(value: string, max: number): string {
+  const text = value
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  return `${cut.replace(/\s+\S*$/, '').trim()}…`;
 }
 
 function cleanBullet(s: string): string {
@@ -160,21 +198,44 @@ function summarize(s: string, max: number): string {
   const t = s.replace(/\s+/g, ' ').trim();
   return t.length > max ? t.slice(0, max).replace(/\s+\S*$/, '') + '…' : t;
 }
-function escapeReg(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Normalise a name for fuzzy matching (lowercase, unify Arabic/Persian letters, collapse spaces). */
+function norm(s: string | null | undefined): string {
+  if (!s) return '';
+  return normalizeFa(String(s).toLowerCase())
+    .replace(/[\u200c\-_\s]+/g, ' ')
+    .trim();
 }
 
 /**
- * Seeds every mentor-behavior/*.md file into mentor_guides. Idempotent: if a guide already
- * exists (e.g. the admin edited it), we leave it alone.
+ * Content hash used for idempotent global-guide merges: two runs of seed with the same
+ * parsed Dart content will produce the same hash, so we skip appending duplicates.
  */
-export async function seedMentorBehavior(d: Deps, repoRoot: string, log?: (m: string) => void): Promise<number> {
+function contentHash(s: string): string {
+  return createHash('sha1').update(s).digest('hex').slice(0, 12);
+}
+
+const SEED_BEHAVIOR_MARKER = 'seeded-mentor-behavior';
+
+/**
+ * Seeds every mentor-behavior/*.md file into mentor_guides. Idempotent: if a guide already
+ * exists (e.g. the admin edited it), we leave it alone. Global guide merges are tagged
+ * with per-block content hashes so re-running seed never duplicates content.
+ */
+export async function seedMentorBehavior(
+  d: Deps,
+  repoRoot: string,
+  log?: (m: string) => void,
+): Promise<number> {
   const dir = path.join(repoRoot, 'mentor-behavior');
   if (!fs.existsSync(dir)) {
     log?.('mentor-behavior: directory not found, skipping');
     return 0;
   }
   const actor = { id: 'seed-mentor-behavior', role: 'system' as const };
+
+  const allBrands = await d.store.query<Brand>({ collection: 'brands' });
+
   let count = 0;
   for (const mapping of BEHAVIOR_FILES) {
     const filePath = path.join(dir, mapping.file);
@@ -182,33 +243,29 @@ export async function seedMentorBehavior(d: Deps, repoRoot: string, log?: (m: st
       log?.(`mentor-behavior: missing ${mapping.file}, skipping`);
       continue;
     }
-    // Decide doc id — brand-level or product-level. Dart (brandId null) → global.
-    const kind = mapping.kind;
-    const targetId = mapping.productId ?? mapping.brandId ?? null;
-    if (kind === 'brand' && !mapping.brandId) {
-      // Global guide merge — append to existing global rather than replacing.
-      await mergeGlobal(d, actor, filePath, log);
-      count++;
-      continue;
-    }
-    const docId = guides.guideDocId(kind, targetId);
-    const existing = await d.store.get(`mentor_guides/${docId}`);
-    if (existing) {
-      log?.(`mentor-behavior: ${docId} already exists (admin-authored), skipping`);
-      continue;
-    }
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const parsed = parseBehaviorMarkdown(raw);
-    await guides.upsertGuide(
-      d,
-      actor,
-      kind,
-      targetId,
-      {
+    const parsed = parseBehaviorMarkdown(fs.readFileSync(filePath, 'utf8'));
+    const brandMatch =
+      allBrands.find((brand) => brand.id === mapping.brandId) ??
+      allBrands.find((brand) =>
+        mapping.brandNames.some((name) => {
+          const needle = norm(name);
+          return needle && (norm(brand.name) === needle || norm(brand.nameLatin) === needle);
+        }),
+      );
+    const targetId = brandMatch?.id ?? mapping.brandId;
+
+    if (targetId) {
+      const docId = guides.guideDocId('brand', targetId);
+      if (await d.store.get(`mentor_guides/${docId}`)) {
+        log?.(`mentor-behavior: ${docId} already exists, skipping`);
+        continue;
+      }
+      const input = {
         title: parsed.title,
         enabled: true,
-        tone: 'coach',
-        personaNote: 'همکار و مربی فروش باتجربه؛ پاسخ مستقیم، یک دلیل از سند، یک نکته مصرف، یک سؤال کوتاه.',
+        tone: 'coach' as const,
+        personaNote:
+          'همکار و مربی فروش باتجربه؛ پاسخ مستقیم، یک دلیل از سند، یک نکته مصرف، یک سؤال کوتاه.',
         summary: parsed.summary,
         keyPoints: parsed.keyPoints,
         sellingPoints: parsed.sellingPoints,
@@ -218,41 +275,107 @@ export async function seedMentorBehavior(d: Deps, repoRoot: string, log?: (m: st
         donts: parsed.donts,
         keywords: extractKeywords(parsed.title),
         priority: 2,
-        quizAnswers: 'hide',
-      },
-    );
-    log?.(`mentor-behavior: seeded ${docId} (${parsed.title})`);
+        quizAnswers: 'hide' as const,
+      };
+      if (brandMatch) {
+        await guides.upsertGuide(d, actor, 'brand', targetId, input);
+      } else {
+        // A live-only ID (currently Dart) is retained in the snapshot. D1 import later
+        // verifies that target exists in the live catalog before installing the guide.
+        const now = d.clock().toISOString();
+        const guide: MentorGuide = {
+          ...guides.emptyGuide('brand', targetId),
+          ...input,
+          kind: 'brand',
+          targetId,
+          createdAt: now,
+          updatedAt: now,
+          updatedBy: actor.id,
+        };
+        await d.store.set(`mentor_guides/${docId}`, guide as unknown as Record<string, unknown>);
+        await markKnowledgeDirty(d);
+      }
+      log?.(
+        `mentor-behavior: seeded ${docId} (${parsed.title})${brandMatch ? ` → ${brandMatch.name}` : ' (live catalog ID)'}`,
+      );
+      count++;
+      continue;
+    }
+
+    // Unmapped future files fall back to a hash-tagged global block; repeated seed runs
+    // replace that block rather than appending a duplicate.
+    await mergeGlobalIdempotent(d, actor, parsed, mapping.file, log);
     count++;
   }
   return count;
 }
 
-async function mergeGlobal(
+/**
+ * Idempotent global-guide merge: each parsed file contributes one content block whose
+ * summary is tagged with a content hash. If the block is already present (same hash),
+ * we skip it — re-running seed never duplicates Dart content.
+ */
+async function mergeGlobalIdempotent(
   d: Deps,
   actor: { id: string; role: 'system' },
-  filePath: string,
+  parsed: ParsedBehavior,
+  sourceFile: string,
   log?: (m: string) => void,
 ) {
-  const raw = fs.readFileSync(filePath, 'utf8');
-  const parsed = parseBehaviorMarkdown(raw);
-  // Fetch existing global (or empty).
-  const existing = await d.store.get(`mentor_guides/${guides.GLOBAL_GUIDE_ID}`);
-  const base = existing
+  const GLOBAL_ID = 'global';
+  const existing = await d.store.get(`mentor_guides/${GLOBAL_ID}`);
+  const existingTyped = existing as Doc<{
+    title?: string;
+    enabled?: boolean;
+    tone?: 'friendly' | 'professional' | 'coach' | 'brief';
+    personaNote?: string;
+    summary?: string;
+    keyPoints?: string[];
+    sellingPoints?: string[];
+    objections?: Array<{ objection: string; answer: string }>;
+    faq?: Array<{ question: string; answer: string }>;
+    dos?: string[];
+    donts?: string[];
+    keywords?: string[];
+    priority?: number;
+    quizAnswers?: 'inherit' | 'allow' | 'hide';
+  }> | null;
+
+  const blockTag = `<!-- ${SEED_BEHAVIOR_MARKER}:${sourceFile}:${contentHash(parsed.summary)} -->`;
+  // If the block is already present in the existing summary, do nothing.
+  if (existingTyped?.summary && existingTyped.summary.includes(blockTag)) {
+    log?.(`mentor-behavior: global already has ${parsed.title} (same hash), skipping`);
+    return;
+  }
+
+  // Remove any older block for the same source file (different hash = content was updated).
+  const stripOldBlocks = (s: string) =>
+    s
+      .replace(
+        new RegExp(
+          `\\n?<!-- ${SEED_BEHAVIOR_MARKER}:${escapeReg(sourceFile)}:[a-f0-9]+ -->[\\s\\S]*?(?=<!-- ${SEED_BEHAVIOR_MARKER}:|$)`,
+          'g',
+        ),
+        '',
+      )
+      .trim();
+
+  const base = existingTyped
     ? {
-        title: (existing as { title?: string }).title ?? 'رفتار پیش‌فرض منتور',
-        enabled: (existing as { enabled?: boolean }).enabled ?? true,
-        tone: ((existing as { tone?: 'friendly' | 'professional' | 'coach' | 'brief' }).tone ?? 'friendly'),
-        personaNote: (existing as { personaNote?: string }).personaNote ?? '',
-        summary: (existing as { summary?: string }).summary ?? '',
-        keyPoints: (existing as { keyPoints?: string[] }).keyPoints ?? [],
-        sellingPoints: (existing as { sellingPoints?: string[] }).sellingPoints ?? [],
-        objections: (existing as { objections?: Array<{ objection: string; answer: string }> }).objections ?? [],
-        faq: (existing as { faq?: Array<{ question: string; answer: string }> }).faq ?? [],
-        dos: (existing as { dos?: string[] }).dos ?? [],
-        donts: (existing as { donts?: string[] }).donts ?? [],
-        keywords: (existing as { keywords?: string[] }).keywords ?? [],
-        priority: (existing as { priority?: number }).priority ?? 1,
-        quizAnswers: ((existing as { quizAnswers?: 'inherit' | 'allow' | 'hide' }).quizAnswers ?? 'inherit') as 'inherit' | 'allow' | 'hide',
+        title: existingTyped.title ?? 'رفتار پیش‌فرض منتور',
+        enabled: existingTyped.enabled ?? true,
+        tone: (existingTyped.tone ?? 'coach') as 'friendly' | 'professional' | 'coach' | 'brief',
+        personaNote: existingTyped.personaNote ?? 'همکار باتجربه و مربی فروش.',
+        summary: stripOldBlocks(existingTyped.summary ?? ''),
+        keyPoints: [...(existingTyped.keyPoints ?? [])],
+        sellingPoints: [...(existingTyped.sellingPoints ?? [])],
+        objections: [...(existingTyped.objections ?? [])],
+        faq: [...(existingTyped.faq ?? [])],
+        dos: [...(existingTyped.dos ?? [])],
+        donts: [...(existingTyped.donts ?? [])],
+        keywords: [...(existingTyped.keywords ?? [])],
+        priority: existingTyped.priority ?? 1,
+        quizAnswers: (existingTyped.quizAnswers ?? 'inherit') as 'inherit' | 'allow' | 'hide',
       }
     : {
         title: 'رفتار پیش‌فرض منتور',
@@ -270,33 +393,56 @@ async function mergeGlobal(
         priority: 1,
         quizAnswers: 'inherit' as const,
       };
-  // Append Dart content, deduplicating.
-  const mergedSummary = [base.summary, parsed.summary].filter(Boolean).join('\n\n').slice(0, 4000);
-  const appendUnique = <T>(a: T[], b: T[], key: (x: T) => string) => {
+
+  // Append the new block with its hash tag at the end of the summary.
+  const appendUnique = <T>(a: T[], b: T[], key: (x: T) => string): T[] => {
     const seen = new Set(a.map(key));
-    for (const item of b) if (!seen.has(key(item))) a.push(item);
+    for (const item of b) {
+      const itemKey = key(item);
+      if (!seen.has(itemKey)) {
+        a.push(item);
+        seen.add(itemKey);
+      }
+    }
     return a;
   };
+
+  const newSummarySection = `${blockTag}\n# ${parsed.title}\n${parsed.summary}`;
+  const mergedSummary = [base.summary, newSummarySection]
+    .filter(Boolean)
+    .join('\n\n')
+    .slice(0, 5500);
+
   await guides.upsertGuide(d, actor, 'global', null, {
     ...base,
     title: base.title || parsed.title,
     summary: mergedSummary,
-    keyPoints: appendUnique([...base.keyPoints], parsed.keyPoints, (x) => normalizeFa(x).slice(0, 40)),
-    sellingPoints: appendUnique([...base.sellingPoints], parsed.sellingPoints, (x) => normalizeFa(x).slice(0, 40)),
-    objections: appendUnique([...base.objections], parsed.objections, (x) => normalizeFa(x.objection).slice(0, 40)),
-    dos: appendUnique([...base.dos], parsed.dos, (x) => normalizeFa(x).slice(0, 40)),
-    donts: appendUnique([...base.donts], parsed.donts, (x) => normalizeFa(x).slice(0, 40)),
-    keywords: appendUnique([...base.keywords], extractKeywords(parsed.title), (x) => normalizeFa(x)),
+    keyPoints: appendUnique(base.keyPoints, parsed.keyPoints, (x) => norm(x).slice(0, 40)),
+    sellingPoints: appendUnique(base.sellingPoints, parsed.sellingPoints, (x) =>
+      norm(x).slice(0, 40),
+    ),
+    objections: appendUnique(base.objections, parsed.objections, (x) =>
+      norm(x.objection).slice(0, 40),
+    ),
+    dos: appendUnique(base.dos, parsed.dos, (x) => norm(x).slice(0, 40)),
+    donts: appendUnique(base.donts, parsed.donts, (x) => norm(x).slice(0, 40)),
+    keywords: appendUnique(base.keywords, extractKeywords(parsed.title), (x) => norm(x)),
   });
-  log?.(`mentor-behavior: merged global guide with ${parsed.title}`);
+  log?.(`mentor-behavior: merged ${parsed.title} into global guide (idempotent)`);
+}
+
+function escapeReg(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function extractKeywords(title: string): string[] {
-  // Pull the Latin/Persian product name from the H1 — e.g. «فورمی | ست آبرسان ۴ME» → [فورمی, 4ME]
-  const parts = title.split('|').map((s) => s.trim()).filter(Boolean);
+  const parts = title
+    .split(/[|\-–—()]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
   const kws: string[] = [];
   for (const p of parts) {
-    const tokens = p.split(/[\s\-–—()]+/).filter((t) => t.length >= 2);
+    const tokens = p.split(/[\s]+/).filter((t) => t.length >= 2);
     kws.push(...tokens);
   }
   return [...new Set(kws)].slice(0, 15);

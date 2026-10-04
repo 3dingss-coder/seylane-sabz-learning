@@ -1,4 +1,4 @@
-# سیلانه‌سبز لرنینگ — Seylane Sabz Learning
+# آکادمی سیلانه — Seylane Academy
 
 Internal micro-learning / sales-enablement app for Seylane Sabz holding marketers.
 The spec is **[`PRODUCT-MASTER-SPEC.md`](./PRODUCT-MASTER-SPEC.md)**, which is the single source of truth. This README covers how to run, build and deploy.

@@ -2,7 +2,7 @@
   "name": "seylane-sabz-learning",
   "private": true,
   "version": "0.1.0",
-  "description": "Seylane Sabz Learning — corporate micro-learning / sales enablement (monorepo)",
+  "description": "Seylane Academy — corporate micro-learning / sales enablement (monorepo)",
   "workspaces": [
     "apps/web",
     "functions"

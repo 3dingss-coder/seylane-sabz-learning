@@ -13,7 +13,16 @@ export function ManagerReports() {
   const [sp] = useSearchParams();
   const qs = useMemo(() => {
     const params = new URLSearchParams();
-    for (const k of ['brand', 'product', 'user', 'status', 'from', 'to', 'province', 'city'] as const) {
+    for (const k of [
+      'brand',
+      'product',
+      'user',
+      'status',
+      'from',
+      'to',
+      'province',
+      'city',
+    ] as const) {
       const v = sp.get(k);
       if (v) params.set(k, v);
     }

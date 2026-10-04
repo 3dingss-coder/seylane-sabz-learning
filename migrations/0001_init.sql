@@ -1,4 +1,4 @@
--- Cloudflare D1 initial schema for Seylane Sabz Learning (سیلانه‌سبز لرنینگ)
+-- Cloudflare D1 initial schema for Seylane Academy (آکادمی سیلانه)
 -- Automatically applied by D1Store on first request, and also available for `wrangler d1 migrations apply`.
 
 CREATE TABLE IF NOT EXISTS docs (
