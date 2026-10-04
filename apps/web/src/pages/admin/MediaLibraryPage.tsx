@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AudioLines,
@@ -31,7 +32,8 @@ import { faDuration } from '@/lib/format';
 import { formatEta } from '@/lib/mediaLibrary/eta';
 import { getUploadQueue, setOnItemReady, useUploadJobs, type Job } from '@/lib/mediaLibrary/queue';
 import type { LibraryItem } from '@/lib/mediaLibrary/types';
-import { useBrands, useProducts } from './adminQueries';
+import { errMsg } from '@/lib/errors';
+import { ak, useBrands, usePackagesAdmin, useProducts } from './adminQueries';
 
 const libKey = ['admin', 'media-library'] as const;
 
@@ -408,6 +410,123 @@ function MediaCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) 
   );
 }
 
+/**
+ * Put this file into a training: pick one of the brand's packages and a section title; the file
+ * becomes a new section there. This is what makes a library file actually show up for marketers.
+ */
+function AddToPackage({
+  item,
+  brandId,
+  productId,
+}: {
+  item: LibraryItem;
+  brandId: string;
+  productId: string;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const brands = useBrands();
+  const pkgs = usePackagesAdmin(brandId ? `brandId=${brandId}` : '');
+  const [packageId, setPackageId] = useState('');
+  const [sectionTitle, setSectionTitle] = useState(item.title);
+  const [added, setAdded] = useState<{ packageId: string; packageTitle: string } | null>(null);
+
+  const brandName = (id: string | null) => brands.data?.find((b) => b.id === id)?.name;
+  const options = useMemo(() => {
+    const all = (pkgs.data ?? []).filter(
+      (p) => p.status !== 'archived' && (!brandId || p.brandId === brandId),
+    );
+    // Packages of the chosen product first.
+    return [...all].sort(
+      (a, b) =>
+        Number(b.productId === productId && !!productId) -
+        Number(a.productId === productId && !!productId),
+    );
+  }, [pkgs.data, brandId, productId]);
+
+  const add = useMutation({
+    mutationFn: () =>
+      api.post(`/admin/packages/${packageId}/sections`, {
+        title: sectionTitle.trim(),
+        description: '',
+        transcript: '',
+        mediaType: item.kind,
+        mediaSource: 'file',
+        youtubeUrl: null,
+        mediaId: item.id,
+        ...(item.durationSec ? { durationSec: item.durationSec } : {}),
+      }),
+    onSuccess: () => {
+      const pkg = options.find((p) => p.id === packageId);
+      setAdded({ packageId, packageTitle: pkg?.title ?? '' });
+      void qc.invalidateQueries({ queryKey: libKey });
+      void qc.invalidateQueries({ queryKey: ak.pkg(packageId) });
+      void qc.invalidateQueries({ queryKey: ['admin', 'packages'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'tree'] });
+    },
+    onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
+  });
+
+  if (added)
+    return (
+      <div
+        role="status"
+        className="rounded-card border border-primary bg-primary-light p-3 text-sm"
+      >
+        <p className="font-bold text-text">به آموزش «{added.packageTitle}» اضافه شد.</p>
+        <p className="mt-1 text-text-secondary">
+          برای نمایش به بازاریاب‌ها، سؤال‌های آزمون این قسمت را بنویسید و آموزش را منتشر کنید.
+        </p>
+        <Link
+          to={`/admin/packages/${added.packageId}`}
+          className="mt-2 inline-block font-bold text-primary underline"
+        >
+          رفتن به آموزش
+        </Link>
+      </div>
+    );
+
+  return (
+    <div className="space-y-3 rounded-card border border-border p-3">
+      <p className="text-sm font-bold text-text">افزودن به یک آموزش</p>
+      <Select
+        label="آموزش"
+        value={packageId}
+        onChange={(e) => setPackageId(e.target.value)}
+        hint={
+          options.length === 0
+            ? brandId
+              ? 'این برند هنوز آموزشی ندارد. از «محتوای آموزشی» یک آموزش بسازید.'
+              : 'ابتدا برند را انتخاب کنید یا از «محتوای آموزشی» آموزش بسازید.'
+            : undefined
+        }
+      >
+        <option value="">انتخاب آموزش…</option>
+        {options.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.title}
+            {!brandId && brandName(p.brandId) ? ` — ${brandName(p.brandId)}` : ''}
+            {p.status === 'draft' ? ' (پیش‌نویس)' : ''}
+          </option>
+        ))}
+      </Select>
+      <Input
+        label="عنوان قسمت"
+        value={sectionTitle}
+        onChange={(e) => setSectionTitle(e.target.value)}
+        maxLength={160}
+      />
+      <Button
+        onClick={() => add.mutate()}
+        loading={add.isPending}
+        disabled={!packageId || sectionTitle.trim().length < 2}
+      >
+        افزودن به آموزش
+      </Button>
+    </div>
+  );
+}
+
 function ItemModal({ item, onClose }: { item: LibraryItem; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -563,6 +682,7 @@ function ItemModal({ item, onClose }: { item: LibraryItem; onClose: () => void }
             {item.durationSec ? ` • ${faDuration(item.durationSec)}` : ''} • فایل اصلی:{' '}
             <span dir="auto">{item.originalName}</span>
           </p>
+          <AddToPackage item={item} brandId={brandId} productId={productId} />
           {item.usedBy.length > 0 && (
             <div>
               <p className="mb-1 text-sm font-medium text-text">استفاده‌شده در:</p>
