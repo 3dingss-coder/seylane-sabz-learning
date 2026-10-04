@@ -1,7 +1,9 @@
 export { Button, type ButtonProps } from './Button';
 export { Card } from './Card';
+export { CoinChip } from './CoinChip';
 export { Confetti } from './Confetti';
 export { CountUp } from './CountUp';
+export { StreakChip } from './StreakChip';
 export { CountBadge } from './CountBadge';
 export { CountdownChip } from './CountdownChip';
 export { EmptyState } from './EmptyState';

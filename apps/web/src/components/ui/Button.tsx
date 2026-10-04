@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Spinner } from './Spinner';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'light';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'light' | 'cta';
 export type ButtonSize = 'md' | 'lg';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -19,6 +19,9 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
     'bg-primary bg-brand-gradient text-on-primary [box-shadow:var(--shadow-sm),var(--shadow-inset-top)] hover:bg-primary-hover hover:[box-shadow:var(--shadow-brand),var(--shadow-inset-top)] active:bg-primary-hover',
+  // Design v3 (PHASE-1/§4.1): green CTA with a solid 3D "lip"; press = translateY + lip removed.
+  // Use size="lg" so the white label stays ≥18px. Green stays the action color (D-102).
+  cta: 'bg-primary text-on-primary [box-shadow:var(--lip-md)] hover:bg-primary-hover active:translate-y-1 active:[box-shadow:none]',
   secondary:
     'bg-surface text-primary border border-primary/70 hover:bg-primary-light active:bg-primary-light',
   /** white button for dark brand surfaces (hero cards) — same look in light and dark mode */
