@@ -139,6 +139,45 @@ export function GalleryPage() {
         />
 
         <main className="flex-1 space-y-10 px-4 py-6 lg:px-6">
+          {/* The real brand logos lead: they are the first thing to load, so the lazy
+              images are inside the initial viewport on a phone. */}
+          <Section title="برندهای سیلانه‌سبز (لوگوی واقعی)">
+            {catalog.kind === 'loading' && (
+              <LoadingRegion>
+                <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 lg:grid-cols-12">
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <div key={i} className="aspect-square animate-pulse rounded-card bg-border" />
+                  ))}
+                </div>
+              </LoadingRegion>
+            )}
+            {catalog.kind === 'error' && <ErrorState onRetry={() => load()} />}
+            {catalog.kind === 'ready' && catalog.data.brands.length === 0 && (
+              <EmptyState
+                title="هنوز برندی ثبت نشده"
+                description="پس از بارگذاری کاتالوگ، برندها اینجا نمایش داده می‌شوند."
+              />
+            )}
+            {catalog.kind === 'ready' && catalog.data.brands.length > 0 && (
+              <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                {catalog.data.brands.map((b) => (
+                  <li key={b.id}>
+                    <Card className="flex flex-col items-center gap-2 text-center">
+                      <BrandLogo name={b.name} logoUrl={b.logoUrl} size="lg" />
+                      <span className="text-sm font-bold text-text">{b.name}</span>
+                      <span className="text-xs text-text-secondary">
+                        {toPersianDigits(
+                          catalog.data.products.filter((p) => p.brandId === b.id).length,
+                        )}{' '}
+                        محصول
+                      </span>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+
           {/* PHASE-1 §1.8 DoD — every foundation token, rendered, not described. */}
           <Section title={TOKEN_SECTION.title}>
             <div className="grid gap-3 md:grid-cols-2">
@@ -207,43 +246,6 @@ export function GalleryPage() {
                 <p className="text-xs text-text-secondary">{TOKEN_SECTION.lipNote}</p>
               </Card>
             </div>
-          </Section>
-
-          <Section title="برندهای سیلانه‌سبز (لوگوی واقعی)">
-            {catalog.kind === 'loading' && (
-              <LoadingRegion>
-                <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 lg:grid-cols-12">
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <div key={i} className="aspect-square animate-pulse rounded-card bg-border" />
-                  ))}
-                </div>
-              </LoadingRegion>
-            )}
-            {catalog.kind === 'error' && <ErrorState onRetry={() => load()} />}
-            {catalog.kind === 'ready' && catalog.data.brands.length === 0 && (
-              <EmptyState
-                title="هنوز برندی ثبت نشده"
-                description="پس از بارگذاری کاتالوگ، برندها اینجا نمایش داده می‌شوند."
-              />
-            )}
-            {catalog.kind === 'ready' && catalog.data.brands.length > 0 && (
-              <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-                {catalog.data.brands.map((b) => (
-                  <li key={b.id}>
-                    <Card className="flex flex-col items-center gap-2 text-center">
-                      <BrandLogo name={b.name} logoUrl={b.logoUrl} size="lg" />
-                      <span className="text-sm font-bold text-text">{b.name}</span>
-                      <span className="text-xs text-text-secondary">
-                        {toPersianDigits(
-                          catalog.data.products.filter((p) => p.brandId === b.id).length,
-                        )}{' '}
-                        محصول
-                      </span>
-                    </Card>
-                  </li>
-                ))}
-              </ul>
-            )}
           </Section>
 
           <Section title="دکمه‌ها">

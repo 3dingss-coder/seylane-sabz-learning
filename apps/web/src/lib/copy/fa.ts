@@ -81,7 +81,6 @@ export const COPY = {
    */
   quiz: {
     title: 'آزمون',
-    questionLegend: 'سؤال آزمون',
     progressLabel: 'پیشرفت آزمون',
     scoreLabel: 'نمره آزمون',
     start: 'شروع آزمون',

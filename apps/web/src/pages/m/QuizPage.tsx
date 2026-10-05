@@ -24,6 +24,7 @@ import {
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Character } from '@/components/character/Character';
+import { CHARACTER_NAME } from '@/components/character/types';
 import { COPY, LINES, QUIZ_OPTION_LABEL } from '@/lib/copy/fa';
 import { CelebrationScreen } from '@/components/learning/CelebrationScreen';
 import { playMoment } from '@/lib/sound';
@@ -452,14 +453,25 @@ function QuizFlow({
         key={q.id}
         className={dir === 'next' ? 'animate-slide-in-end' : 'animate-slide-in-start'}
       >
-        <fieldset className="stagger flex flex-col gap-3">
-          {/* The question itself is the speech bubble below; the legend only names the group
-              (duplicating the stem would double-announce it to screen readers). */}
-          <legend className="sr-only">{COPY.quiz.questionLegend}</legend>
-          <div className="mb-1 flex items-start gap-2">
-            {/* PHASE-2 §2.4: on M7 the asker is always Simin, the hesitating customer.
-                The mentor never grades and never celebrates (C-05 / S-09). */}
-            <Character id="simin" expression="thinking" speech={q.stem} size="sm" />
+        <fieldset className="stagger relative flex flex-col gap-3">
+          {/* PHASE-2 §2.4: on M7 the asker is always Simin, the hesitating customer, and the
+              mentor never grades or celebrates (C-05 / S-09).
+
+              The question IS the <legend>. A <legend> is the radio group's accessible name, so
+              labelling it with a generic word left a screen-reader user hearing that word instead
+              of the question they were answering. It is also the visible ask, so it keeps the
+              speech-bubble styling Simin's voice had before. */}
+          <legend className="mb-1 w-full ps-14 text-start">
+            <span className="mb-1 block text-[11px] font-extrabold text-text-secondary">
+              {CHARACTER_NAME.simin}
+            </span>
+            <span className="block rounded-card rounded-ss-none border-2 border-mint bg-mint px-3.5 py-2.5 text-start text-sm font-bold leading-7 text-text">
+              {q.stem}
+            </span>
+          </legend>
+          {/* Simin herself is decorative here: her words are the legend above. */}
+          <div aria-hidden className="pointer-events-none absolute start-0 top-0">
+            <Character id="simin" expression="thinking" size="sm" />
           </div>
           {q.options.map((o) => {
             const checked = answers[q.id] === o.key;

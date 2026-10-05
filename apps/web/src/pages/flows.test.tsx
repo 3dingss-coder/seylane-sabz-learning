@@ -221,6 +221,15 @@ describe('M7/M8 quiz', () => {
     renderApp('/quiz/seed-pkg-formi-s1');
     fireEvent.click(await screen.findByTestId('quiz-start'));
     expect(await screen.findByText('این قسمت درباره کدام محصول است؟')).toBeInTheDocument();
+    // The <legend> IS the question, so it names the radio group. This broke once: the stem was
+    // moved into Simin's speech bubble and the legend was left as a generic «سؤال آزمون», which
+    // meant a screen-reader user tabbing into the options heard the generic label instead of the
+    // question — and Playwright's `locator('legend', { hasText: stem })` stopped matching. The
+    // bubble look is kept by styling the legend itself; Simin's name rides along in front so the
+    // group announces who is asking.
+    expect(
+      screen.getByRole('group', { name: /این قسمت درباره کدام محصول است؟/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /بعدی/ })).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/کیت درمانی فورمی/));
     fireEvent.click(screen.getByRole('button', { name: /بعدی/ }));
