@@ -237,7 +237,7 @@ function QuizFlow({
           {header}
           <CelebrationScreen
             testId="quiz-result"
-            title={COPY.quiz.packageDoneTitle}
+            title={COPY.quiz.passedAndPackageDone}
             subtitle={LINES.scoreSummary(
               toPersianDigits(result.correctCount),
               toPersianDigits(result.total),

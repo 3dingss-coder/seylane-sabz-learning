@@ -97,7 +97,9 @@ export const COPY = {
     passedTitle: 'قبول شدی! 🎉',
     failedTitle: 'این بار قبول نشدی',
     passedBadge: 'این آزمون را قبول شده‌ای ✅',
-    packageDoneTitle: 'بسته تمام شد! 🎉',
+    /** Peak result: the pass is announced first (it is what the marketer just did),
+        then the package milestone. The pass must never be swallowed by the bigger news. */
+    passedAndPackageDone: 'قبول شدی! 🎉 بسته هم کامل شد.',
     backHome: 'بازگشت به خانه',
     nextSection: 'قسمت بعد',
     backToPackage: 'بازگشت به بسته',

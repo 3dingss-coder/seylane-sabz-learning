@@ -250,6 +250,51 @@ describe('M7/M8 quiz', () => {
     expect(submit?.body).toEqual({ answers: { q1: 'a', q2: 'a' } });
   });
 
+  // The peak path (PHASE-4 §4.7 celebration) was not covered by any unit test, and the passing
+  // title was replaced wholesale by the package-complete one: on the last quiz of a package the
+  // screen said «بسته تمام شد!» and never told the marketer they had passed. Playwright caught it.
+  it('still says the quiz was passed when that same submit also completes the package', async () => {
+    mockApi({
+      ...loggedIn(),
+      'GET /v1/me/sections/seed-pkg-formi-s1': () => ({ data: sectionDetail }),
+      'GET /v1/me/quizzes/seed-pkg-formi-s1-quiz': () => ({ data: quiz }),
+      'POST /v1/me/quizzes/seed-pkg-formi-s1-quiz/attempts': () => ({
+        status: 201,
+        data: { attemptId: 'at1', attemptNumber: 1, resumed: false },
+      }),
+      'POST /v1/me/attempts/at1/submit': () => ({
+        data: {
+          attemptId: 'at1',
+          attemptNumber: 1,
+          score: 100,
+          passed: true,
+          passScore: 70,
+          correctCount: 2,
+          total: 2,
+          remainingAttempts: 0,
+          nextAction: 'package_complete',
+          packageCompleted: true,
+          pointsEarned: 100,
+          review: [
+            { questionId: 'q1', correct: true, explanation: '' },
+            { questionId: 'q2', correct: true, explanation: '' },
+          ],
+        },
+      }),
+    });
+    renderApp('/quiz/seed-pkg-formi-s1');
+    fireEvent.click(await screen.findByTestId('quiz-start'));
+    fireEvent.click(await screen.findByLabelText(/کیت درمانی فورمی/));
+    fireEvent.click(screen.getByRole('button', { name: /بعدی/ }));
+    fireEvent.click(await screen.findByLabelText(/فورمی/));
+    fireEvent.click(screen.getByTestId('quiz-submit'));
+    fireEvent.click(await screen.findByTestId('quiz-confirm'));
+    const result = await screen.findByTestId('quiz-result');
+    expect(result).toHaveTextContent('قبول شدی');
+    // …and the package milestone is still announced, not dropped in the other direction.
+    expect(result).toHaveTextContent('بسته هم کامل شد');
+  });
+
   it('opens the quiz even before the media is completed', async () => {
     mockApi({
       ...loggedIn(),
