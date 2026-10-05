@@ -18,7 +18,7 @@
     },
     {
       "id": "brand-sb-icebubble",
-      "name": "آیس بابل",
+      "name": "بابل",
       "nameLatin": "Bubble",
       "logoFile": null,
       "decision": "D27/D34"
@@ -96,7 +96,7 @@
     },
     {
       "id": "seed-pkg-bubble",
-      "title": "آموزش فوم شستشوی صورت آیس بابل",
+      "title": "آموزش فوم شستشوی صورت بابل",
       "brandId": "brand-sb-icebubble",
       "productId": "sb-370276101",
       "deadlineDays": null,
