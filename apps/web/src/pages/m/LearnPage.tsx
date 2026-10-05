@@ -16,9 +16,9 @@ import { useBehavior, useHome, usePackages } from '@/lib/queries';
 import type { PackageSummary, PackageUserStatus } from '@/lib/types';
 
 const EMPTY: Record<PackageUserStatus, string> = {
-  in_progress: 'چیزی برای ادامه نداری.',
-  new: 'آموزش جدیدی نداری.',
-  completed: 'هنوز آموزشی را تمام نکرده‌ای.',
+  in_progress: COPY.learn.noneInProgress,
+  new: COPY.learn.noneNew,
+  completed: COPY.learn.noneCompleted,
 };
 
 /** Stations follow the order the admin assigned (`pathOrder`), not the status. */
@@ -61,13 +61,17 @@ export function LearnPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="آموزش‌ها"
+        title={COPY.learn.title}
         actions={
-          <div role="group" aria-label="نوع نمایش" className="flex gap-1 rounded-pill bg-surface-2 p-1">
+          <div
+            role="group"
+            aria-label={COPY.learn.viewGroup}
+            className="flex gap-1 rounded-pill bg-surface-2 p-1"
+          >
             {(
               [
-                { id: 'path', label: 'مسیر', icon: Route },
-                { id: 'list', label: 'فهرست', icon: ListChecks },
+                { id: 'path', label: COPY.learn.viewPath, icon: Route },
+                { id: 'list', label: COPY.learn.viewList, icon: ListChecks },
               ] as const
             ).map(({ id, label, icon: Icon }) => (
               <button
@@ -95,18 +99,18 @@ export function LearnPage() {
             ordered.length === 0 ? (
               <EmptyState
                 character="seyla"
-                title="هنوز آموزشی نداری"
+                title={COPY.learn.emptyTitle}
                 description={COPY.empty.home}
-                actionText="رفتن به کارت‌های من"
+                actionText={COPY.learn.goToCards}
                 onAction={() => nav('/cards')}
               />
             ) : (
               <Reveal>
                 <PathScreen
-                packages={ordered}
-                points={user?.pointsBalance ?? home.data?.pointsBalance ?? 0}
-                streakDays={behavior.data?.state.streakDays ?? 0}
-                totalProgress={home.data?.totalProgress ?? 0}
+                  packages={ordered}
+                  points={user?.pointsBalance ?? home.data?.pointsBalance ?? 0}
+                  streakDays={behavior.data?.state.streakDays ?? 0}
+                  totalProgress={home.data?.totalProgress ?? 0}
                 />
               </Reveal>
             )
@@ -115,20 +119,20 @@ export function LearnPage() {
       ) : (
         <>
           <Tabs
-            label="وضعیت آموزش‌ها"
+            label={COPY.learn.statusLabel}
             value={tab}
             onChange={setTab}
             items={[
-              { value: 'in_progress', label: 'در حال انجام', count: counts.in_progress },
-              { value: 'new', label: 'جدید', count: counts.new },
-              { value: 'completed', label: 'تکمیل‌شده', count: counts.completed },
+              { value: 'in_progress', label: COPY.learn.inProgress, count: counts.in_progress },
+              { value: 'new', label: COPY.learn.fresh, count: counts.new },
+              { value: 'completed', label: COPY.learn.done, count: counts.completed },
             ]}
           />
           {brands.length > 1 && (
             <div
               className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
               role="group"
-              aria-label="فیلتر برند"
+              aria-label={COPY.learn.brandFilter}
             >
               {brands.map((b) => (
                 <button
@@ -158,8 +162,8 @@ export function LearnPage() {
                 <EmptyState
                   character="seyla"
                   title={EMPTY[tab]}
-                  description="می‌توانی نمای مسیر را ببینی؛ شاید ایستگاه بعدی همان‌جا باشد."
-                  actionText="نمایش مسیر"
+                  description={COPY.learn.emptyInPath}
+                  actionText={COPY.learn.showPath}
                   onAction={() => setView('path')}
                 />
               ) : (

@@ -160,6 +160,43 @@ export const COPY = {
     signOut: 'خروج از حساب',
   },
 
+  /** §6.2.9 — training list and path view (M2/M3). */
+  learn: {
+    title: 'آموزش‌ها',
+    viewGroup: 'نوع نمایش',
+    viewPath: 'مسیر',
+    viewList: 'فهرست',
+    emptyTitle: 'هنوز آموزشی نداری',
+    goToCards: 'رفتن به کارت‌های من',
+    statusLabel: 'وضعیت آموزش‌ها',
+    inProgress: 'در حال انجام',
+    fresh: 'جدید',
+    done: 'تکمیل‌شده',
+    brandFilter: 'فیلتر برند',
+    emptyInPath: 'می‌توانی نمای مسیر را ببینی؛ شاید ایستگاه بعدی همان‌جا باشد.',
+    showPath: 'نمایش مسیر',
+    noneInProgress: 'چیزی برای ادامه نداری.',
+    noneNew: 'آموزش جدیدی نداری.',
+    noneCompleted: 'هنوز آموزشی را تمام نکرده‌ای.',
+  },
+
+  /** §6.2.10 — a station (M4/M5): what this part is, and what finishes it. */
+  section: {
+    playbackFailed: 'پخش ممکن نشد. اتصال را بررسی کنید.',
+    fileNotReady: 'فایل این قسمت هنوز آماده نیست.',
+    mediaFailed:
+      'فایل صوتی یا ویدیویی بارگذاری نشد. صفحه را دوباره باز کنید یا به مدیر اطلاع دهید.',
+    youtubeBlocked: 'ویدیو بارگذاری نشد. اگر یوتیوب در دسترس نیست، اتصال خود را بررسی کنید.',
+    completedNote: 'این قسمت را کامل کردی.',
+    finished: 'دیدن/شنیدن کامل شد',
+    progress: 'پیشرفت این قسمت',
+    progressLabel: 'پیشرفت قسمت',
+    about: 'درباره این قسمت',
+    playbackSpeed: 'سرعت پخش',
+    reported: 'گزارش شد؛ ممنون',
+    reportToAdmin: 'گزارش مشکل به ادمین',
+  },
+
   /** Shared action labels — one verb, no decoration. */
   actions: {
     retry: 'تلاش دوباره',
@@ -234,6 +271,10 @@ export const LINES = {
   memberSince: (date: string) => `عضو از ${date}`,
   masteryLabel: (brand: string) => `استادی ${brand}`,
   greeting: (firstName: string) => `سلام ${firstName} 👋`,
+  sectionOf: (index: string, total: string) => `قسمت ${index} از ${total}`,
+  /* §6.0 — two sentences, not three: the live percent rides along with a dash. */
+  completionRule: (threshold: string, percent: string) =>
+    `آزمون این قسمت همیشه باز است. برای کامل شدن، حداقل ${threshold} را ببین یا بشنو — الان ${percent}`,
   overdueWarning: (count: string) => `مهلت ${count} آموزش گذشته است. هر چه زودتر تمامش کن.`,
   answeredHint: (answered: string, total: string) =>
     `به همه سؤال‌ها پاسخ بده (${answered} از ${total}).`,

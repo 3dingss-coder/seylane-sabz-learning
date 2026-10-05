@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, ClipboardCheck, Headphones, WifiOff } from 'lucide-react';
 import { Button, Card, ErrorState, ProgressBar, Skeleton, Spinner } from '@/components/ui';
+import { COPY, LINES } from '@/lib/copy/fa';
 import { PageHeader } from '@/components/common/PageHeader';
 import { ProductImage } from '@/components/common/ProductImage';
 import { QueryState } from '@/components/common/QueryState';
@@ -75,8 +76,8 @@ function Player({ d }: { d: SectionDetail }) {
         back={`/packages/${p.id}`}
         subtitle={
           <span>
-            {p.title} • قسمت {toPersianDigits(d.position.index)} از{' '}
-            {toPersianDigits(d.position.total)}
+            {p.title} •{' '}
+            {LINES.sectionOf(toPersianDigits(d.position.index), toPersianDigits(d.position.total))}
           </span>
         }
       />
@@ -88,7 +89,7 @@ function Player({ d }: { d: SectionDetail }) {
             <Card className="flex flex-col items-center gap-2 py-8 text-center">
               <WifiOff className="size-8 text-muted" aria-hidden />
               <ErrorState
-                message="پخش ممکن نشد. اتصال را بررسی کنید."
+                message={COPY.section.playbackFailed}
                 onRetry={() => void media.refetch()}
               />
             </Card>
@@ -118,26 +119,26 @@ function Player({ d }: { d: SectionDetail }) {
               }}
             />
           ) : (
-            <ErrorState message="فایل این قسمت هنوز آماده نیست." />
+            <ErrorState message={COPY.section.fileNotReady} />
           )}
 
           <Card className="flex flex-col gap-2">
             <div className="flex items-center justify-between text-sm">
               <span className="font-bold text-text">
-                {progress.completed ? 'دیدن/شنیدن کامل شد' : 'پیشرفت این قسمت'}
+                {progress.completed ? COPY.section.finished : COPY.section.progress}
               </span>
               <span className="text-text-secondary">
                 {clock(pos)} / {clock(dur)}
               </span>
             </div>
-            <ProgressBar value={progress.percent} label="پیشرفت قسمت" />
+            <ProgressBar value={progress.percent} label={COPY.section.progressLabel} />
             <p className="text-xs text-text-secondary">
               {progress.completed ? (
                 <span className="inline-flex items-center gap-1 font-bold text-success-fg">
-                  <CheckCircle2 className="size-4" aria-hidden /> این قسمت را کامل کردی.
+                  <CheckCircle2 className="size-4" aria-hidden /> {COPY.section.completedNote}
                 </span>
               ) : (
-                `آزمون این قسمت همیشه باز است. برای کامل شدن قسمت، حداقل ${faPercent(d.completionThreshold)} را ببین یا بشنو. (${faPercent(progress.percent)})`
+                LINES.completionRule(faPercent(d.completionThreshold), faPercent(progress.percent))
               )}
             </p>
           </Card>
@@ -151,22 +152,27 @@ function Player({ d }: { d: SectionDetail }) {
               onClick={() => nav(`/quiz/${s.id}`)}
               data-testid="start-quiz"
             >
-              شروع آزمون
+              {COPY.quiz.start}
             </Button>
           ) : s.quizPassed && d.nextSectionId ? (
-            <Button size="lg" block variant="cta" onClick={() => nav(`/sections/${d.nextSectionId}`)}>
-              قسمت بعد
+            <Button
+              size="lg"
+              block
+              variant="cta"
+              onClick={() => nav(`/sections/${d.nextSectionId}`)}
+            >
+              {COPY.quiz.nextSection}
             </Button>
           ) : s.quizPassed ? (
             <Button size="lg" block variant="secondary" onClick={() => nav(`/packages/${p.id}`)}>
-              بازگشت به بسته
+              {COPY.quiz.backToPackage}
             </Button>
           ) : null}
         </div>
         <aside className="mt-4 flex flex-col gap-3 lg:mt-0 lg:w-80">
           {s.description && (
             <Card>
-              <h2 className="mb-1 text-sm font-bold text-text">درباره این قسمت</h2>
+              <h2 className="mb-1 text-sm font-bold text-text">{COPY.section.about}</h2>
               <p className="text-sm leading-7 text-text-secondary">{s.description}</p>
             </Card>
           )}
@@ -254,7 +260,7 @@ function FileView({
     <div className="flex flex-col gap-2">
       {failed ? (
         <Card role="alert" className="py-6 text-center text-danger-fg" data-testid="media-error">
-          فایل صوتی یا ویدیویی بارگذاری نشد. صفحه را دوباره باز کنید یا به مدیر اطلاع دهید.
+          {COPY.section.mediaFailed}
         </Card>
       ) : audio ? (
         <Card tone="brand" className="flex flex-col items-center gap-4 py-6">
@@ -289,7 +295,11 @@ function FileView({
           data-testid="media"
         />
       )}
-      <div className="flex items-center gap-1 self-end" role="group" aria-label="سرعت پخش">
+      <div
+        className="flex items-center gap-1 self-end"
+        role="group"
+        aria-label={COPY.section.playbackSpeed}
+      >
         {[1, 1.25, 1.5].map((r) => (
           <button
             key={r}
@@ -398,7 +408,7 @@ function YouTubeView({
       {state === 'error' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface p-4 text-center text-sm text-text">
           <WifiOff className="size-8 text-muted" aria-hidden />
-          ویدیو بارگذاری نشد. اگر یوتیوب در دسترس نیست، اتصال خود را بررسی کنید.
+          {COPY.section.youtubeBlocked}
           <button
             type="button"
             className="min-h-12 px-3 font-bold text-primary disabled:text-muted-fg"
@@ -408,7 +418,7 @@ function YouTubeView({
               track('youtube_blocked_reported', { videoId });
             }}
           >
-            {reportedYt ? 'گزارش شد؛ ممنون' : 'گزارش مشکل به ادمین'}
+            {reportedYt ? COPY.section.reported : COPY.section.reportToAdmin}
           </button>
         </div>
       )}
