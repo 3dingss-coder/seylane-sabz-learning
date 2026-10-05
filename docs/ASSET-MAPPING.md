@@ -20,7 +20,7 @@
 | 9 | pixel.png | پیکسل | brand-sb-5 | brands/brand-sb-5/logo.png | BrandLogo: brand grid, package/product header, admin content tree, marketer package cards |
 | 10 | mislip.png | میس لیپ | brand-sb-12 | brands/brand-sb-12/logo.png | BrandLogo: brand grid, package/product header, admin content tree, marketer package cards |
 | 11 | icebal.png | آیس بال | brand-sb-10 | brands/brand-sb-10/logo.png | BrandLogo: brand grid, package/product header, admin content tree, marketer package cards |
-| 12 | kalamin.webp | کالمین | brand-sb-11 | brands/brand-sb-11/logo.webp | BrandLogo: brand grid, package/product header, admin content tree, marketer package cards |
+| 12 | kalamin.webp | کلامین | brand-sb-11 | brands/brand-sb-11/logo.webp | BrandLogo: brand grid, package/product header, admin content tree, marketer package cards |
 
 ## Product images
 
@@ -263,7 +263,7 @@
 | 235 | 280242103_یخ صورت جوان کننده ماچا آیس بال.png | آیس بال | محلول جوان کننده ماچا آیس بال | sb-280242103 | products/sb-280242103/main.png | product card, product page header, package cover fallback, admin product list |
 | 236 | 280242101_یخ صورت آبرسان آیس بال.png | آیس بال | ژل آبرسان صورت آیس بال | sb-280242101 | products/sb-280242101/main.png | product card, product page header, package cover fallback, admin product list |
 | 237 | 280243102_یخ صورت کلاژن لیفتینگ آیس بال.png | آیس بال | ژل لیفتینگ آیس بال | sb-280243102 | products/sb-280243102/main.png | product card, product page header, package cover fallback, admin product list |
-| 238 | 330128101_کلاژن بانک کلامین حجم 125 میلی‌ لیتر.png | کالمین | کالژن بانک امگا 3 - 125 میل کالمین | sb-330128101 | products/sb-330128101/main.png | product card, product page header, package cover fallback, admin product list |
+| 238 | 330128101_کلاژن بانک کلامین حجم 125 میلی‌ لیتر.png | کلامین | کالژن بانک امگا 3 - 125 میل کلامین | sb-330128101 | products/sb-330128101/main.png | product card, product page header, package cover fallback, admin product list |
 
 ## Unused logo files (no active brand in the catalog — needs client decision)
 
