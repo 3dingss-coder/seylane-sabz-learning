@@ -23,7 +23,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
-import { MascotAvatar } from '@/components/brand/MascotAvatar';
+import { Character } from '@/components/character/Character';
 import { CelebrationScreen } from '@/components/learning/CelebrationScreen';
 import { playMoment } from '@/lib/sound';
 import { QueryState } from '@/components/common/QueryState';
@@ -263,11 +263,22 @@ function QuizFlow({
           data-testid="quiz-result"
         >
           {result.passed && <Confetti />}
-          <MascotAvatar
-            size={72}
-            className={result.passed ? 'animate-pop' : ''}
-            alt={result.passed ? 'سیلا خوشحال' : 'سیلا در حال فکر کردن'}
-          />
+          {result.passed ? (
+            /* a pass = the customer was convinced. Simin says it; Seyla only celebrates. */
+            <div className="flex items-end justify-center gap-1">
+              <Character id="simin" expression="happy" size="sm" speech="قانع شدم." />
+              <Character id="seyla" expression="celebrate" mastery={1} size="lg" />
+            </div>
+          ) : (
+            /* a fail is never shown on the customer's face — Kamran teaches, in an
+               empathy voice (C-06 fail rule). Simin never says «نتونستم». */
+            <Character
+              id="kamran"
+              expression="empathy"
+              size="lg"
+              speech="بذار یه بار دیگه با هم مرور کنیم."
+            />
+          )}
           <ProgressRing
             value={result.score}
             size={120}
@@ -451,10 +462,9 @@ function QuizFlow({
               (duplicating the stem would double-announce it to screen readers). */}
           <legend className="sr-only">سؤال آزمون</legend>
           <div className="mb-1 flex items-start gap-2">
-            <MascotAvatar size={44} className="mt-1 shrink-0" alt="سیلا" />
-            <p className="relative flex-1 rounded-card rounded-ss-none bg-mint px-4 py-3 text-base font-bold leading-8 text-text">
-              {q.stem}
-            </p>
+            {/* PHASE-2 §2.4: on M7 the asker is always Simin, the hesitating customer.
+                The mentor never grades and never celebrates (C-05 / S-09). */}
+            <Character id="simin" expression="thinking" speech={q.stem} size="sm" />
           </div>
           {q.options.map((o) => {
             const checked = answers[q.id] === o.key;

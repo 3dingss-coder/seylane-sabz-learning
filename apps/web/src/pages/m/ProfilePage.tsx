@@ -12,6 +12,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Character } from '@/components/character/Character';
 import { PushOptIn } from '@/components/common/PushOptIn';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -36,6 +37,10 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
   const behavior = useBehavior();
   const streak = behavior.data?.state.streakDays ?? 0;
   const mastery = (behavior.data?.signals.mastery ?? []).filter((m) => m.percent > 0);
+  /* C-07: Seyla's crest is the mastery meter — 0 feathers until real progress exists. */
+  const topMastery = mastery.reduce((mx, m) => Math.max(mx, m.percent), 0);
+  const crest: 0 | 1 | 2 | 3 =
+    topMastery >= 80 ? 3 : topMastery >= 50 ? 2 : topMastery > 0 ? 1 : 0;
   const [sound, setSound] = useSoundSetting();
   if (!user) return null;
 
@@ -99,7 +104,13 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
       </Card>
       {mastery.length > 0 && (
         <Card chunky className="flex flex-col gap-3">
-          <h2 className="text-base font-bold text-text">استادی برندها</h2>
+          <div className="flex items-center gap-3">
+            <Character id="seyla" mastery={crest} size="sm" />
+            <h2 className="text-base font-bold text-text">استادی برندها</h2>
+          </div>
+          <p className="text-xs leading-6 text-text-secondary">
+            تاج سیلا با استادی بلندتر می‌شود — از {toPersianDigits(0)} تا {toPersianDigits(3)} پَر.
+          </p>
           <div className="flex flex-col gap-3">
             {mastery.map((m) => (
               <div key={m.key} className="flex flex-col gap-1">

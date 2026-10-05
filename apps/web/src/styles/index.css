@@ -672,7 +672,13 @@ html:not([data-motion])
     .animate-slide-in-end,
     .animate-pop,
     .animate-pulse-dot,
-    .animate-float
+    .animate-float,
+    .animate-bob,
+    .animate-wiggle,
+    .animate-settle,
+    .animate-slide-up,
+    .animate-grow-y,
+    .animate-spot
   ) {
   animation: none;
 }

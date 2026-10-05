@@ -10,6 +10,7 @@ import {
   StatusBadge,
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Character } from '@/components/character/Character';
 import { ProductImage } from '@/components/common/ProductImage';
 import { QueryState } from '@/components/common/QueryState';
 import { MentorLauncher } from '@/components/learning/MentorSheet';
@@ -53,6 +54,13 @@ export function PackagePage() {
                 }
               />
               <Card className="flex gap-4 bg-soft-brand">
+                {/* M5: Raha owns deep product knowledge — one plain line, no hype (§2.6) */}
+                <Character
+                  id="raha"
+                  expression="idle"
+                  size="sm"
+                  speech={`این بسته ${toPersianDigits(live.length)} ایستگاه داره.`}
+                />
                 <ProductImage
                   src={p.product?.imageUrl ?? p.brand?.logoUrl}
                   alt={p.product?.name ?? p.brand?.name ?? p.title}

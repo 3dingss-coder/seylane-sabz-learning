@@ -13,7 +13,8 @@ import {
 } from '@/components/ui';
 import { QueryState, StaleBanner } from '@/components/common/QueryState';
 import { Reveal } from '@/components/common/Reveal';
-import { MascotAvatar } from '@/components/brand/MascotAvatar';
+import { Character } from '@/components/character/Character';
+import type { Expression } from '@/components/character/types';
 import { ProductImage } from '@/components/common/ProductImage';
 import { PackageCard } from '@/components/learning/PackageCard';
 import { useAuth } from '@/lib/auth';
@@ -40,6 +41,19 @@ export function HomePage() {
     queryFn: ({ signal }) => api.get<Nudge[]>('/me/mentor/nudges', signal),
   });
   const topNudge = nudges.data?.[0];
+
+  /* M3 §2.4: Seyla is on the home card, and her FACE is the state of the real deadline —
+     not decoration. No deadline → idle; under 72h → nudge; under 24h → worried. */
+  const deadlineAt = home.data?.nextItem?.deadlineAt;
+  const deadlineMs = deadlineAt ? Date.parse(deadlineAt) - Date.now() : null;
+  const seylaMood: Expression =
+    deadlineMs == null
+      ? 'idle'
+      : deadlineMs < 86_400_000
+        ? 'worried'
+        : deadlineMs < 259_200_000
+          ? 'nudge'
+          : 'happy';
 
   return (
     <div className="stagger flex flex-col gap-4">
@@ -156,7 +170,7 @@ export function HomePage() {
               to={topNudge?.actionRef ?? '/mentor'}
               className="pressable flex items-center gap-3 rounded-card bg-mint p-4 shadow-sm"
             >
-              <MascotAvatar size={72} className="animate-wiggle shrink-0" alt="سیلا" />
+              <Character id="seyla" expression={seylaMood} size="md" />
               <span className="relative min-w-0 flex-1 rounded-card rounded-ss-none bg-surface px-4 py-3 text-sm font-bold leading-7 text-text shadow-xs">
                 {topNudge?.message ??
                   'دربارهٔ هر محصول، برند یا اعتراض مشتری سؤال داری؟ از سیلا بپرس.'}
