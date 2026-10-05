@@ -9,7 +9,10 @@ import type {
   AdminTeam,
   AuditEntry,
   ContentTree,
+  KnowledgeStats,
   Me,
+  MentorQuality,
+  MentorReport,
   PolicyData,
 } from '@/lib/types';
 import { marketer } from '@/test/fixtures';
@@ -316,6 +319,100 @@ describe('admin: everything understandable at a glance', () => {
     );
     const patch = calls.find((c) => c.key === 'PATCH /v1/admin/quizzes/qz1');
     expect(patch?.body).toEqual({ passScore: null, maxAttempts: null });
+  });
+
+  /** Typed on purpose — the mentor tab reads nested nullable fields, and a partial
+   *  literal would let `satisfaction: null` pass as `undefined` and skip the guard. */
+  const mentorReport = (over: Partial<MentorReport> = {}): MentorReport => ({
+    days: 30,
+    replies: 12,
+    up: 0,
+    down: 0,
+    satisfaction: null,
+    byOutcome: { answered: 9, unknown: 3 },
+    users: 4,
+    ...over,
+  });
+
+  const mentorQuality = (over: Partial<MentorQuality> = {}): MentorQuality => ({
+    days: 30,
+    answers: {
+      total: 12,
+      answered: 9,
+      unknown: 3,
+      blocked: 0,
+      fallback: 0,
+      unknownRate: 25,
+      avgLatencyMs: 800,
+      spoken: 0,
+    },
+    providers: [],
+    voice: {
+      turns: 0,
+      sessions: 0,
+      minutes: 0,
+      avgSttMs: null,
+      avgAnswerMs: null,
+      avgTtsMs: null,
+      ttsFallback: 0,
+    },
+    behavior: { interventions: 0, byRule: {}, escalations: 0 },
+    satisfaction: { up: 0, down: 0, score: null },
+    knowledge: { live: 0, embedded: 0, builtAt: null, embeddingProvider: null },
+    health: [],
+    ...over,
+  });
+
+  const knowledgeStats: KnowledgeStats = {
+    builtAt: null,
+    itemCount: 0,
+    embeddingProvider: null,
+    byKind: {},
+    extractorVersion: 'v1',
+    live: 0,
+    embedded: 0,
+    archived: 0,
+    media: {
+      sections: { total: 0, withTranscript: 0, extracted: 0 },
+      products: { total: 0, withImage: 0, extracted: 0 },
+      failing: 0,
+      lastExtractAt: null,
+    },
+  };
+
+  /** The mentor tab fires all three of these; a missing one renders an error state. */
+  const mentorRoutes = (r: MentorReport, mq = mentorQuality()) => ({
+    ...asAdmin(),
+    'GET /v1/admin/reports/mentor': () => ({ data: r }),
+    'GET /v1/admin/reports/mentor-quality': () => ({ data: mq }),
+    'GET /v1/admin/knowledge': () => ({ data: knowledgeStats }),
+  });
+
+  const openMentorTab = async () => {
+    renderApp('/admin/reports');
+    // Tabs renders role="tab" inside a role="tablist", not a plain button
+    fireEvent.click(await screen.findByRole('tab', { name: 'کیفیت منتور' }));
+  };
+
+  it('mentor report says «بدون بازخورد» when satisfaction is null, not a NaN percentage', async () => {
+    mockApi(mentorRoutes(mentorReport()));
+    await openMentorTab();
+    expect(await screen.findByText('بدون بازخورد')).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
+
+  it('mentor report names a real satisfaction percentage when there is feedback', async () => {
+    mockApi(mentorRoutes(mentorReport({ up: 3, down: 1, satisfaction: 75 })));
+    await openMentorTab();
+    expect(await screen.findByText('رضایت ۷۵٪')).toBeInTheDocument();
+  });
+
+  it('mentor outcomes translate known keys and fall back to the raw key for unknown ones', async () => {
+    mockApi(mentorRoutes(mentorReport({ byOutcome: { answered: 9, escalated: 2 } })));
+    await openMentorTab();
+    expect(await screen.findByText('پاسخ داده شد')).toBeInTheDocument();
+    // no Persian label exists for this key, so the raw server key must survive
+    expect(await screen.findByText('escalated')).toBeInTheDocument();
   });
 
   it('dashboard shows the 4-step publish guide and the «انتشار آموزش جدید» shortcut', async () => {
