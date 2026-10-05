@@ -25,7 +25,8 @@ const BUDGETS = {
   soundHaptics: 90_000, // §7.3 — PHASE-5 cues are synthesised, so this stays near zero
   cssGzip: 16_000, // §7.3 — the whole shipped stylesheet, compressed
   initialJsGzip: 170_000, // entry chunk; measured 147.6 KB when this gate was written
-  fontWoff2: 60_000, // §7.3 — self-hosted Vazirmatn RD subset
+  fontWoff2: 60_000, // §1.8 DoD — the self-hosted Vazirmatn RD subset
+  fontWoff2Total: 160_000, // every woff2 in dist, incl. the unused fontsource fallbacks
 };
 
 const results = [];
@@ -144,8 +145,26 @@ function fontBytes(dir) {
   }
   return total;
 }
-const fonts = fontBytes(join(WEB, 'public')) + fontBytes(join(WEB, 'src/assets'));
-check('self-hosted font files', fonts, BUDGETS.fontWoff2, fonts ? 'largest subset must stay under budget' : 'no self-hosted font yet (PHASE-1 open item)');
+/* Measure the SHIPPED artifact. Scanning public/ + src/assets reported 0 B while the build
+   actually bundles 100 KB+ of fontsource subsets into dist/assets — a check that passes
+   vacuously is worse than no check. dist/ is where the truth is. */
+const distFonts = fontBytes(join(WEB, 'dist'));
+const rdFonts = fontBytes(join(WEB, 'dist/fonts'));
+check(
+  'Vazirmatn RD subset (shipped)',
+  rdFonts,
+  BUDGETS.fontWoff2,
+  rdFonts
+    ? 'PHASE-1 §1.8 DoD: the self-hosted RD subset stays under 60 KB'
+    : 'MISSING — public/fonts/vazirmatn-rd-var.woff2 did not reach dist',
+);
+check(
+  'all shipped webfonts',
+  distFonts,
+  BUDGETS.fontWoff2Total,
+  'dist/**/*.woff2 — only RD (Persian) and the latin subset are ever fetched at runtime; ' +
+    'the arabic fallback subset stays on disk as the safety net',
+);
 
 // ── 7. no raster images on the learning surfaces (LCP) ─────────────────────────────────
 function rasterInLearning() {

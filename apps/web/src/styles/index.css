@@ -4,6 +4,22 @@
 @import '@fontsource-variable/vazirmatn';
 @import 'tailwindcss';
 
+/* ── PHASE-1 §1.8 DoD — self-hosted Vazirmatn RD, SIL OFL 1.1 (public/fonts/OFL.txt) ───────
+   One *variable* Non-Latin file: 49,068 B covers every weight the app uses (400/500/600/700/
+   800 — 192 × font-bold, 32 × font-extrabold, 19 × font-medium) instead of five ~51 KB
+   statics or the 112 KB full variable. `unicode-range` is the Arabic/Persian block only, so
+   Latin keeps resolving to the fontsource layer below it — that is also why this file is
+   49 KB and not 112 KB. `font-display: swap` → text is never invisible (§7.2 rule 4).
+   Not a CDN: the file ships from public/fonts, per §22.4 (Iran network constraints). */
+@font-face {
+  font-family: 'Vazirmatn RD';
+  src: url('/fonts/vazirmatn-rd-var.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+200C-200F, U+FB50-FDFF, U+FE70-FEFF;
+}
+
 @theme {
   /* §16.2 Color System */
   /* D40: #1B8A5A → #177A50 so white-on-primary meets WCAG AA (4.35 → 5.34:1). */
@@ -87,10 +103,11 @@
   --color-danger-lip: #8f1d1d;
   --lip-danger: 0 4px 0 var(--color-danger-lip);
 
-  /* §16.3 Typography — Vazirmatn self-hosted; system fallback if font fails to load */
+  /* §16.3 Typography — Vazirmatn **RD** (Round-Dots) is the display face for Persian text;
+     'Vazirmatn Variable' (fontsource) stays as the fallback layer and covers Latin. */
   --font-sans:
-    'Vazirmatn Variable', Vazirmatn, Tahoma, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Noto Sans Arabic', sans-serif;
+    'Vazirmatn RD', 'Vazirmatn Variable', Vazirmatn, Tahoma, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Noto Sans Arabic', sans-serif;
   --font-latin: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* 12/14/16/18/20/24/30 */
   --text-xs: 0.75rem;

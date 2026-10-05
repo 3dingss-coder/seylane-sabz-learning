@@ -171,7 +171,11 @@ Lucide باقی می‌ماند (۲۴px outline، `rtl-mirror` برای جهت�
 - [ ] `tokens/seylane.tokens.json` و `tokens/seylane-theme.css` در ریپو (انجام شد)
 - [x] `python3 docs/design-system/tools/contrast.py` → exit 0 (انجام شد — v3: **۱۸ جفت، ۰ خطا**، `tools/CONTRAST-REPORT.txt`). تعداد ۳۰ جفت محقق نشد: جفت‌های اضافه نیازمند کاراکترهای فاز ۲ هستند که هنوز ساخته نشده‌اند.
 - [x] توکن‌های جدید در `@theme` اضافه شدند **بدون حذف هیچ توکن موجود**؛ `npm run typecheck && npm test` سبز (۳۲۹ تست)
-- [ ] صفحهٔ `/gallery` نمونهٔ هر توکن جدید را نشان دهد — **باز**
+- [x] صفحهٔ `/gallery` نمونهٔ هر توکن جدید را نشان دهد — بخش «بنیادهای توکن (فاز ۱)» اضافه شد: ۱۰ رنگ نقش‌دار با مقدار، مقیاس تایپ ۱۲→۴۰px، ۶ شعاع (۱۴/۱۶/۲۰/۲۴/۲۸/∞) و ۴ لیپ، همه از همان `@theme` (بدون هگز در کامپوننت — گیت `check:hex` پاس).
 - [ ] axe روی همهٔ صفحات بازاریاب در light و dark بدون violation
 - [ ] Lighthouse ≥۹۰ حفظ شود (لبه جای blur را می‌گیرد → انتظار بهبود، نه افت)
-- [ ] Vazirmatn RD self-host شده باشد (woff2، زیر ۶۰KB، `font-display: swap`) — نه از CDN خارجی (محدودیت محیط ایران، spec §22.4)
+- [x] Vazirmatn RD self-host شده باشد (woff2، زیر ۶۰KB، `font-display: swap`) — نه از CDN خارجی (محدودیت محیط ایران، spec §22.4)
+      - فایل: `apps/web/public/fonts/vazirmatn-rd-var.woff2` — **۴۹٬۰۶۸ B** (متغیر، Non-Latin: یک فایل برای همهٔ وزن‌ها ۴۰۰–۸۰۰، به‌جای ۵ فایل ~۵۱KB یا ۱۱۲KB کامل).
+      - `@font-face` با `font-display: swap` و `unicode-range` بلوک عربی/فارسی؛ لاتین به لایهٔ fontsource می‌افتد (در CSS بیلد شده تأیید شد).
+      - مجوز: SIL OFL 1.1 — `public/fonts/OFL.txt` + `AUTHORS.txt` کنار فایل.
+      - گیت `check:budget` اصلاح شد: قبلاً `public/`+`src/assets` را می‌شمرد و **۰ B** گزارش می‌داد در حالی که بیلد واقعاً ۱۰۲٬۶۹۲ B فونت ship می‌کرد. حالا `dist/**/*.woff2` را می‌شمارد: RD **۴۹٬۰۶۸** ≤ ۶۰٬۰۰۰ و کل فونت‌ها **۱۵۱٬۷۶۰** ≤ ۱۶۰٬۰۰۰.
