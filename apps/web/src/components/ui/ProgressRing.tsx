@@ -98,12 +98,13 @@ export function ProgressBar({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={pct}
-      className={cn('h-2 w-full overflow-hidden rounded-full bg-border/80', className)}
+      className={cn('h-4 w-full overflow-hidden rounded-pill bg-surface-2 shadow-xs', className)}
     >
       <div
         className={cn(
-          'h-full w-full rounded-full transition-transform duration-700 ease-soft',
-          pct >= 100 ? 'bg-success' : 'bg-primary bg-brand-gradient',
+          // v4: thick bar, vivid leaf fill with a top highlight (PHASE-1 leaf/glow)
+          'h-full w-full rounded-pill transition-transform duration-700 ease-soft [box-shadow:inset_0_3px_0_rgb(255_255_255/0.35)]',
+          pct >= 100 ? 'bg-success' : 'bg-leaf',
         )}
         // RTL: the fill is anchored to the right edge, so the unfilled part slides out to the right
         style={{ transform: `translateX(${document.dir === 'ltr' ? -rest : rest}%)` }}

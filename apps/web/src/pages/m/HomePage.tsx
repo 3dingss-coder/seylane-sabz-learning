@@ -6,7 +6,6 @@ import {
   CoinChip,
   CountdownChip,
   EmptyState,
-  StreakChip,
   PackageCardSkeleton,
   ProgressRing,
   Skeleton,
@@ -20,7 +19,7 @@ import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { faDuration } from '@/lib/format';
-import { qk, useBehavior, useHome } from '@/lib/queries';
+import { qk, useHome } from '@/lib/queries';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { track } from '@/lib/telemetry';
@@ -40,18 +39,12 @@ export function HomePage() {
     queryFn: ({ signal }) => api.get<Nudge[]>('/me/mentor/nudges', signal),
   });
   const topNudge = nudges.data?.[0];
-  // Real streak from the behaviour endpoint — no invented gamification numbers (PHASE-3).
-  const streak = useBehavior().data?.state.streakDays ?? 0;
 
   return (
     <div className="stagger flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <MascotAvatar size={52} />
-        <div className="min-w-0">
-          <p className="text-sm text-text-secondary">سلام {user?.name.split(' ')[0]} 👋</p>
-          <h1 className="text-2xl font-extrabold text-text">کار بعدی تو</h1>
-        </div>
-        {streak > 0 && <StreakChip count={streak} className="ms-auto shrink-0" />}
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-text-secondary">سلام {user?.name.split(' ')[0]} 👋</p>
+        <h1 className="display text-3xl text-text">کار بعدی تو</h1>
       </div>
       <StaleBanner
         show={home.isError && home.data !== undefined}
@@ -105,10 +98,10 @@ export function HomePage() {
                   <ProductImage
                     src={d.nextItem.imageUrl}
                     alt={d.nextItem.packageTitle}
-                    className="size-20 border-white/20 shadow-md"
+                    className="size-24 rounded-card border-white/20 shadow-md"
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-base font-bold leading-7 text-white">
+                    <p className="display line-clamp-2 text-xl leading-8 text-white">
                       {d.nextItem.packageTitle}
                     </p>
                     <p className="mt-1 flex items-center gap-1 text-sm text-white/85">
@@ -157,15 +150,17 @@ export function HomePage() {
               </Card>
             )}
 
-            {topNudge && (
-              <Link
-                to={topNudge.actionRef ?? '/mentor'}
-                className="pressable flex items-start gap-3 rounded-card border border-info/30 bg-info-light p-3 text-sm text-text hover:shadow-sm"
-              >
-                <Sparkles className="mt-0.5 size-5 shrink-0 text-info" aria-hidden />
-                <span>{topNudge.message}</span>
-              </Link>
-            )}
+            {/* v4: the mascot's real job — a coach that speaks, not a logo in the header. */}
+            <Link
+              to={topNudge?.actionRef ?? '/mentor'}
+              className="pressable flex items-center gap-3 rounded-card bg-mint p-4 shadow-sm"
+            >
+              <MascotAvatar size={72} className="shrink-0" alt="سیلا" />
+              <span className="relative min-w-0 flex-1 rounded-card rounded-ss-none bg-surface px-4 py-3 text-sm font-bold leading-7 text-text shadow-xs">
+                {topNudge?.message ??
+                  'دربارهٔ هر محصول، برند یا اعتراض مشتری سؤال داری؟ از سیلا بپرس.'}
+              </span>
+            </Link>
 
             <Card chunky className="flex flex-col gap-3">
               <div className="flex items-center gap-4">
@@ -200,7 +195,7 @@ export function HomePage() {
 
             <section aria-labelledby="my-trainings" className="flex flex-col gap-3">
               <div className="flex items-center justify-between">
-                <h2 id="my-trainings" className="text-base font-bold text-text">
+                <h2 id="my-trainings" className="display text-xl text-text">
                   آموزش‌های من
                 </h2>
                 <Link

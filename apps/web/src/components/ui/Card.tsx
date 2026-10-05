@@ -22,17 +22,19 @@ export function Card({
   return (
     <div
       className={cn(
-        'border',
+        // v4: no hairline gray border — depth is the hard lip from --shadow-sm/--shadow-md
+        'border-0',
         tone === 'hero'
-          ? 'rounded-hero shadow-md [will-change:transform]'
+          ? 'rounded-hero shadow-lg [will-change:transform]'
           : 'rounded-card shadow-sm',
-        tone === 'brand' && 'border-primary/20 bg-soft-brand bg-primary-light',
-        // v3: the page hero sits on a deep lip (PHASE-4 §4.2)
-        tone === 'hero' && 'bg-hero border-transparent [box-shadow:var(--lip-lg)]',
-        tone === 'default' && 'border-border bg-surface',
-        padded && 'p-4',
+        tone === 'brand' && 'bg-soft-brand bg-primary-light',
+        // the page hero sits on the deepest lip (PHASE-4 §4.2)
+        tone === 'hero' && 'bg-hero [box-shadow:var(--lip-lg)]',
+        tone === 'default' && 'bg-surface',
+        padded && 'p-5',
         chunky && 'border-2 border-chunk-border',
-        interactive && 'pressable hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md',
+        interactive &&
+          'pressable transition-transform hover:-translate-y-0.5 active:translate-y-0 active:[box-shadow:none]',
         className,
       )}
       {...rest}

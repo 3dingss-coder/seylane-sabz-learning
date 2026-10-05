@@ -36,10 +36,10 @@ export function Input({ label, error, hint, icon, ltr, id, className, ...rest }:
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
           className={cn(
-            'min-h-12 w-full rounded-input border bg-surface px-3.5 text-base text-text placeholder:text-muted-fg',
-            'shadow-xs transition-[border-color,box-shadow] duration-150 hover:border-muted focus:border-info focus:outline-none focus:ring-4 focus:ring-info/15',
+            'min-h-13 w-full rounded-input border-2 bg-surface px-4 text-base text-text placeholder:text-muted-fg',
+            'shadow-xs transition-[border-color,box-shadow] duration-150 hover:border-muted focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15',
             'disabled:cursor-not-allowed disabled:opacity-40',
-            error ? 'animate-shake border-danger' : 'border-border',
+            error ? 'animate-shake border-danger' : 'border-chunk-border',
             icon ? 'ps-10' : null,
             ltr && 'text-left',
             className,

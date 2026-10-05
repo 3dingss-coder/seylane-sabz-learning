@@ -18,7 +18,8 @@
   --color-text-secondary: #475569;
   --color-muted: #94a3b8;
   --color-border: #e2e8f0;
-  --color-background: #f8fafc;
+  /* v4: mint canvas — white cards read as objects on a light-green field (60/30/10). */
+  --color-background: #f1f9f4;
   --color-surface: #ffffff;
   /* tinted backgrounds for status surfaces (derived, same hues) */
   --color-success-light: #dcfce7;
@@ -93,23 +94,26 @@
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
-  --text-4xl: 2.25rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.125rem;
+  --text-4xl: 2.5rem;
 
   /* §16.4 Radius: 8 input / 12 card / 16 modal */
-  --radius-input: 8px;
-  --radius-card: 12px;
-  --radius-modal: 16px;
-  --radius-hero: 20px;
+  --radius-input: 14px;
+  --radius-card: 20px;
+  --radius-modal: 24px;
+  --radius-hero: 28px;
+  --radius-btn: 16px;
 
   /* §16.4 Shadow: sm / md / lg (soft) — layered so elevation reads as depth, not as a dark halo */
-  --shadow-xs: 0 1px 1px rgb(15 23 42 / 0.04);
-  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 1px rgb(15 23 42 / 0.03);
-  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
-  --shadow-lg: 0 12px 32px -8px rgb(15 23 42 / 0.16), 0 4px 8px -4px rgb(15 23 42 / 0.06);
-  --shadow-brand: 0 8px 20px -6px rgb(23 122 80 / 0.45);
+  /* v4: elevation = a hard bottom lip, not a gray blur. Every card/button/input gets
+     physical depth; press removes the lip and translates 2px (Duolingo's "push"). */
+  --shadow-xs: 0 1px 0 var(--color-chunk-border);
+  --shadow-sm: 0 2px 0 var(--color-chunk-border);
+  --shadow-md: 0 4px 0 var(--color-chunk-border);
+  --shadow-lg: 0 6px 0 var(--color-chunk-border), 0 16px 32px -12px rgb(15 23 42 / 0.22);
+  --shadow-brand: 0 4px 0 var(--color-green-lip);
   --shadow-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.18);
 
   /* ---- Motion tokens: 120–300ms for interaction, ≤ 600ms for page entry; only transform/opacity ---- */
@@ -329,11 +333,11 @@
     --color-accent-light: #33250a;
     --color-accent-fg: #fcd34d;
     --color-scrim: rgb(2 8 5 / 0.62);
-    --shadow-xs: 0 1px 1px rgb(0 0 0 / 0.3);
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
-    --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.5);
-    --shadow-lg: 0 16px 36px -8px rgb(0 0 0 / 0.65);
-    --shadow-brand: 0 8px 20px -6px rgb(62 207 142 / 0.35);
+    --shadow-xs: 0 1px 0 rgb(0 0 0 / 0.5);
+    --shadow-sm: 0 2px 0 rgb(0 0 0 / 0.55);
+    --shadow-md: 0 4px 0 rgb(0 0 0 / 0.6);
+    --shadow-lg: 0 6px 0 rgb(0 0 0 / 0.6), 0 16px 32px -12px rgb(0 0 0 / 0.7);
+    --shadow-brand: 0 4px 0 rgb(4 36 26 / 0.9);
     --shadow-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
 }
@@ -392,6 +396,12 @@
   [dir='rtl'] .rtl-mirror {
     transform: scaleX(-1);
   }
+  /* v4 display type: the heaviest Vazirmatn weight for screen titles and big numbers.
+     No negative tracking — it breaks Persian letter joining (see @layer base). */
+  .display {
+    font-weight: 900;
+    line-height: 1.35;
+  }
   /* Latin digits for countdowns/percentages (§16.3) */
   .num-latin {
     font-family: var(--font-latin);
@@ -424,16 +434,10 @@
      scrolls/animates beneath it and cost us >1s of main-thread time on throttled phones
      (Lighthouse perf 97 -> 70). The real blur is enabled from the desktop breakpoint up. */
   .glass {
-    background-color: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    /* v4: solid header. Frosted glass read as "enterprise dashboard", not a learning app. */
+    background-color: var(--color-surface);
+    box-shadow: 0 2px 0 var(--color-border);
   }
-  @media (min-width: 1024px) and (hover: hover) {
-    .glass {
-      background-color: color-mix(in srgb, var(--color-surface) 78%, transparent);
-      -webkit-backdrop-filter: blur(12px);
-      backdrop-filter: blur(12px);
-    }
-  }
-  /* brand hero: deep green gradient + faint light bloom (text on it is white ≥ 7:1) */
   .bg-hero {
     background-color: var(--color-primary-800);
     background-image:

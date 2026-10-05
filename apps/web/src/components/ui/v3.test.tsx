@@ -12,11 +12,14 @@ describe('design v3 additions', () => {
     expect(btn.className).toContain('[box-shadow:var(--lip-md)]');
   });
 
-  it('existing primary variant is unchanged', () => {
+  it('primary is a flat filled key with a 3D lip (v4 replaced the soft gradient)', () => {
     render(<Button variant="primary">اصلی</Button>);
     const btn = screen.getByRole('button', { name: 'اصلی' });
-    expect(btn.className).toContain('bg-brand-gradient');
-    expect(btn.className).not.toContain('var(--lip-md)');
+    expect(btn.className).toContain('bg-primary');
+    expect(btn.className).toContain('text-on-primary');
+    expect(btn.className).toContain('[box-shadow:var(--lip-md)]');
+    expect(btn.className).toContain('active:translate-y-1');
+    expect(btn.className).not.toContain('bg-brand-gradient');
   });
 
   it('Card chunky adds a 2px physical border without removing base classes', () => {
