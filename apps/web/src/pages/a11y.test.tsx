@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
 import {
   badges,
+  catalogManifest,
+  coinWallet,
+  gamification,
   home,
   marketer,
   messages,
@@ -56,20 +59,11 @@ const signedIn = () => {
     'GET /v1/me/points': () => ({ data: points }),
     'GET /v1/me/badges': () => ({ data: badges }),
     'GET /v1/me/messages': () => ({ data: messages }),
-    'GET /v1/me/gamification': () => ({
-      data: {
-        streak: { current: 4, longest: 4, shields: 1, repairedThisYear: 0, frozenUntil: null },
-        quests: [],
-        coins: { balance: 60, lifetime: 60, redemptions: [] },
-        mastery: [],
-      },
-    }),
-    'GET /v1/me/coins': () => ({
-      data: { balance: 60, lifetime: 60, redemptions: [], catalogue: [] },
-    }),
-    'GET /v1/me/reviews': () => ({ data: { due: [], cap: 7, halfLifeDays: 1 } }),
-    // the gallery reads the real brand catalogue, not the API
-    'GET /catalog/manifest.json': () => ({ data: { brands: [], products: [] } }),
+    'GET /v1/me/gamification': () => ({ data: gamification }),
+    'GET /v1/me/coins': () => ({ data: coinWallet }),
+    // the gallery reads the real brand catalogue, not the API — and that endpoint answers with a
+    // bare manifest, not the `{ data }` envelope, so it needs `raw`
+    'GET /catalog/manifest.json': () => ({ raw: catalogManifest }),
   };
 };
 

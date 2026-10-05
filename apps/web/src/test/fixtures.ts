@@ -1,5 +1,7 @@
 import type {
   BadgeView,
+  CoinWallet,
+  Gamification,
   HomeData,
   ManagerNote,
   Me,
@@ -12,6 +14,7 @@ import type {
   SectionDetail,
   SectionView,
 } from '@/lib/types';
+import type { CatalogManifest } from '@/lib/catalog-manifest';
 
 export const marketer: Me = {
   id: 'u1',
@@ -215,3 +218,126 @@ export const messages: MessageItem[] = [
 export const notifications: NotificationItem[] = [
   { id: 'nt1', type: 'deadline', title: 'مهلت نزدیک', body: 'مهلت آموزش فورمی نزدیک است.', actionRef: pkg.id, readAt: null, createdAt: '2026-09-23T09:00:00.000Z' },
 ];
+
+/**
+ * PHASE-3 motivation payload. Shape taken from a live `GET /v1/me/gamification`, not invented:
+ * an earlier hand-written mock omitted `reviews` entirely, which crashed `ReviewDeck`
+ * (`g.data.reviews.items`) with an unhandled TypeError that vitest reported *after* the run,
+ * so every assertion still passed while the suite exited 1.
+ */
+export const gamification: Gamification = {
+  streak: {
+    current: 4,
+    longest: 6,
+    shields: 1,
+    maxShields: 2,
+    repairUntil: null,
+    onLeaveUntil: null,
+    nextMilestone: 7,
+    daysToMilestone: 3,
+  },
+  quests: {
+    day: '2026-09-23',
+    total: 3,
+    completed: 1,
+    quests: [
+      {
+        kind: 'stations',
+        title: '۲ ایستگاه را تمام کن',
+        progress: 2,
+        target: 2,
+        coinReward: 20,
+        done: true,
+        chest: 'bronze',
+        chestCoins: 10,
+      },
+      {
+        kind: 'perfect_duel',
+        title: 'یک دوئل را بدون غلط ببر',
+        progress: 0,
+        target: 1,
+        coinReward: 30,
+        done: false,
+        chest: null,
+        chestCoins: 0,
+      },
+      {
+        kind: 'reviews',
+        title: '۴ مرور امروزت را انجام بده',
+        progress: 1,
+        target: 4,
+        coinReward: 25,
+        done: false,
+        chest: null,
+        chestCoins: 0,
+      },
+    ],
+  },
+  reviews: {
+    due: 1,
+    cap: 7,
+    items: [
+      {
+        questionId: 'q1',
+        quizId: 'seed-pkg-formi-s1-quiz',
+        sectionId: 'seed-pkg-formi-s1',
+        packageId: pkg.id,
+        halfLifeDays: 3,
+        nextReviewAt: '2026-09-23T08:00:00.000Z',
+        stem: 'مادهٔ مؤثرهٔ فورمی کدام است؟',
+        options: [
+          { key: 'a', text: 'هیالورونیک اسید' },
+          { key: 'b', text: 'ویتامین C' },
+        ],
+      },
+    ],
+  },
+  coins: { balance: 60, lifetime: 120 },
+  mastery: { evaluated: 6, mastered: 1 },
+};
+
+/** `GET /v1/me/coins` — key names taken from the live endpoint (`catalog`, not `catalogue`). */
+export const coinWallet: CoinWallet = {
+  balance: 60,
+  lifetime: 120,
+  catalog: [
+    {
+      code: 'tester_sample',
+      title: 'نمونهٔ تستر اضافه',
+      price: 200,
+      fulfilment: 'physical',
+      note: 'ابزار کار واقعی در ویزیت حضوری.',
+    },
+  ],
+  ledger: [
+    {
+      id: 'l1',
+      amount: 60,
+      reason: 'station_completed',
+      refId: 'seed-pkg-formi-s1',
+      createdAt: '2026-09-22T08:00:00.000Z',
+    },
+  ],
+  redemptions: [],
+};
+
+/** `GET /catalog/manifest.json` — the real brand mirror the gallery renders. */
+export const catalogManifest: CatalogManifest = {
+  brands: [
+    {
+      id: 'brand-formi',
+      name: 'فورمی',
+      nameLatin: 'Formi',
+      sortOrder: 1,
+      logoUrl: '/catalog/brands/formi.svg',
+    },
+  ],
+  products: [
+    {
+      id: 'prod-formi-kit',
+      brandId: 'brand-formi',
+      name: 'کیت درمانی فورمی',
+      imageUrl: '/catalog/products/formi-kit.png',
+    },
+  ],
+};
