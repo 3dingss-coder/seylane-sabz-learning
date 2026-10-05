@@ -33,8 +33,7 @@ export function Card({
         tone === 'default' && 'bg-surface',
         padded && 'p-5',
         chunky && 'border-2 border-chunk-border',
-        interactive &&
-          'pressable transition-transform hover:-translate-y-0.5 active:translate-y-0 active:[box-shadow:none]',
+        interactive && 'lift tap cursor-pointer',
         className,
       )}
       {...rest}

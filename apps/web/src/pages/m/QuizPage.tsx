@@ -25,6 +25,7 @@ import {
 import { PageHeader } from '@/components/common/PageHeader';
 import { MascotAvatar } from '@/components/brand/MascotAvatar';
 import { CelebrationScreen } from '@/components/learning/CelebrationScreen';
+import { playMoment } from '@/lib/sound';
 import { QueryState } from '@/components/common/QueryState';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -125,6 +126,15 @@ function QuizFlow({
   useEffect(() => {
     if (attempt) localStorage.setItem(draftKey(attempt.attemptId), JSON.stringify(answers));
   }, [answers, attempt]);
+
+  // PHASE-5 §5.2 moments 1–3: a short cue on the verdict, a fanfare only for the real peak.
+  // Silent under prefers-reduced-motion and when the sound switch is off (then haptics instead).
+  useEffect(() => {
+    if (!result) return;
+    playMoment(
+      result.passed ? (result.packageCompleted ? 'celebrate' : 'correct') : 'wrong',
+    );
+  }, [result]);
 
   const start = useMutation({
     mutationFn: () => api.post<StartAttempt>(`/me/quizzes/${d.quiz.id}/attempts`),
@@ -249,7 +259,7 @@ function QuizFlow({
         {header}
         <Card
           tone={result.passed ? 'brand' : 'default'}
-          className="relative flex flex-col items-center gap-2 overflow-hidden py-6 text-center"
+          className="animate-slide-up relative flex flex-col items-center gap-2 overflow-hidden py-6 text-center"
           data-testid="quiz-result"
         >
           {result.passed && <Confetti />}

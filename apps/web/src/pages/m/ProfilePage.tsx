@@ -1,12 +1,22 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Save } from 'lucide-react';
-import { Button, Card, CoinChip, Input, ProgressBar, StreakChip, useToast } from '@/components/ui';
+import {
+  Button,
+  Card,
+  CoinChip,
+  Input,
+  ProgressBar,
+  StreakChip,
+  Switch,
+  useToast,
+} from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { PushOptIn } from '@/components/common/PushOptIn';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useBehavior } from '@/lib/queries';
+import { playMoment, useSoundSetting } from '@/lib/sound';
 import { errMsg } from '@/lib/errors';
 import { ROLE_LABEL, faDate, faPercent } from '@/lib/format';
 import { toPersianDigits } from '@/lib/digits';
@@ -26,6 +36,7 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
   const behavior = useBehavior();
   const streak = behavior.data?.state.streakDays ?? 0;
   const mastery = (behavior.data?.signals.mastery ?? []).filter((m) => m.percent > 0);
+  const [sound, setSound] = useSoundSetting();
   if (!user) return null;
 
   const saveName = async (e: FormEvent) => {
@@ -120,6 +131,23 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
             ذخیره نام
           </Button>
         </form>
+      </Card>
+      {/* PHASE-5 S-07: sound is opt-in and off by default (marketers are on the street/bus). */}
+      <Card chunky className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold text-text">صدای لحظه‌ها</h2>
+          <p className="text-xs leading-6 text-text-secondary">
+            پیش‌فرض خاموش است. فقط برای قبولی، خطا، جشن و پیوستگی — هیچ کلیک معمولی صدا ندارد.
+          </p>
+        </div>
+        <Switch
+          checked={sound}
+          label="صدای لحظه‌ها"
+          onChange={(next) => {
+            setSound(next);
+            if (next) playMoment('correct'); // the one permitted preview tap
+          }}
+        />
       </Card>
       <PushOptIn />
       <Card>

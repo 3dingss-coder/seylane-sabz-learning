@@ -10,7 +10,7 @@ export function CoinChip({ value, className }: { value: number; className?: stri
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-pill bg-reward px-2.5 py-0.5 text-xs font-extrabold text-reward-fg',
+        'inline-flex items-center gap-1 rounded-pill bg-reward px-2.5 py-0.5 text-xs font-extrabold text-reward-fg transition-transform duration-150 ease-spring hover:scale-105',
         className,
       )}
       aria-label={`${toPersianDigits(value)} سکهٔ توانمندی`}

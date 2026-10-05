@@ -12,6 +12,7 @@ import {
   TrophyIllustration,
 } from '@/components/ui';
 import { QueryState, StaleBanner } from '@/components/common/QueryState';
+import { Reveal } from '@/components/common/Reveal';
 import { MascotAvatar } from '@/components/brand/MascotAvatar';
 import { ProductImage } from '@/components/common/ProductImage';
 import { PackageCard } from '@/components/learning/PackageCard';
@@ -124,7 +125,7 @@ export function HomePage() {
                   size="lg"
                   block
                   variant="light"
-                  className="relative mt-4"
+                  className="spot relative mt-4"
                   icon={<PlayCircle className="size-5" aria-hidden />}
                   onClick={() => {
                     track('next_item_cta_clicked', { action: d.nextItem?.action ?? '' });
@@ -155,13 +156,14 @@ export function HomePage() {
               to={topNudge?.actionRef ?? '/mentor'}
               className="pressable flex items-center gap-3 rounded-card bg-mint p-4 shadow-sm"
             >
-              <MascotAvatar size={72} className="shrink-0" alt="سیلا" />
+              <MascotAvatar size={72} className="animate-wiggle shrink-0" alt="سیلا" />
               <span className="relative min-w-0 flex-1 rounded-card rounded-ss-none bg-surface px-4 py-3 text-sm font-bold leading-7 text-text shadow-xs">
                 {topNudge?.message ??
                   'دربارهٔ هر محصول، برند یا اعتراض مشتری سؤال داری؟ از سیلا بپرس.'}
               </span>
             </Link>
 
+            <Reveal>
             <Card chunky className="flex flex-col gap-3">
               <div className="flex items-center gap-4">
                 <ProgressRing value={d.totalProgress} size={76} stroke={8} label="پیشرفت کلی" />
@@ -182,6 +184,7 @@ export function HomePage() {
                 <CoinChip value={d.pointsBalance} />
               </Link>
             </Card>
+            </Reveal>
 
             {d.counts.overdue > 0 && (
               <div
@@ -193,7 +196,7 @@ export function HomePage() {
               </div>
             )}
 
-            <section aria-labelledby="my-trainings" className="flex flex-col gap-3">
+            <Reveal as="section" aria-labelledby="my-trainings" className="flex flex-col gap-3" delayMs={60}>
               <div className="flex items-center justify-between">
                 <h2 id="my-trainings" className="display text-xl text-text">
                   آموزش‌های من
@@ -214,7 +217,7 @@ export function HomePage() {
                     <PackageCard key={p.id} p={p} />
                   ))}
               </div>
-            </section>
+            </Reveal>
           </>
         )}
       </QueryState>

@@ -37,7 +37,7 @@ export function StationTile({
       to={to}
       aria-current={state === 'current' ? 'step' : undefined}
       className={cn(
-        'pressable group flex w-full max-w-[19rem] items-center gap-3 rounded-card p-1 text-start',
+        'lift group flex w-full max-w-[19rem] items-center gap-3 rounded-card p-1 text-start',
         ALIGN[align],
       )}
     >

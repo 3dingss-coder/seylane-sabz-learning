@@ -12,7 +12,7 @@ export function PackageCard({ p }: { p: PackageSummary }) {
   return (
     <Link
       to={`/packages/${p.id}`}
-      className="pressable group flex gap-3 rounded-card border-2 border-chunk-border bg-surface p-3 shadow-sm hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:border-primary"
+      className="lift tap group flex gap-3 rounded-card border-2 border-chunk-border bg-surface p-4 shadow-sm focus-visible:border-primary"
       data-testid="package-card"
     >
       <ProductImage

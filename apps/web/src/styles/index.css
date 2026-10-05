@@ -140,10 +140,19 @@
   --animate-shake: shake 360ms var(--ease-soft) both;
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-float: float 4s ease-in-out infinite;
+  /* finite idle bob — the DoD forbids infinite motion on the main screens */
+  --animate-bob: float 3.2s var(--ease-soft) 1;
   --animate-pulse-dot: pulse-dot 1.6s var(--ease-soft) 1;
   --animate-blink: blink 1.2s ease-in-out infinite;
   --animate-check: check-draw 420ms var(--ease-soft) 120ms both;
   --animate-confetti: confetti-fall 1.8s var(--ease-soft) both;
+  /* ---- PHASE-5 §5.2 moments ---- */
+  --animate-slide-up: slide-up var(--duration-slow) var(--ease-soft) both;
+  --animate-fade-down: fade-down var(--duration-slow) var(--ease-soft) both;
+  --animate-wiggle: wiggle 2.6s var(--ease-soft) 1;
+  --animate-grow-y: grow-y 0.5s var(--ease-spring) both;
+  --animate-spot: spot 1.8s var(--ease-soft) 1;
+  --animate-settle: settle 0.3s var(--ease-soft) both;
 
   @keyframes fade-in {
     from {
@@ -279,6 +288,54 @@
       stroke-dashoffset: 0;
     }
   }
+  /* PHASE-5 moments: every one of these is transform/opacity only (M-01) and finite (DoD:
+     no infinite animation on the main screens). */
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+  }
+  @keyframes fade-down {
+    from {
+      opacity: 0;
+      transform: translateY(-18px);
+    }
+  }
+  @keyframes wiggle {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-4deg);
+    }
+    60% {
+      transform: rotate(3deg);
+    }
+  }
+  @keyframes grow-y {
+    from {
+      transform: scaleY(0.4);
+    }
+  }
+  @keyframes settle {
+    from {
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+  /* M-04: the ONE shining point of a page — a single soft ring pulse, once. */
+  @keyframes spot {
+    0%,
+    100% {
+      box-shadow: var(--lip-md);
+    }
+    50% {
+      box-shadow:
+        var(--lip-md),
+        0 0 0 8px color-mix(in srgb, var(--color-leaf) 32%, transparent);
+    }
+  }
   @keyframes confetti-fall {
     0% {
       opacity: 1;
@@ -395,6 +452,60 @@
   /* §16.9: directional icons (arrows/chevrons that mean "forward/back") mirror in RTL */
   [dir='rtl'] .rtl-mirror {
     transform: scaleX(-1);
+  }
+  /* ---- PHASE-5: micro-interactions ----
+     .lift  = hover raises the object and deepens its lip (cards, tiles, chips)
+     .tap   = press pushes it down and removes the lip (M-01: transform only)
+     .spot  = the single attention pulse allowed per screen (M-04)
+     .reveal/.reveal-in = scroll-in, suppressed on cold load and for reduced motion */
+  .lift {
+    transition:
+      transform var(--duration-fast) var(--ease-soft),
+      box-shadow var(--duration-base) var(--ease-soft);
+  }
+  @media (hover: hover) {
+    .lift:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-md);
+    }
+  }
+  .tap:active {
+    transform: translateY(2px);
+    box-shadow: none;
+  }
+  .spot {
+    animation: var(--animate-spot);
+  }
+  /* Switch knob: transform-only travel, mirrored in RTL */
+  .switch-knob {
+    transition: transform var(--duration-base) var(--ease-spring);
+  }
+  [dir='rtl'] [aria-checked='true'] .switch-knob {
+    transform: translateX(-24px);
+  }
+  [dir='ltr'] [aria-checked='true'] .switch-knob {
+    transform: translateX(24px);
+  }
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  .reveal-in {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 0.42s var(--ease-soft),
+      transform 0.42s var(--ease-soft);
+  }
+  html:not([data-motion]) .reveal {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+    }
   }
   /* v4 display type: the heaviest Vazirmatn weight for screen titles and big numbers.
      No negative tracking — it breaks Persian letter joining (see @layer base). */

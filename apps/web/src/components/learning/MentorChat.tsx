@@ -109,7 +109,7 @@ export function MentorChat({
         {history.isPending && <Skeleton className="h-16 w-3/4" />}
         {!history.isPending && msgs.length === 0 && !pending && (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <MascotAvatar size={72} className="animate-float" alt="سیلا" />
+            <MascotAvatar size={72} className="animate-bob" alt="سیلا" />
             <p className="text-sm text-text-secondary">
               سؤالت درباره محصولات و آموزش‌ها را بپرس. فقط از محتوای تأییدشده جواب می‌دهم.
             </p>

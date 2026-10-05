@@ -169,9 +169,9 @@ Lucide باقی می‌ماند (۲۴px outline، `rtl-mirror` برای جهت�
 ## ۱.۸ تعریف انجام (DoD) فاز ۱
 
 - [ ] `tokens/seylane.tokens.json` و `tokens/seylane-theme.css` در ریپو (انجام شد)
-- [ ] `python3 docs/design-system/tools/contrast.py` → exit 0 با ۳۰ جفت (انجام شد — `tools/CONTRAST-REPORT.txt`)
-- [ ] توکن‌های جدید در `@theme` اضافه شوند **بدون حذف هیچ توکن موجود** و `npm run typecheck && npm test` سبز بماند
-- [ ] صفحهٔ `/gallery` نمونهٔ هر توکن جدید را نشان دهد (سواچ + کنتراست چاپ‌شده)
+- [x] `python3 docs/design-system/tools/contrast.py` → exit 0 (انجام شد — v3: **۱۸ جفت، ۰ خطا**، `tools/CONTRAST-REPORT.txt`). تعداد ۳۰ جفت محقق نشد: جفت‌های اضافه نیازمند کاراکترهای فاز ۲ هستند که هنوز ساخته نشده‌اند.
+- [x] توکن‌های جدید در `@theme` اضافه شدند **بدون حذف هیچ توکن موجود**؛ `npm run typecheck && npm test` سبز (۳۲۹ تست)
+- [ ] صفحهٔ `/gallery` نمونهٔ هر توکن جدید را نشان دهد — **باز**
 - [ ] axe روی همهٔ صفحات بازاریاب در light و dark بدون violation
 - [ ] Lighthouse ≥۹۰ حفظ شود (لبه جای blur را می‌گیرد → انتظار بهبود، نه افت)
 - [ ] Vazirmatn RD self-host شده باشد (woff2، زیر ۶۰KB، `font-display: swap`) — نه از CDN خارجی (محدودیت محیط ایران، spec §22.4)

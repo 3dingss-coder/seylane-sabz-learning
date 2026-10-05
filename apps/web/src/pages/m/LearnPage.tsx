@@ -8,6 +8,7 @@ import { QueryState, StaleBanner } from '@/components/common/QueryState';
 import { BrandLogo } from '@/components/brand/BrandLogo';
 import { PackageCard } from '@/components/learning/PackageCard';
 import { PathScreen } from '@/components/learning/PathScreen';
+import { Reveal } from '@/components/common/Reveal';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/lib/auth';
 import { useBehavior, useHome, usePackages } from '@/lib/queries';
@@ -99,12 +100,14 @@ export function LearnPage() {
                 onAction={() => nav('/cards')}
               />
             ) : (
-              <PathScreen
+              <Reveal>
+                <PathScreen
                 packages={ordered}
                 points={user?.pointsBalance ?? home.data?.pointsBalance ?? 0}
                 streakDays={behavior.data?.state.streakDays ?? 0}
                 totalProgress={home.data?.totalProgress ?? 0}
-              />
+                />
+              </Reveal>
             )
           }
         </QueryState>

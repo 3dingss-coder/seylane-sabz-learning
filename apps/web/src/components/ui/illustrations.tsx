@@ -35,7 +35,7 @@ export function EmptyIllustration({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 160 120" className={cn(base, className)} aria-hidden focusable="false">
       <ellipse cx="80" cy="110" rx="44" ry="5" className="fill-text/10" />
-      <g className="animate-float">
+      <g className="animate-bob">
         <rect x="44" y="34" width="84" height="62" rx="14" className="fill-primary/10" />
         <rect
           x="36"
@@ -62,7 +62,7 @@ export function ErrorIllustration({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 160 120" className={cn(base, className)} aria-hidden focusable="false">
       <ellipse cx="80" cy="110" rx="40" ry="5" className="fill-text/10" />
-      <g className="animate-float">
+      <g className="animate-bob">
         <path
           d="M52 90a20 20 0 0 1-2-39.9A28 28 0 0 1 104 46a22 22 0 0 1 4 44Z"
           className="fill-surface stroke-danger/50"
@@ -84,7 +84,7 @@ export function NotFoundIllustration({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 160 120" className={cn(base, className)} aria-hidden focusable="false">
       <ellipse cx="80" cy="110" rx="42" ry="5" className="fill-text/10" />
-      <g className="animate-float">
+      <g className="animate-bob">
         <circle cx="80" cy="56" r="38" className="fill-primary/10" />
         <circle cx="80" cy="56" r="30" className="fill-surface stroke-primary" strokeWidth="2.5" />
         <path d="M80 38l9 22-9 4-9-4z" className="fill-primary" />
@@ -101,7 +101,7 @@ export function TrophyIllustration({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 160 120" className={cn(base, className)} aria-hidden focusable="false">
       <ellipse cx="80" cy="110" rx="36" ry="5" className="fill-text/10" />
-      <g className="animate-float">
+      <g className="animate-bob">
         <path d="M56 28h48v22a24 24 0 0 1-48 0z" className="fill-accent" />
         <path
           d="M56 36H42a10 10 0 0 0 12 18M104 36h14a10 10 0 0 1-12 18"

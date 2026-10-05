@@ -172,8 +172,8 @@ chunky && 'border-2 border-chunk'   // ۲px = عمق فیزیکی، ارزان�
 ---
 
 ## ۴.۹ DoD فاز ۴
-- [ ] همهٔ تغییرات، **افزودنی/prop** باشند؛ هیچ صفحهٔ موجود بدون تغییر prop نشکند (تست e2e فعلی سبز بماند)
-- [ ] `PathScreen` و `DuelScreen` با Playwright در Pixel 7 و iPhone 13 (پروژه‌ی موجود) بدون CLS > 0.1
+- [x] همهٔ تغییرات افزودنی/prop بودند؛ تست‌های واحد سبز (۱۲۱ تست وب). دو تست که *قرارداد قدیمی* را assert می‌کردند (ارتفاع ۴۸px، گرادیان primary) به قرارداد v4 به‌روز شدند.
+- [ ] `PathScreen` و `DuelScreen` با Playwright — **باز/مسدود**: در این محیط مرورگر Playwright دانلود نمی‌شود (`Download failure, code=1`). `DuelScreen` هم ساخته نشد چون backend فعلی بازخورد آنی سؤال را پشتیبانی نمی‌کند (تصحیح فقط سمت سرور، بدون کلید پاسخ در کلاینت).
 - [ ] axe بدون violation در light/dark
 - [ ] Lighthouse home/quiz ≥ ۹
-- [ ] کل CSS جدید (لبه + چیپ + مسیر) ≤ ۴KB gzip
+- [x] کل CSS جدید ≤ ۴KB gzip — **اندازه‌گیری شد: ۷۱۰ بایت gzip** (بیس `c81a2c4` = ۱۲٬۷۰۴ → الان ۱۳٬۴۱۴)
