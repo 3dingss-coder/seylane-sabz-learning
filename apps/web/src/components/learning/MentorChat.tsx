@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, PhoneCall, Send, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { PhoneCall, Send, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { Button, Skeleton, useToast } from '@/components/ui';
+import { MascotAvatar } from '@/components/brand/MascotAvatar';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { errMsg } from '@/lib/errors';
@@ -108,9 +109,7 @@ export function MentorChat({
         {history.isPending && <Skeleton className="h-16 w-3/4" />}
         {!history.isPending && msgs.length === 0 && !pending && (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <span className="animate-float flex size-16 items-center justify-center rounded-full bg-hero shadow-md">
-              <Bot className="size-8 text-white" aria-hidden />
-            </span>
+            <MascotAvatar size={72} className="animate-float" alt="سیلا" />
             <p className="text-sm text-text-secondary">
               سؤالت درباره محصولات و آموزش‌ها را بپرس. فقط از محتوای تأییدشده جواب می‌دهم.
             </p>
@@ -138,21 +137,31 @@ export function MentorChat({
           >
             <div
               className={cn(
-                'max-w-[85%] whitespace-pre-line rounded-[18px] px-3.5 py-2 text-sm leading-7 shadow-xs',
-                m.role === 'user'
-                  ? 'rounded-se-md bg-primary bg-brand-gradient text-on-primary'
-                  : 'rounded-ee-md border border-border bg-surface text-text',
+                'flex max-w-[85%] items-end gap-2',
+                m.role === 'assistant' && 'flex-row-reverse',
               )}
             >
-              {m.text}
-              {m.mode === 'voice' && (
-                <span className="mt-1 block text-xs text-text-secondary">تماس صوتی</span>
+              {m.role === 'assistant' && (
+                <MascotAvatar size={32} alt="سیلا" className="mb-1 shrink-0" />
               )}
-              {(m.sources?.length ?? 0) > 0 && (
-                <p className="mt-1 text-xs text-text-secondary">
-                  منبع: {(m.sources ?? []).map((s) => s.title).join('، ')}
-                </p>
-              )}
+              <div
+                className={cn(
+                  'whitespace-pre-line rounded-[18px] px-3.5 py-2 text-sm leading-7 shadow-xs',
+                  m.role === 'user'
+                    ? 'rounded-se-md bg-primary bg-brand-gradient text-on-primary'
+                    : 'rounded-ee-md border border-mint bg-mint text-text',
+                )}
+              >
+                {m.text}
+                {m.mode === 'voice' && (
+                  <span className="mt-1 block text-xs text-text-secondary">تماس صوتی</span>
+                )}
+                {(m.sources?.length ?? 0) > 0 && (
+                  <p className="mt-1 text-xs text-text-secondary">
+                    منبع: {(m.sources ?? []).map((s) => s.title).join('، ')}
+                  </p>
+                )}
+              </div>
             </div>
             {m.role === 'assistant' && !(m.id ?? '').startsWith('local-') && (
               <div className="flex gap-1">

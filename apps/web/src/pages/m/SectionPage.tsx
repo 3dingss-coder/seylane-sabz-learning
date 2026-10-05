@@ -146,6 +146,7 @@ function Player({ d }: { d: SectionDetail }) {
             <Button
               size="lg"
               block
+              variant="cta"
               icon={<ClipboardCheck className="size-5" aria-hidden />}
               onClick={() => nav(`/quiz/${s.id}`)}
               data-testid="start-quiz"
@@ -153,7 +154,7 @@ function Player({ d }: { d: SectionDetail }) {
               شروع آزمون
             </Button>
           ) : s.quizPassed && d.nextSectionId ? (
-            <Button size="lg" block onClick={() => nav(`/sections/${d.nextSectionId}`)}>
+            <Button size="lg" block variant="cta" onClick={() => nav(`/sections/${d.nextSectionId}`)}>
               قسمت بعد
             </Button>
           ) : s.quizPassed ? (

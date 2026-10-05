@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Save } from 'lucide-react';
-import { Button, Card, Input, useToast } from '@/components/ui';
+import { Button, Card, CoinChip, Input, ProgressBar, StreakChip, useToast } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { PushOptIn } from '@/components/common/PushOptIn';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { useBehavior } from '@/lib/queries';
 import { errMsg } from '@/lib/errors';
-import { ROLE_LABEL, faDate } from '@/lib/format';
+import { ROLE_LABEL, faDate, faPercent } from '@/lib/format';
 import { toPersianDigits } from '@/lib/digits';
 import type { Me } from '@/lib/types';
 
@@ -21,6 +22,10 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
   const [next, setNext] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<'' | 'name' | 'pw' | 'out'>('');
+  // Real signals only (PHASE-3): streak + per-brand mastery come from /me/mentor/behavior.
+  const behavior = useBehavior();
+  const streak = behavior.data?.state.streakDays ?? 0;
+  const mastery = (behavior.data?.signals.mastery ?? []).filter((m) => m.percent > 0);
   if (!user) return null;
 
   const saveName = async (e: FormEvent) => {
@@ -75,8 +80,28 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
             <span dir="ltr">{toPersianDigits(user.phone ?? user.email ?? '')}</span>
           </p>
           <p className="text-xs text-white/75">عضو از {faDate(user.createdAt)}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <CoinChip value={user.pointsBalance} />
+            {streak > 0 && <StreakChip count={streak} />}
+          </div>
         </div>
       </Card>
+      {mastery.length > 0 && (
+        <Card chunky className="flex flex-col gap-3">
+          <h2 className="text-base font-bold text-text">استادی برندها</h2>
+          <div className="flex flex-col gap-3">
+            {mastery.map((m) => (
+              <div key={m.key} className="flex flex-col gap-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-bold text-text">{m.label}</span>
+                  <span className="text-text-secondary">{faPercent(m.percent)}</span>
+                </div>
+                <ProgressBar value={m.percent} label={`استادی ${m.label}`} />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       <Card>
         <form onSubmit={saveName} className="flex flex-col gap-3">
           <Input

@@ -27,7 +27,8 @@ export function Card({
           ? 'rounded-hero shadow-md [will-change:transform]'
           : 'rounded-card shadow-sm',
         tone === 'brand' && 'border-primary/20 bg-soft-brand bg-primary-light',
-        tone === 'hero' && 'bg-hero border-transparent',
+        // v3: the page hero sits on a deep lip (PHASE-4 §4.2)
+        tone === 'hero' && 'bg-hero border-transparent [box-shadow:var(--lip-lg)]',
         tone === 'default' && 'border-border bg-surface',
         padded && 'p-4',
         chunky && 'border-2 border-chunk-border',

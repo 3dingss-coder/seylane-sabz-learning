@@ -6,6 +6,7 @@ import {
   CoinChip,
   CountdownChip,
   EmptyState,
+  StreakChip,
   PackageCardSkeleton,
   ProgressRing,
   Skeleton,
@@ -19,7 +20,7 @@ import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { faDuration } from '@/lib/format';
-import { qk, useHome } from '@/lib/queries';
+import { qk, useBehavior, useHome } from '@/lib/queries';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { track } from '@/lib/telemetry';
@@ -39,15 +40,18 @@ export function HomePage() {
     queryFn: ({ signal }) => api.get<Nudge[]>('/me/mentor/nudges', signal),
   });
   const topNudge = nudges.data?.[0];
+  // Real streak from the behaviour endpoint — no invented gamification numbers (PHASE-3).
+  const streak = useBehavior().data?.state.streakDays ?? 0;
 
   return (
     <div className="stagger flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <MascotAvatar size={52} />
-        <div>
+        <div className="min-w-0">
           <p className="text-sm text-text-secondary">سلام {user?.name.split(' ')[0]} 👋</p>
           <h1 className="text-2xl font-extrabold text-text">کار بعدی تو</h1>
         </div>
+        {streak > 0 && <StreakChip count={streak} className="ms-auto shrink-0" />}
       </div>
       <StaleBanner
         show={home.isError && home.data !== undefined}
@@ -65,8 +69,11 @@ export function HomePage() {
         isEmpty={(d) => d.packages.length === 0}
         empty={
           <EmptyState
+            character="seyla"
             title="هنوز آموزشی ندارید"
-            description="منتظر آموزش جدید باشید؛ وقتی فعال شد همین‌جا می‌بینید."
+            description="سیلا منتظرته؛ به محض فعال‌شدن اولین بسته، همین‌جا می‌بینی."
+            actionText="رفتن به کارت‌های من"
+            onAction={() => nav('/cards')}
           />
         }
       >

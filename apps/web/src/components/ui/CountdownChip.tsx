@@ -40,7 +40,7 @@ export function CountdownChip({ deadline, warningHours, className, now }: Countd
   return (
     <span
       role="timer"
-      aria-live="off"
+      aria-live="polite"
       aria-label={state.spoken}
       className={cn(
         'inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-bold',

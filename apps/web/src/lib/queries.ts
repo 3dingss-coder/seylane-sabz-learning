@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import { lastKnown } from './lastKnown';
 import type {
+  BehaviorBrief,
   HomeData,
   MessageItem,
   NotificationItem,
@@ -40,6 +41,17 @@ export const useHome = (uid: string | undefined) => {
     initialDataUpdatedAt: cached ? 0 : undefined,
   });
 };
+/**
+ * Learning behaviour brief (streak, mastery, pressure) — real endpoint, used by the
+ * v3 status chips (PHASE-3) instead of invented gamification numbers.
+ */
+export const useBehavior = () =>
+  useQuery({
+    queryKey: qk.behavior,
+    queryFn: ({ signal }) => api.get<BehaviorBrief>('/me/mentor/behavior', signal),
+    staleTime: 60_000,
+  });
+
 export const usePackages = () =>
   useQuery({
     queryKey: qk.packages(),

@@ -64,7 +64,15 @@ export function MessagesPage() {
           query={n}
           loading={<TableSkeleton rows={5} />}
           isEmpty={(d) => d.items.length === 0}
-          empty={<EmptyState title="اعلانی نداری" icon={<Bell className="size-8" />} />}
+          empty={
+            <EmptyState
+              character="seyla"
+              title="اعلانی نداری"
+              description="هر وقت آموزش جدید یا مهلتی در راه باشد، سیلا همین‌جا خبرت می‌کند."
+              actionText="رفتن به مسیر یادگیری"
+              onAction={() => nav('/learn')}
+            />
+          }
         >
           {(d) => (
             <ul className="stagger flex flex-col gap-2">
@@ -118,8 +126,11 @@ export function MessagesPage() {
           isEmpty={(d) => d.length === 0}
           empty={
             <EmptyState
+              character="seyla"
               title="پیامی از مدیر نداری"
-              icon={<MessageSquareText className="size-8" />}
+              description="پیام‌های مدیرت درباره تیم و آموزش‌ها این‌جا می‌رسد."
+              actionText="رفتن به خانه"
+              onAction={() => nav('/')}
             />
           }
         >

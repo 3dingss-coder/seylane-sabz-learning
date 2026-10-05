@@ -23,6 +23,8 @@ import {
   useToast,
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
+import { MascotAvatar } from '@/components/brand/MascotAvatar';
+import { CelebrationScreen } from '@/components/learning/CelebrationScreen';
 import { QueryState } from '@/components/common/QueryState';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -181,6 +183,67 @@ function QuizFlow({
 
   // ── M8 result ──
   if (result) {
+    const peak = result.passed && result.packageCompleted; // C-07: only a real achievement
+    const actions = (
+      <>
+        {result.nextAction === 'next_section' && nextSectionId ? (
+          <Button size="lg" block onClick={() => nav(`/sections/${nextSectionId}`)}>
+            قسمت بعد
+          </Button>
+        ) : result.nextAction === 'package_complete' || result.nextAction === 'next_section' ? (
+          <Button
+            size="lg"
+            block
+            onClick={() => nav(result.packageCompleted ? '/' : `/packages/${d.quiz.packageId}`)}
+          >
+            {result.packageCompleted ? 'بسته تمام شد — بازگشت به خانه' : 'بازگشت به بسته'}
+          </Button>
+        ) : result.nextAction === 'retry' ? (
+          <div className="flex flex-col gap-2">
+            <Button
+              size="lg"
+              block
+              icon={<RotateCcw className="size-5" aria-hidden />}
+              loading={start.isPending}
+              onClick={() => {
+                setResult(null);
+                setAttempt(null);
+                start.mutate();
+              }}
+            >
+              تلاش دوباره
+            </Button>
+            <Button variant="ghost" block onClick={() => nav(`/sections/${sectionId}`)}>
+              دوباره دیدن قسمت
+            </Button>
+          </div>
+        ) : result.nextAction === 'request_retake' ? (
+          <Button size="lg" block loading={retake.isPending} onClick={() => retake.mutate()}>
+            درخواست آزمون مجدد از مدیر
+          </Button>
+        ) : (
+          <EmptyState title="درخواست آزمون مجددت در انتظار تأیید مدیر است." />
+        )}
+      </>
+    );
+
+    if (peak)
+      return (
+        <div className="flex flex-col gap-4">
+          {header}
+          <CelebrationScreen
+            testId="quiz-result"
+            title="بسته تمام شد! 🎉"
+            subtitle={`${toPersianDigits(result.correctCount)} پاسخ درست از ${toPersianDigits(
+              result.total,
+            )} • نمره ${faPercent(result.score)}`}
+            pointsEarned={result.pointsEarned}
+            actionLabel="بازگشت به خانه"
+            onAction={() => nav('/')}
+          />
+        </div>
+      );
+
     return (
       <div className="flex flex-col gap-4">
         {header}
@@ -190,6 +253,11 @@ function QuizFlow({
           data-testid="quiz-result"
         >
           {result.passed && <Confetti />}
+          <MascotAvatar
+            size={72}
+            className={result.passed ? 'animate-pop' : ''}
+            alt={result.passed ? 'سیلا خوشحال' : 'سیلا در حال فکر کردن'}
+          />
           <ProgressRing
             value={result.score}
             size={120}
@@ -264,44 +332,7 @@ function QuizFlow({
             })}
           </div>
         </section>
-        {result.nextAction === 'next_section' && nextSectionId ? (
-          <Button size="lg" block onClick={() => nav(`/sections/${nextSectionId}`)}>
-            قسمت بعد
-          </Button>
-        ) : result.nextAction === 'package_complete' || result.nextAction === 'next_section' ? (
-          <Button
-            size="lg"
-            block
-            onClick={() => nav(result.packageCompleted ? '/' : `/packages/${d.quiz.packageId}`)}
-          >
-            {result.packageCompleted ? 'بسته تمام شد — بازگشت به خانه' : 'بازگشت به بسته'}
-          </Button>
-        ) : result.nextAction === 'retry' ? (
-          <div className="flex flex-col gap-2">
-            <Button
-              size="lg"
-              block
-              icon={<RotateCcw className="size-5" aria-hidden />}
-              loading={start.isPending}
-              onClick={() => {
-                setResult(null);
-                setAttempt(null);
-                start.mutate();
-              }}
-            >
-              تلاش دوباره
-            </Button>
-            <Button variant="ghost" block onClick={() => nav(`/sections/${sectionId}`)}>
-              دوباره دیدن قسمت
-            </Button>
-          </div>
-        ) : result.nextAction === 'request_retake' ? (
-          <Button size="lg" block loading={retake.isPending} onClick={() => retake.mutate()}>
-            درخواست آزمون مجدد از مدیر
-          </Button>
-        ) : (
-          <EmptyState title="درخواست آزمون مجددت در انتظار تأیید مدیر است." />
-        )}
+        {actions}
       </div>
     );
   }
@@ -406,7 +437,15 @@ function QuizFlow({
         className={dir === 'next' ? 'animate-slide-in-end' : 'animate-slide-in-start'}
       >
         <fieldset className="stagger flex flex-col gap-3">
-          <legend className="mb-3 text-lg font-bold leading-8 text-text">{q.stem}</legend>
+          {/* The question itself is the speech bubble below; the legend only names the group
+              (duplicating the stem would double-announce it to screen readers). */}
+          <legend className="sr-only">سؤال آزمون</legend>
+          <div className="mb-1 flex items-start gap-2">
+            <MascotAvatar size={44} className="mt-1 shrink-0" alt="سیلا" />
+            <p className="relative flex-1 rounded-card rounded-ss-none bg-mint px-4 py-3 text-base font-bold leading-8 text-text">
+              {q.stem}
+            </p>
+          </div>
           {q.options.map((o) => {
             const checked = answers[q.id] === o.key;
             return (
@@ -447,7 +486,7 @@ function QuizFlow({
           })}
         </fieldset>
       </div>
-      <div className="flex gap-2">
+      <div className="sticky bottom-24 z-20 flex gap-2 rounded-card border border-border/70 bg-surface/95 p-2 shadow-md backdrop-blur lg:bottom-4">
         <Button
           variant="secondary"
           disabled={idx === 0}

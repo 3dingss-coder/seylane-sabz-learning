@@ -324,6 +324,14 @@ export type InterventionRuleId =
   | 'B11'
   | 'B12';
 
+/** GET /me/mentor/behavior — the mentor's read of this marketer's learning state (real endpoint). */
+export interface BehaviorBrief {
+  state: MentorBrief['state'];
+  signals: MentorBrief['signals'];
+  nextAction: { label: string; actionRef: string | null; reason: string } | null;
+  escalateToManager: boolean;
+}
+
 export interface MentorBrief {
   state: {
     momentum: Momentum;
