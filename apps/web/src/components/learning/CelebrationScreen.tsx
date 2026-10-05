@@ -62,7 +62,7 @@ export function CelebrationScreen({
         {streakDays ? (
           <div className="stagger mt-1 flex flex-wrap items-center justify-center gap-2">
             <StreakChip count={streakDays} className="px-3 py-1 text-sm" />
-            <CoinChip value={pointsEarned} className="px-3 py-1 text-sm" />
+            {pointsEarned > 0 && <CoinChip value={pointsEarned} className="px-3 py-1 text-sm" />}
           </div>
         ) : null}
         <Button size="lg" variant="cta" className="mt-4 min-w-52" onClick={onAction}>

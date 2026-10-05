@@ -33,9 +33,10 @@ export function PathScreen({ packages, points, streakDays, totalProgress }: Path
       <div className="flex flex-wrap items-center justify-center gap-2">
         <CoinChip value={points} />
         {streakDays ? <StreakChip count={streakDays} /> : null}
-        <span className="inline-flex items-center gap-1.5 rounded-pill bg-mint px-2.5 py-0.5 text-xs font-extrabold text-primary-800">
-          <ProgressRing value={totalProgress} size={18} stroke={3} label="پیشرفت کلی" />
-        </span>
+        {/* div (not span): ProgressRing renders a div with role="progressbar" */}
+        <div className="inline-flex items-center gap-1.5 rounded-pill bg-mint px-2.5 py-1 text-xs font-extrabold text-primary-800">
+          <ProgressRing value={totalProgress} size={20} stroke={4} label="پیشرفت کلی" />
+        </div>
       </div>
 
       <ol className="mx-auto flex w-full max-w-md flex-col items-stretch gap-1" aria-label="مسیر یادگیری">
