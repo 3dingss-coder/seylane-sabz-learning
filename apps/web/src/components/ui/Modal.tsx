@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { COPY } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { usePresence } from '@/lib/motion';
 
@@ -120,7 +121,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
           <button
             type="button"
             onClick={onClose}
-            aria-label="بستن"
+            aria-label={COPY.a11y.close}
             className="pressable flex size-12 items-center justify-center rounded-input text-muted-fg hover:bg-background hover:text-text"
           >
             <X className="size-5" aria-hidden />

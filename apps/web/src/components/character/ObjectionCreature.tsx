@@ -1,3 +1,4 @@
+import { LINES } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { OBJECTIONS, type ObjectionId } from './data';
 
@@ -65,10 +66,17 @@ export function ObjectionCreature({
       width={size}
       height={size}
       role="img"
-      aria-label={`اعتراض مشتری: ${o?.says ?? ''}${calm ? ' (آرام شده)' : ''}`}
+      aria-label={LINES.objectionLabel(o?.says ?? '', calm)}
       className={cn(calm && 'opacity-90', className)}
     >
-      <ellipse cx={32} cy={58} rx={16} ry={2.6} fill="#0f172a" className="opacity-[0.08] dark:opacity-[0.16]" />
+      <ellipse
+        cx={32}
+        cy={58}
+        rx={16}
+        ry={2.6}
+        fill="#0f172a"
+        className="opacity-[0.08] dark:opacity-[0.16]"
+      />
       <g
         className={calm ? 'animate-settle' : 'animate-bob'}
         style={{ transformOrigin: '32px 40px', transform: calm ? 'scale(0.82)' : undefined }}

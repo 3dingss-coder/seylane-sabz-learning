@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Button, CoinChip, ProgressRing, StreakChip } from '@/components/ui';
 import { StationTile, type StationState } from './StationTile';
+import { COPY } from '@/lib/copy/fa';
 import { faDuration } from '@/lib/format';
 import type { PackageSummary } from '@/lib/types';
 
@@ -35,11 +36,19 @@ export function PathScreen({ packages, points, streakDays, totalProgress }: Path
         {streakDays ? <StreakChip count={streakDays} /> : null}
         {/* div (not span): ProgressRing renders a div with role="progressbar" */}
         <div className="inline-flex items-center gap-1.5 rounded-pill bg-mint px-2.5 py-1 text-xs font-extrabold text-primary-800">
-          <ProgressRing value={totalProgress} size={20} stroke={4} label="پیشرفت کلی" />
+          <ProgressRing
+            value={totalProgress}
+            size={20}
+            stroke={4}
+            label={COPY.path.totalProgress}
+          />
         </div>
       </div>
 
-      <ol className="mx-auto flex w-full max-w-md flex-col items-stretch gap-1" aria-label="مسیر یادگیری">
+      <ol
+        className="mx-auto flex w-full max-w-md flex-col items-stretch gap-1"
+        aria-label={COPY.path.pathLabel}
+      >
         {packages.map((p, i) => {
           const state: StationState =
             p.status === 'completed' ? 'done' : i === currentIdx ? 'current' : 'upcoming';
@@ -72,7 +81,7 @@ export function PathScreen({ packages, points, streakDays, totalProgress }: Path
           className="mx-auto w-full max-w-md"
           onClick={() => nav(`/packages/${packages[currentIdx]?.id}`)}
         >
-          ادامه مسیر
+          {COPY.path.continuePath}
         </Button>
       )}
     </div>

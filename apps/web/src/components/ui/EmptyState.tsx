@@ -2,6 +2,7 @@
 // «پنل مدیر/کامپوننت‌ها/common/EmptyState.tsx» — emerald → primary tokens, 48px CTA.
 import type { ReactNode } from 'react';
 import { MascotAvatar } from '@/components/brand/MascotAvatar';
+import { COPY } from '@/lib/copy/fa';
 import { Button } from './Button';
 import { EmptyIllustration } from './illustrations';
 
@@ -32,7 +33,7 @@ export function EmptyState({
       />
       <div className="relative mb-3">
         {character === 'seyla' ? (
-          <MascotAvatar size={72} alt="سیلا" className="animate-pop" />
+          <MascotAvatar size={72} alt={COPY.mentor.name} className="animate-pop" />
         ) : icon ? (
           <div className="flex size-16 items-center justify-center rounded-card bg-primary-light text-primary">
             {icon}

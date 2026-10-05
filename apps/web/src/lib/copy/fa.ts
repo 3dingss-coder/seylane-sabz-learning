@@ -331,6 +331,65 @@ export const COPY = {
     gold: 'صندوق طلایی',
   },
 
+  /** §6.2.20 — the cast. Expression names are read aloud by screen readers, so they describe a
+   *  feeling, not an animation state (§2.2). */
+  cast: {
+    idle: 'آرام',
+    happy: 'خوشحال',
+    celebrate: 'در حال جشن',
+    thinking: 'در حال فکر',
+    worried: 'نگرانِ مهلت',
+    proud: 'سرافراز',
+    nudge: 'دعوت ملایم',
+    empathy: 'همدل',
+  },
+
+  /** §6.2.21 — station path (M2) and the package card. */
+  path: {
+    totalProgress: 'پیشرفت کلی',
+    pathLabel: 'مسیر یادگیری',
+    continuePath: 'ادامه مسیر',
+    done: 'تمام شد',
+    yourTurn: 'نوبت تو',
+    nextStation: 'ایستگاه بعدی',
+    brandTrainingSuffix: ' — آموزش برند',
+    completedNote: 'تکمیل شد',
+  },
+
+  /** §6.2.22 — countdown chip: information, never a countdown threat (§6.1). */
+  countdown: {
+    normal: 'مهلت',
+    warning: 'مهلت نزدیک',
+    danger: 'فوری',
+    overdue: 'مهلت گذشته',
+  },
+
+  /** §6.2.23 — the crash screen (§15.0): it is our fault, and it says what to do. */
+  crash: {
+    title: 'یک مشکل پیش آمد',
+    body: 'اشکالی از طرف ما بود، نه شما. دوباره تلاش کن؛ اگر درست نشد به صفحه اصلی برگرد.',
+    retry: 'تلاش مجدد',
+    goHome: 'بازگشت به صفحه اصلی',
+  },
+
+  /** §6.2.24 — celebration (M8) and the mentor entry points. */
+  celebrate: {
+    happyAlt: 'سیلا خوشحال',
+    pointsUnit: 'امتیاز',
+    askMentor: 'از منتور بپرس',
+    mentor: 'منتور',
+    mentorPageAlt: 'سیلا — منتور سیلانه‌سبز لرنینگ',
+    mentorPageTitle: 'منتور',
+    mentorPageHint: 'درباره‌ی هر محصول، برند یا آزمونی بپرس',
+  },
+
+  /** §6.2.25 — shared screen-reader labels. */
+  a11y: {
+    close: 'بستن',
+    closeMessage: 'بستن پیام',
+    loading: 'در حال بارگذاری…',
+  },
+
   /** Shared action labels — one verb, no decoration. */
   actions: {
     retry: 'تلاش دوباره',
@@ -406,6 +465,16 @@ export const LINES = {
   memberSince: (date: string) => `عضو از ${date}`,
   masteryLabel: (brand: string) => `استادی ${brand}`,
   greeting: (firstName: string) => `سلام ${firstName} 👋`,
+  says: (name: string, speech: string) => `${name} می‌گوید: ${speech}`,
+  expressionState: (name: string, state: string) => `${name}، حالت ${state}`,
+  objectionLabel: (says: string, calm: boolean) =>
+    `اعتراض مشتری: ${says}${calm ? ' (آرام شده)' : ''}`,
+  streakDays: (days: string) => `پیوستگی ${days} روز`,
+  coinWalletLabel: (coins: string) => `${coins} سکهٔ توانمندی`,
+  pointsEarned: (points: string) => `${points} امتیاز گرفتی`,
+  packageProgress: (title: string) => `پیشرفت ${title}`,
+  sectionsOfTotal: (done: string, total: string) => `${done} از ${total} قسمت`,
+  stationIndex: (index: string) => ` — ایستگاه ${index}`,
   redeemRecorded: (title: string, price: string) => `${title} ثبت شد (${price} سکه)`,
   coinPrice: (price: string) => `${price} سکه`,
   dueAndCap: (due: string, cap: string) => `${due} مورد · سقف ${cap}`,

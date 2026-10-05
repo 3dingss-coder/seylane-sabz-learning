@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Flame } from 'lucide-react';
+import { LINES } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { playMoment } from '@/lib/sound';
@@ -35,7 +36,7 @@ export function StreakChip({ count, className }: { count: number; className?: st
         fresh && 'animate-pop',
         className,
       )}
-      aria-label={`پیوستگی ${toPersianDigits(count)} روز`}
+      aria-label={LINES.streakDays(toPersianDigits(count))}
     >
       <Flame className="size-3.5 text-streak" aria-hidden />
       <span className="num-latin" dir="ltr">

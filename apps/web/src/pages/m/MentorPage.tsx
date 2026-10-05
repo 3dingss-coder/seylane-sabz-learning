@@ -1,6 +1,7 @@
 import { PhoneCall } from 'lucide-react';
 import { MentorChat } from '@/components/learning/MentorChat';
 import { MascotAvatar } from '@/components/brand/MascotAvatar';
+import { COPY } from '@/lib/copy/fa';
 
 /**
  * M9 — منتور.
@@ -14,12 +15,12 @@ export function MentorPage() {
   return (
     <div className="flex h-[calc(100dvh-12rem)] flex-col md:h-[calc(100dvh-8rem)]">
       <div className="mb-2 flex items-center gap-2">
-        <MascotAvatar size={36} alt="سیلا — منتور سیلانه‌سبز لرنینگ" />
+        <MascotAvatar size={36} alt={COPY.celebrate.mentorPageAlt} />
         <div className="min-w-0">
-          <h1 className="text-lg font-bold leading-6">منتور</h1>
+          <h1 className="text-lg font-bold leading-6">{COPY.celebrate.mentorPageTitle}</h1>
           <p className="flex items-center gap-1 text-xs text-text-secondary">
             <PhoneCall className="size-3" aria-hidden />
-            درباره‌ی هر محصول، برند یا آزمونی بپرس
+            {COPY.celebrate.mentorPageHint}
           </p>
         </div>
       </div>

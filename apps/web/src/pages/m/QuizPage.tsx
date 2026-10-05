@@ -409,12 +409,8 @@ function QuizFlow({
           <Card className="flex flex-col gap-2 text-sm text-text">
             <p>{LINES.questionCount(toPersianDigits(d.quiz.questionCount))}</p>
             <p>{LINES.passScoreLine(faPercent(d.quiz.passScore))}</p>
-            <p>
-              {LINES.remainingLine(toPersianDigits(info.remaining), toPersianDigits(info.max))}
-            </p>
-            {info.lastAttempt && (
-              <p>{LINES.lastScoreLine(faPercent(info.lastAttempt.score))}</p>
-            )}
+            <p>{LINES.remainingLine(toPersianDigits(info.remaining), toPersianDigits(info.max))}</p>
+            {info.lastAttempt && <p>{LINES.lastScoreLine(faPercent(info.lastAttempt.score))}</p>}
           </Card>
           <Button
             size="lg"

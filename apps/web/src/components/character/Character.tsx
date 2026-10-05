@@ -1,3 +1,4 @@
+import { COPY, LINES } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { Brows, Eyes, Mouth, GroundShadow } from './parts';
 import { BODY_MOTION, FACE } from './data';
@@ -8,14 +9,14 @@ const INK = '#0f172a';
 
 /** Persian label for each expression — the accessible name must say the state, not the id. */
 const EXPRESSION_FA: Record<Expression, string> = {
-  idle: 'آرام',
-  happy: 'خوشحال',
-  celebrate: 'در حال جشن',
-  thinking: 'در حال فکر',
-  worried: 'نگرانِ مهلت',
-  proud: 'سرافراز',
-  nudge: 'دعوت ملایم',
-  empathy: 'همدل',
+  idle: COPY.cast.idle,
+  happy: COPY.cast.happy,
+  celebrate: COPY.cast.celebrate,
+  thinking: COPY.cast.thinking,
+  worried: COPY.cast.worried,
+  proud: COPY.cast.proud,
+  nudge: COPY.cast.nudge,
+  empathy: COPY.cast.empathy,
 };
 
 const HUMAN_BODY = {
@@ -43,8 +44,8 @@ export function Character({
 }: CharacterProps) {
   const px = SIZE_PX[size];
   const label = speech
-    ? `${CHARACTER_NAME[id]} می‌گوید: ${speech}`
-    : `${CHARACTER_NAME[id]}، حالت ${EXPRESSION_FA[expression]}`;
+    ? LINES.says(CHARACTER_NAME[id], speech)
+    : LINES.expressionState(CHARACTER_NAME[id], EXPRESSION_FA[expression]);
 
   return (
     <div className={cn('flex items-end gap-2', className)} style={{ maxWidth: px * 3 }}>
@@ -103,13 +104,7 @@ function Body({ id }: { id: Exclude<CharacterProps['id'], 'seyla'> | CharacterPr
   return <Cmp />;
 }
 
-function Face({
-  id,
-  expression,
-}: {
-  id: CharacterProps['id'];
-  expression: Expression;
-}) {
+function Face({ id, expression }: { id: CharacterProps['id']; expression: Expression }) {
   if (id === 'seyla') return null;
   const geo = FACE[id as keyof typeof FACE];
   return (

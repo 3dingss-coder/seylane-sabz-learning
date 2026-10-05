@@ -52,10 +52,11 @@ describe('routing', () => {
       }),
     );
     renderAt('/gallery');
-    expect(await screen.findByRole('img', { name: 'لوگوی دافی' })).toHaveAttribute(
-      'src',
-      '/catalog/brands/brand-sb-2/logo.png',
-    );
+    // 5s, not the 1s default: with all 24 files running in parallel this page can take longer
+    // than a second to resolve the manifest, and the flake was the timeout, not the assertion.
+    expect(
+      await screen.findByRole('img', { name: 'لوگوی دافی' }, { timeout: 5000 }),
+    ).toHaveAttribute('src', '/catalog/brands/brand-sb-2/logo.png');
   });
 
   it('gallery shows retry on manifest failure', async () => {

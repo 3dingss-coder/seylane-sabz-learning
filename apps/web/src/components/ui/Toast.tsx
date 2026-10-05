@@ -3,6 +3,7 @@
 //   auto-dismiss timings from §16.5 (success 3s / error 6s + action), top placement on mobile.
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
+import { COPY } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { exitDelay } from '@/lib/motion';
 import {
@@ -91,7 +92,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => dismiss(t.id)}
-              aria-label="بستن پیام"
+              aria-label={COPY.a11y.closeMessage}
               className="flex size-12 items-center justify-center rounded-input text-muted-fg hover:bg-background hover:text-text"
             >
               <X className="size-4" aria-hidden />

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Bot } from 'lucide-react';
 import { Modal } from '@/components/ui';
+import { COPY } from '@/lib/copy/fa';
 import { track } from '@/lib/telemetry';
 import { MentorChat } from './MentorChat';
 
@@ -24,9 +25,9 @@ export function MentorLauncher({ packageId }: { packageId: string }) {
           />
           <Bot className="relative size-5" aria-hidden />
         </span>
-        از منتور بپرس
+        {COPY.celebrate.askMentor}
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="منتور" size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title={COPY.celebrate.mentor} size="lg">
         <MentorChat packageId={packageId} className="h-[60dvh]" />
       </Modal>
     </>

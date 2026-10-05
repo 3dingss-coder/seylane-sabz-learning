@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Check, Play } from 'lucide-react';
+import { COPY, LINES } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 
@@ -24,14 +25,7 @@ const ALIGN = { start: 'self-start', center: 'self-center', end: 'self-end' } as
  * State is derived from real package status — there is no invented "locked" state,
  * because the product gates sections inside a package, not packages themselves.
  */
-export function StationTile({
-  index,
-  title,
-  state,
-  to,
-  meta,
-  align = 'center',
-}: StationTileProps) {
+export function StationTile({ index, title, state, to, meta, align = 'center' }: StationTileProps) {
   return (
     <Link
       to={to}
@@ -74,9 +68,13 @@ export function StationTile({
           {title}
         </span>
         <span className="mt-0.5 block text-xs text-text-secondary">
-          {state === 'done' ? 'تمام شد' : state === 'current' ? 'نوبت تو' : 'ایستگاه بعدی'}
+          {state === 'done'
+            ? COPY.path.done
+            : state === 'current'
+              ? COPY.path.yourTurn
+              : COPY.path.nextStation}
           {meta ? ` • ${meta}` : ''}
-          <span className="sr-only"> — ایستگاه {toPersianDigits(index)}</span>
+          <span className="sr-only">{LINES.stationIndex(toPersianDigits(index))}</span>
         </span>
       </span>
     </Link>

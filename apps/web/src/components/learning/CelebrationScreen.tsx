@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Button, Card, CoinChip, Confetti, CountUp, StreakChip } from '@/components/ui';
 import { MascotAvatar } from '@/components/brand/MascotAvatar';
+import { COPY, LINES } from '@/lib/copy/fa';
 import { faNumber } from '@/lib/format';
 
 export interface CelebrationScreenProps {
@@ -44,19 +45,21 @@ export function CelebrationScreen({
         className="relative flex flex-col items-center gap-2 overflow-hidden py-8 text-center"
       >
         <Confetti />
-        <MascotAvatar size={96} className="animate-pop" alt="سیلا خوشحال" />
+        <MascotAvatar size={96} className="animate-pop" alt={COPY.celebrate.happyAlt} />
         {badge}
         <h2 className="mt-1 text-xl font-extrabold text-text">{title}</h2>
         {subtitle && <p className="max-w-xs text-sm text-text-secondary">{subtitle}</p>}
         {pointsEarned > 0 && (
           <p
             className="mt-1 text-3xl font-extrabold text-primary-800"
-            aria-label={`${faNumber(pointsEarned)} امتیاز گرفتی`}
+            aria-label={LINES.pointsEarned(faNumber(pointsEarned))}
           >
             <span aria-hidden>
               +<CountUp value={pointsEarned} format={(n) => faNumber(n)} />
             </span>
-            <span className="ms-1 text-sm font-bold text-text-secondary">امتیاز</span>
+            <span className="ms-1 text-sm font-bold text-text-secondary">
+              {COPY.celebrate.pointsUnit}
+            </span>
           </p>
         )}
         {streakDays ? (
