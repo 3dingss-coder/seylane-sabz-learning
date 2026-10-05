@@ -4,6 +4,12 @@ import { ApiError } from '../http/errors';
 import { text } from '../http/validate';
 import { ids, normalizePhone, phoneToAuthEmail } from '../lib/ids';
 import { StoreConflictError, type Doc } from '../store/types';
+import {
+  canonicalCity,
+  canonicalProvince,
+  isValidResidence,
+  normalizeLocation,
+} from '../domain/iranLocations';
 import type { Role, Team, User } from '../domain/types';
 import { audit, nowIso, SYSTEM, track, type Actor, type Deps } from './context';
 
@@ -23,21 +29,86 @@ const identifierSchema = z
   .min(3, 'شماره موبایل یا ایمیل را وارد کنید.')
   .max(120);
 
-export const registerSchema = z.object({
-  name: text(2, 60, 'نام'),
-  identifier: identifierSchema,
-  password: passwordSchema,
-});
+// ─── Residence («محل سکونت») ────────────────────────────────────────────────
+/** The province/city pair is validated against the generated directory (domain/iranLocations). */
+const provinceSchema = text(2, 40, 'استان').refine(
+  (s) => canonicalProvince(s) !== null,
+  'این استان در فهرست استان‌های ایران نیست.',
+);
+const citySchema = text(2, 60, 'شهر');
+
+const residenceShape = {
+  province: provinceSchema.optional(),
+  city: citySchema.optional(),
+};
+
+/**
+ * Both parts travel together and the city must belong to the province (sign-up + admin edit).
+ * `null` clears the pair (only sent by the admin patch); absent fields are left untouched.
+ */
+function checkResidence(
+  v: { province?: string | null | undefined; city?: string | null | undefined },
+  ctx: z.RefinementCtx,
+) {
+  if (v.province === undefined && v.city === undefined) return;
+  const province = v.province ?? '';
+  const city = v.city ?? '';
+  if (!province) {
+    if (city)
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['province'],
+        message: 'استان را انتخاب کنید.',
+      });
+    return;
+  }
+  if (!city) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['city'], message: 'شهر را انتخاب کنید.' });
+    return;
+  }
+  if (!isValidResidence(province, city)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['city'],
+      message: `«${city}» در استان ${canonicalProvince(province) ?? province} نیست.`,
+    });
+  }
+}
+
+/** Residence as stored: canonical names, or nulls when the caller sent neither part. */
+function residence(input: {
+  province?: string | null | undefined;
+  city?: string | null | undefined;
+}) {
+  return {
+    province: input.province ? canonicalProvince(input.province) : null,
+    city: input.province && input.city ? canonicalCity(input.province, input.city) : null,
+  };
+}
+
+export const registerSchema = z
+  .object({
+    name: text(2, 60, 'نام'),
+    identifier: identifierSchema,
+    password: passwordSchema,
+    ...residenceShape,
+  })
+  .superRefine(checkResidence);
 export const loginSchema = z.object({
   identifier: identifierSchema,
   password: z.string().min(1, 'رمز عبور را وارد کنید.').max(128),
 });
 
 /** Self sign-up by phone only (no password: marketers sign in with their number). */
-export const phoneRegisterSchema = z.object({
-  name: text(2, 60, 'نام'),
-  phone: z.string().min(1, 'شماره موبایل را وارد کنید.').max(20),
-});
+export const phoneRegisterSchema = z
+  .object({
+    name: text(2, 60, 'نام'),
+    phone: z.string().min(1, 'شماره موبایل را وارد کنید.').max(20),
+    // Required here: every self sign-up tells us where the marketer sells (admin/manager panels).
+    province: provinceSchema,
+    city: citySchema,
+  })
+  .superRefine(checkResidence);
 export const staffLoginSchema = z.object({
   username: z.string().trim().min(2).max(60),
   password: z.string().min(1).max(128),
@@ -78,6 +149,8 @@ export function publicUser(u: Doc<User>) {
     name: u.name,
     phone: u.phone,
     email: u.email,
+    province: u.province ?? null,
+    city: u.city ?? null,
     role: u.role,
     teamId: u.teamId,
     brandIds: u.brandIds,
@@ -131,6 +204,7 @@ export async function register(
     name: input.name,
     phone: idf.kind === 'phone' ? idf.phone : null,
     email: idf.kind === 'email' ? idf.email : null,
+    ...residence(input),
     firebaseUid: uid,
     role,
     teamId: null,
@@ -305,11 +379,19 @@ export async function listUsers(d: Deps, f: z.infer<typeof adminUserQuery>) {
   if (f.q) {
     const q = f.q.trim().toLowerCase();
     const phone = normalizePhone(q);
+    // Province/city are searchable too: «مشهد» / «خراسان» finds every marketer of that region.
+    const residenceQuery = normalizeLocation(q);
     users = users.filter(
       (u) =>
         u.name.toLowerCase().includes(q) ||
         (u.email ?? '').includes(q) ||
-        (u.phone ?? '').includes(phone ?? (q.replace(/\D/g, '') || '§')),
+        (u.phone ?? '').includes(phone ?? (q.replace(/\D/g, '') || '§')) ||
+        (u.province !== null &&
+          u.province !== undefined &&
+          normalizeLocation(u.province).includes(residenceQuery)) ||
+        (u.city !== null &&
+          u.city !== undefined &&
+          normalizeLocation(u.city).includes(residenceQuery)),
     );
   }
   users.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
@@ -323,7 +405,11 @@ export const adminPatchUserSchema = z
     teamId: z.string().max(80).nullable().optional(),
     status: z.enum(['active', 'inactive']).optional(),
     brandIds: z.array(z.string().max(80)).max(50).optional(),
+    // Admins may correct the residence captured at sign-up (also for accounts that predate it).
+    province: provinceSchema.nullable().optional(),
+    city: citySchema.nullable().optional(),
   })
+  .superRefine(checkResidence)
   .refine((v) => Object.keys(v).length > 0, 'هیچ تغییری ارسال نشده است.');
 
 const PRIVILEGED: Role[] = ['admin', 'superadmin'];
@@ -396,6 +482,8 @@ export async function adminUpdateUser(
       );
   }
   const update: Partial<User> = { ...patch, updatedAt: nowIso(d) } as Partial<User>;
+  // Store the canonical spellings, not whatever the picker/search box sent.
+  if (patch.province) Object.assign(update, residence(patch));
   await d.store.update(`users/${userId}`, update as Record<string, unknown>);
   if (roleChanged) await d.auth.setClaims(userId, { role: patch.role });
   if (roleChanged || patch.status === 'inactive') await d.auth.revoke(userId);
@@ -540,6 +628,9 @@ export async function ensureUser(
     role: Role;
     teamId?: string | null;
     brandIds?: string[];
+    /** Optional residence for seeded/demo accounts (sign-up collects it from the form). */
+    province?: string | null;
+    city?: string | null;
   },
 ) {
   const idf = parseIdentifier(p.identifier);
@@ -551,7 +642,13 @@ export async function ensureUser(
   if (existing[0]) return existing[0];
   const u = await register(
     d,
-    { name: p.name, identifier: p.identifier, password: p.password },
+    {
+      name: p.name,
+      identifier: p.identifier,
+      password: p.password,
+      province: p.province ?? undefined,
+      city: p.city ?? undefined,
+    },
     p.role,
     { teamId: p.teamId ?? null, brandIds: p.brandIds ?? [], onboardedAt: nowIso(d) },
   );

@@ -6,6 +6,9 @@ export interface Me {
   name: string;
   phone: string | null;
   email: string | null;
+  /** Residence («محل سکونت») captured at sign-up; null on accounts created before it existed. */
+  province: string | null;
+  city: string | null;
   role: Role;
   teamId: string | null;
   brandIds: string[];
@@ -44,6 +47,8 @@ export interface SectionView {
   mediaType: 'video' | 'audio';
   durationSec: number;
   quizId: string;
+  /** false = no quiz on this section (the package quiz is on its podcast section). */
+  quizRequired?: boolean;
   percent: number;
   mediaCompleted: boolean;
   quizPassed: boolean;
@@ -123,6 +128,9 @@ export interface SectionDetail {
   };
   position: { index: number; total: number };
   nextSectionId: string | null;
+  /** The package's single quiz lives on one section; every media row links to it. */
+  quizSectionId?: string;
+  packageQuizPassed?: boolean;
   completionThreshold: number;
 }
 
@@ -158,6 +166,8 @@ export interface AttemptInfo {
   remaining: number;
   passed: boolean;
   mediaCompleted: boolean;
+  /** Last try was below the pass mark: content must be watched/listened to again first. */
+  rewatchRequired?: boolean;
   canAttempt: boolean;
   inProgressAttemptId: string | null;
   inProgressAnswers: Record<string, string>;
@@ -191,6 +201,7 @@ export interface SubmitResult {
   correctCount: number;
   total: number;
   remainingAttempts: number;
+  rewatchRequired?: boolean;
   nextAction: 'next_section' | 'package_complete' | 'retry' | 'request_retake' | 'retake_pending';
   packageCompleted: boolean;
   pointsEarned: number;
@@ -452,6 +463,8 @@ export interface TeamKpis {
 export interface Laggard {
   userId: string;
   name: string;
+  province: string | null;
+  city: string | null;
   packageId: string;
   packageTitle: string;
   percent: number;
@@ -470,6 +483,8 @@ export interface CompletionRow {
   userId: string;
   userName: string;
   teamId: string | null;
+  province: string | null;
+  city: string | null;
   packageId: string;
   packageTitle: string;
   brandId: string | null;
@@ -517,6 +532,8 @@ export interface RetakeItem {
   id: string;
   userId: string;
   userName: string;
+  userProvince: string | null;
+  userCity: string | null;
   quizId: string;
   sectionTitle: string;
   packageTitle: string;

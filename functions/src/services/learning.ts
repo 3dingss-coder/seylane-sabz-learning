@@ -156,6 +156,9 @@ export async function mySection(d: Deps, user: Doc<User>, sectionId: string) {
     },
     position: { index: idx + 1, total: active.length },
     nextSectionId: active[idx + 1]?.id ?? null,
+    // One quiz per package: video and podcast both lead to it.
+    quizSectionId: active.find((s) => s.quizRequired !== false)?.id ?? sectionId,
+    packageQuizPassed: active.filter((s) => s.quizRequired !== false).every((s) => s.quizPassed),
     completionThreshold: policy.completionThreshold,
   };
 }
@@ -476,6 +479,13 @@ export async function getQuizForUser(d: Deps, user: Doc<User>, quizId: string) {
     shown = all.filter((q): q is Doc<Question> => !!q);
   }
   const last = submitted[submitted.length - 1] ?? null;
+  // Below the pass mark → the content must be watched/listened to again before the next try.
+  const rewatchRequired =
+    !passed &&
+    inProgress === null &&
+    last !== null &&
+    !last.passed &&
+    !view.sections.some((s) => !s.archived && s.mediaCompleted);
   return {
     quiz: {
       id: quiz.id,
@@ -494,8 +504,10 @@ export async function getQuizForUser(d: Deps, user: Doc<User>, quizId: string) {
       remaining: Math.max(0, allowance.max - submitted.length - (inProgress ? 1 : 0)),
       passed,
       mediaCompleted: sv.mediaCompleted,
+      rewatchRequired,
       canAttempt:
         !passed &&
+        !rewatchRequired &&
         (inProgress !== null || submitted.length < allowance.max) &&
         questions.length > 0,
       inProgressAttemptId: inProgress?.id ?? null,
@@ -551,6 +563,20 @@ export async function startAttempt(d: Deps, user: Doc<User>, quizId: string) {
         'CONFLICT',
         'تلاش‌های شما تمام شده است. می‌توانید درخواست تلاش مجدد بدهید.',
         { reason: 'attempts_exhausted' },
+      );
+    const lastSubmitted = attempts
+      .filter((x) => x.status === 'submitted')
+      .sort((x, y) => x.attemptNumber - y.attemptNumber)
+      .pop();
+    if (
+      lastSubmitted &&
+      !lastSubmitted.passed &&
+      !view.sections.some((s) => !s.archived && s.mediaCompleted)
+    )
+      throw new ApiError(
+        'CONFLICT',
+        'نمره‌ات زیر حد قبولی بود. برای تلاش دوباره، یک بار ویدیو را ببین یا پادکست را گوش بده.',
+        { reason: 'rewatch_required' },
       );
     const n = attempts.length + 1;
     const snapshot: AttemptSnapshotItem[] = questions.map((q) => ({
@@ -644,6 +670,25 @@ export async function submitAttempt(
     if (g.passed) {
       const pPath = `section_progress/${ids.progress(user.id, a.sectionId)}`;
       tx.set(pPath, { quizPassed: true, quizPassedAt: now, updatedAt: now }, { merge: true });
+    } else {
+      // Failed (< pass mark): clear the package's playback so the content has to be watched or
+      // listened to again before the next attempt can start.
+      const prog = await tx.query<SectionProgress>({
+        collection: 'section_progress',
+        where: [
+          ['userId', '==', user.id],
+          ['packageId', '==', a.packageId],
+        ],
+      });
+      for (const p of prog)
+        tx.update(`section_progress/${p.id}`, {
+          completed: false,
+          completedAt: null,
+          percent: 0,
+          playedSeconds: 0,
+          lastPositionSec: 0,
+          updatedAt: now,
+        });
     }
     return {
       a: {
@@ -738,16 +783,16 @@ export async function submitAttempt(
         d,
         user.id,
         'R2',
-        `اشکالی ندارد — قسمت «${section.title}» را مرور کن و دوباره تلاش کن.`,
-        `/sections/${a.sectionId}`,
+        `اشکالی ندارد — «${pkg.title}» را یک بار دیگر ببین یا گوش بده و دوباره آزمون بده.`,
+        `/packages/${pkg.id}`,
         a.quizId,
       );
       await notifyTemplate(
         d,
         [user.id],
         'quiz_failed',
-        { title: section.title },
-        { actionRef: `/sections/${a.sectionId}` },
+        { title: pkg.title },
+        { actionRef: `/packages/${pkg.id}` },
       );
     }
   }
@@ -767,6 +812,7 @@ export async function submitAttempt(
     total: g.total,
     remainingAttempts: remaining,
     nextAction,
+    rewatchRequired: !g.passed,
     packageCompleted,
     pointsEarned,
     review: g.perQuestion.map((p, i) => ({

@@ -73,7 +73,7 @@ export function QuizPage() {
           key={d.quiz.id}
           d={d}
           sectionId={sectionId}
-          nextSectionId={section.data?.nextSectionId ?? null}
+          nextSectionId={null}
         />
       )}
     </QueryState>
@@ -212,24 +212,14 @@ function QuizFlow({
             {result.packageCompleted ? COPY.quiz.packageDoneHome : COPY.quiz.backToPackage}
           </Button>
         ) : result.nextAction === 'retry' ? (
-          <div className="flex flex-col gap-2">
-            <Button
-              size="lg"
-              block
-              icon={<RotateCcw className="size-5" aria-hidden />}
-              loading={start.isPending}
-              onClick={() => {
-                setResult(null);
-                setAttempt(null);
-                start.mutate();
-              }}
-            >
-              {COPY.actions.retry}
-            </Button>
-            <Button variant="ghost" block onClick={() => nav(`/sections/${sectionId}`)}>
-              {COPY.quiz.rewatch}
-            </Button>
-          </div>
+          <Button
+            size="lg"
+            block
+            icon={<RotateCcw className="size-5" aria-hidden />}
+            onClick={() => nav(`/packages/${d.quiz.packageId}`)}
+          >
+            {COPY.quiz.rewatchMedia}
+          </Button>
         ) : result.nextAction === 'request_retake' ? (
           <Button size="lg" block loading={retake.isPending} onClick={() => retake.mutate()}>
             {COPY.quiz.requestRetake}
@@ -317,9 +307,11 @@ function QuizFlow({
               {LINES.points(faNumber(result.pointsEarned))}
             </p>
           )}
-          {!result.passed && result.remainingAttempts > 0 && (
+          {!result.passed && (
             <p className="text-sm text-text-secondary">
-              {LINES.attemptsLeft(toPersianDigits(result.remainingAttempts))}
+              {LINES.retryGuidance(
+                result.remainingAttempts > 0 ? toPersianDigits(result.remainingAttempts) : '',
+              )}
             </p>
           )}
         </Card>
@@ -387,6 +379,15 @@ function QuizFlow({
             }
           >
             {nextSectionId ? COPY.quiz.nextSection : COPY.quiz.backToPackage}
+          </Button>
+        </>
+      );
+    else if (info.rewatchRequired && !info.pendingRetake)
+      body = (
+        <>
+          <EmptyState title={COPY.quiz.belowPassTitle} description={COPY.quiz.belowPassDesc} />
+          <Button size="lg" block onClick={() => nav(`/packages/${d.quiz.packageId}`)}>
+            {COPY.quiz.goToMedia}
           </Button>
         </>
       );

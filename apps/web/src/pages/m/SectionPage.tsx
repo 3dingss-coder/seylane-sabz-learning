@@ -68,7 +68,9 @@ function Player({ d }: { d: SectionDetail }) {
   };
   const tracker = usePlaybackTracker(s.id, onResult);
 
-  const quizReady = !s.quizPassed;
+  const quizSectionId = d.quizSectionId ?? s.id;
+  const quizReady = !(d.packageQuizPassed ?? s.quizPassed);
+  const sectionDone = !quizReady;
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -137,6 +139,11 @@ function Player({ d }: { d: SectionDetail }) {
                 <span className="inline-flex items-center gap-1 font-bold text-success-fg">
                   <CheckCircle2 className="size-4" aria-hidden /> {COPY.section.completedNote}
                 </span>
+              ) : quizReady ? (
+                LINES.completionRuleQuizOpen(
+                  faPercent(d.completionThreshold),
+                  faPercent(progress.percent),
+                )
               ) : (
                 LINES.completionRule(faPercent(d.completionThreshold), faPercent(progress.percent))
               )}
@@ -149,21 +156,12 @@ function Player({ d }: { d: SectionDetail }) {
               block
               variant="cta"
               icon={<ClipboardCheck className="size-5" aria-hidden />}
-              onClick={() => nav(`/quiz/${s.id}`)}
+              onClick={() => nav(`/quiz/${quizSectionId}`)}
               data-testid="start-quiz"
             >
               {COPY.quiz.start}
             </Button>
-          ) : s.quizPassed && d.nextSectionId ? (
-            <Button
-              size="lg"
-              block
-              variant="cta"
-              onClick={() => nav(`/sections/${d.nextSectionId}`)}
-            >
-              {COPY.quiz.nextSection}
-            </Button>
-          ) : s.quizPassed ? (
+          ) : sectionDone ? (
             <Button size="lg" block variant="secondary" onClick={() => nav(`/packages/${p.id}`)}>
               {COPY.quiz.backToPackage}
             </Button>

@@ -1,4 +1,4 @@
-# Design Refresh — سیلانه‌سبز لرنینگ
+# Design Refresh — آکادمی سیلانه
 
 UI/UX-only refresh of `apps/web`. No API, routing, state or business logic was changed (except the
 two bug fixes listed under "Fixed on the way"). Screenshots: `docs/design-refresh/before/` and

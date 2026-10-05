@@ -10,8 +10,8 @@ export function AppLogo({
 }) {
   return (
     <span className={cn('inline-flex items-center gap-2', className)}>
-      <img src="/icons/logo-full.png" alt="هلدینگ سیلانه‌سبز" className="h-9 w-auto" />
-      {withTitle && <span className="text-base font-bold text-primary">لرنینگ</span>}
+      <img src="/icons/logo-full.png" alt="آکادمی سیلانه" className="h-9 w-auto" />
+      {withTitle && <span className="text-base font-bold text-primary">آکادمی سیلانه</span>}
     </span>
   );
 }

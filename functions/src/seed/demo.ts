@@ -31,6 +31,8 @@ export const DEMO_USERS = [
     name: 'سارا احمدی',
     phone: '09120000004',
     team: 'team-tehran',
+    province: 'تهران',
+    city: 'تهران',
   },
   {
     key: 'marketer2',
@@ -38,6 +40,8 @@ export const DEMO_USERS = [
     name: 'علی رضایی',
     phone: '09120000005',
     team: 'team-tehran',
+    province: 'تهران',
+    city: 'ری',
   },
   {
     key: 'manager2',
@@ -45,6 +49,8 @@ export const DEMO_USERS = [
     name: 'نرگس مدیر فروش',
     phone: '09120000006',
     team: 'team-isfahan',
+    province: 'اصفهان',
+    city: 'اصفهان',
   },
   {
     key: 'marketer3',
@@ -52,6 +58,8 @@ export const DEMO_USERS = [
     name: 'مریم کریمی',
     phone: '09120000007',
     team: 'team-isfahan',
+    province: 'اصفهان',
+    city: 'کاشان',
   },
 ];
 
@@ -78,6 +86,8 @@ export async function seedDemo(d: Deps) {
       password: DEMO_PASSWORD,
       role: u.role,
       teamId: u.team,
+      province: u.province ?? null,
+      city: u.city ?? null,
     });
     if (u.role === 'manager' && u.team)
       await d.store.update(`teams/${u.team}`, { managerId: user.id });

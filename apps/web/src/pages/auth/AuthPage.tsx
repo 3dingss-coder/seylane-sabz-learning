@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Phone, UserRound } from 'lucide-react';
 import { BrandBackdrop } from '@/components/brand/BrandBackdrop';
+import { ResidencePicker, type Residence } from '@/components/common/ResidencePicker';
 import { Button, Card, Input } from '@/components/ui';
 import { ApiError } from '@/lib/api';
 import { homePathFor, useAuth } from '@/lib/auth';
@@ -19,6 +20,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
   const [mode, setMode] = useState<Mode>(initial);
   const [name, setName] = useState('');
   const [identifier, setIdentifier] = useState('');
+  const [residence, setResidence] = useState<Residence>({ province: '', city: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState('');
   const [info, setInfo] = useState('');
@@ -47,6 +49,11 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
     if (mode === 'register' && name.trim().length < 2) e.name = 'نام و نام خانوادگی را بنویسید.';
     if (!/^09\d{9}$/.test(toLatinDigits(identifier.trim())))
       e.identifier = 'شماره موبایل معتبر وارد کنید.';
+    if (mode === 'register') {
+      // Activity location is part of sign-up: the admin/manager panels get the region of every marketer.
+      if (!residence.province) e.province = 'استان محل فعالیت خود را انتخاب کنید.';
+      else if (!residence.city) e.city = 'شهر محل فعالیت خود را انتخاب کنید.';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -59,7 +66,14 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
     const id = toLatinDigits(identifier.trim());
     try {
       const u =
-        mode === 'login' ? await login(id) : await register({ name: name.trim(), phone: id });
+        mode === 'login'
+          ? await login(id)
+          : await register({
+              name: name.trim(),
+              phone: id,
+              province: residence.province,
+              city: residence.city,
+            });
       // Return to the page that sent the user here (e.g. /admin/users) when their role allows it.
       const from = (loc.state as { from?: string } | null)?.from;
       const target =
@@ -106,7 +120,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             className="h-14 w-auto"
           />
         </span>
-        <h1 className="text-2xl font-extrabold text-white">سیلانه‌سبز لرنینگ</h1>
+        <h1 className="text-2xl font-extrabold text-white">آکادمی سیلانه</h1>
         <p className="text-sm text-white/85">{title}</p>
       </div>
       <Card className="animate-fade-up relative mt-6 w-full max-w-[400px] p-6 shadow-lg">
@@ -134,6 +148,16 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             icon={<Phone className="size-5" />}
             disabled={busy}
           />
+          {mode === 'register' && (
+            <ResidencePicker
+              value={residence}
+              onChange={setResidence}
+              label="انتخاب محل فعالیت شما"
+              provinceError={errors.province}
+              cityError={errors.city}
+              disabled={busy}
+            />
+          )}
           {formError && (
             <p
               role="alert"

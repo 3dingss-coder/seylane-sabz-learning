@@ -21,6 +21,8 @@ export const marketer: Me = {
   name: 'سارا احمدی',
   phone: '09120000004',
   email: null,
+  province: 'تهران',
+  city: 'تهران',
   role: 'marketer',
   teamId: 'team-tehran',
   brandIds: [],

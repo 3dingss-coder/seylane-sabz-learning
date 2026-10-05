@@ -25,9 +25,9 @@ export default defineConfig(({ mode }) => {
         injectRegister: false,
         includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
         manifest: {
-          name: 'سیلانه‌سبز لرنینگ',
-          short_name: 'سیلانه‌سبز لرنینگ',
-          description: 'آموزش محصولات سیلانه‌سبز برای بازاریاب‌ها',
+          name: 'آکادمی سیلانه',
+          short_name: 'آکادمی سیلانه',
+          description: 'آموزش محصولات آکادمی سیلانه برای بازاریاب‌ها',
           lang: 'fa',
           dir: 'rtl',
           start_url: '/',
@@ -43,12 +43,23 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
-          // Catalog images are large — cache at runtime instead of precaching.
-          globIgnores: ['**/catalog/**', '**/ffmpeg/**'],
+          // Catalog images and the rarely used ExcelJS export chunk are fetched on demand.
+          // ExcelJS (~940 KB) must not be downloaded during PWA installation for marketers.
+          globIgnores: ['**/catalog/**', '**/ffmpeg/**', '**/exceljs*.js'],
           // Web Push handler (src/lib/webPush.ts) — self-hosted, no Firebase script in the worker.
           importScripts: ['push-sw.js'],
           navigateFallbackDenylist: [/^\/v1\//],
           runtimeCaching: [
+            {
+              // Cache the large ExcelJS chunk only after a user explicitly requests an export.
+              urlPattern: ({ url }) => /\/assets\/exceljs[^/]*\.js$/.test(url.pathname),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'excel-export',
+                expiration: { maxEntries: 2 },
+                cacheableResponse: { statuses: [200] },
+              },
+            },
             {
               urlPattern: ({ url }) => url.pathname.startsWith('/catalog/'),
               handler: 'CacheFirst',

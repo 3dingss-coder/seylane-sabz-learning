@@ -7,6 +7,9 @@ export interface User {
   name: string;
   phone: string | null;
   email: string | null;
+  /** Residence («محل سکونت»), captured at sign-up; null on accounts created before it existed. */
+  province: string | null;
+  city: string | null;
   firebaseUid: string;
   role: Role;
   teamId: string | null;
@@ -68,6 +71,8 @@ export interface SectionSummary {
   mediaType: MediaType;
   durationSec: number;
   quizId: string;
+  /** false = no quiz gates this section (the package quiz lives on another section). Missing = true. */
+  quizRequired?: boolean;
   archived: boolean;
 }
 
@@ -117,6 +122,8 @@ export interface Section {
   mediaSizeBytes: number | null;
   durationSec: number;
   quizId: string;
+  /** false = no quiz gates this section (the package quiz lives on another section). Missing = true. */
+  quizRequired?: boolean;
   archived: boolean;
   createdAt: string;
   updatedAt: string;

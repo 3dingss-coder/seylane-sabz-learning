@@ -22,8 +22,8 @@ interface AuthState {
   status: 'loading' | 'authenticated' | 'anonymous';
   /** Marketers: phone number only. Rejects with code NOT_FOUND when the number isn't registered. */
   login(phone: string): Promise<Me>;
-  /** Marketers: sign up with name + phone and be signed in straight away. */
-  register(input: { name: string; phone: string }): Promise<Me>;
+  /** Marketers: sign up with name + phone + residence and be signed in straight away. */
+  register(input: { name: string; phone: string; province: string; city: string }): Promise<Me>;
   /** Admin / manager panels: username + password. */
   staffLogin(input: {
     panel: 'admin' | 'manager';

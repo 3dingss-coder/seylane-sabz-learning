@@ -20,6 +20,9 @@ export function MemberTimeline({ data, canMessage }: { data: Timeline; canMessag
               <span dir="ltr">{toPersianDigits(user.phone ?? user.email ?? '')}</span> • آخرین
               فعالیت: {user.lastActiveAt ? faRelative(user.lastActiveAt) : 'هرگز'}
             </p>
+            <p className="text-sm text-text-secondary">
+              محل فعالیت: {user.province ? `${user.province} • ${user.city ?? ''}` : 'ثبت نشده'}
+            </p>
           </div>
           {canMessage && (
             <Button icon={<Send className="size-4" aria-hidden />} onClick={() => setOpen(true)}>

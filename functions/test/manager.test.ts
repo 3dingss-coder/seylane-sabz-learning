@@ -60,7 +60,7 @@ describe('manager scope (28.2 #5)', () => {
   });
 
   it('dashboard lists only own team, with progress and lagging flags', async () => {
-    await watchSection(ctx, userA.token, fx.sections[0]?.id ?? '', 60);
+    await watchSection(ctx, userA.token, fx.sections[0]?.id ?? '', 20);
     const res = await ctx.api(mgrA.token).get('/v1/manager/dashboard');
     expect(res.status).toBe(200);
     const names = JSON.stringify(res.body.data);
@@ -74,6 +74,7 @@ describe('manager scope (28.2 #5)', () => {
     const wrong = Object.fromEntries(Object.keys(s1?.answers ?? {}).map((k) => [k, 'a']));
     for (let i = 0; i < 3; i++) {
       ctx.limiter.reset();
+      if (i > 0) await watchSection(ctx, userB.token, s1?.id ?? '', 60);
       await passQuiz(ctx, userB.token, s1?.quizId ?? '', wrong);
     }
     const req = await ctx.api(userB.token).post(`/v1/me/quizzes/${s1?.quizId}/retake-requests`);

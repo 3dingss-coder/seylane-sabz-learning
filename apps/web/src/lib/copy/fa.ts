@@ -103,7 +103,10 @@ export const COPY = {
     nextSection: 'قسمت بعد',
     backToPackage: 'بازگشت به بسته',
     packageDoneHome: 'بسته تمام شد — بازگشت به خانه',
-    rewatch: 'دوباره دیدن قسمت',
+    rewatchMedia: 'دیدن ویدیو یا گوش دادن به پادکست',
+    belowPassTitle: 'نمره‌ات زیر حد قبولی بود',
+    belowPassDesc: 'یک بار ویدیو را ببین یا پادکست را گوش بده؛ بعد دوباره آزمون باز می‌شود.',
+    goToMedia: 'رفتن به ویدیو و پادکست',
     requestRetake: 'درخواست آزمون مجدد از مدیر',
     retakeRequested: 'درخواست آزمون مجدد برای مدیر ارسال شد.',
     requestPending: 'درخواست آزمون مجددت در انتظار تأیید مدیر است.',
@@ -200,10 +203,11 @@ export const COPY = {
   /** §6.2.11 — a package (M3): what it holds, and the one next station. */
   pkg: {
     progressLabel: 'پیشرفت بسته',
-    startSectionQuiz: 'شروع آزمون قسمت',
+    startQuiz: 'شروع آزمون',
     continueSection: 'ادامه قسمت فعلی',
     startSection: 'شروع قسمت',
-    sectionQuiz: 'آزمون این قسمت',
+    packageQuiz: 'آزمون این محصول',
+    packageQuizPassed: 'آزمون این محصول را قبول شده‌ای ✅',
     emptyTitle: 'این بسته هنوز قسمتی ندارد',
     emptyDesc: 'به مدیر اطلاع داده شد.',
     lockedHint: 'ابتدا قسمت قبل را کامل کنید.',
@@ -464,7 +468,8 @@ export const LINES = {
   correctOfTotal: (correct: string, total: string) => `${correct} پاسخ درست از ${total}`,
   passScoreNote: (passScore: string) => `نمره قبولی ${passScore}`,
   points: (points: string) => `+${points} امتیاز`,
-  attemptsLeft: (remaining: string) => `${remaining} فرصت دیگر داری.`,
+  retryGuidance: (remaining: string) =>
+    `برای تلاش بعدی، یک بار ویدیو را ببین یا پادکست را گوش بده.${remaining ? ` (${remaining} فرصت دیگر داری)` : ''}`,
   scoreNote: (score: string) => `نمره: ${score}`,
   questionCount: (count: string) => `• ${count} سؤال چهارگزینه‌ای`,
   passScoreLine: (passScore: string) => `• نمره قبولی: ${passScore}`,
@@ -498,12 +503,15 @@ export const LINES = {
   brandTraining: (brand: string) => `آموزش برند ${brand}`,
   stationCount: (count: string) => `این بسته ${count} ایستگاه داره.`,
   deadlineOn: (date: string) => `مهلت: ${date}`,
-  sectionsCount: (count: string) => `قسمت‌ها (${count})`,
+  mediaListHeading: (count: string) => `ویدیو و پادکست (${count})`,
   percentWatched: (percent: string) => ` • ${percent} دیده شده`,
   sectionOf: (index: string, total: string) => `قسمت ${index} از ${total}`,
   /* §6.0 — two sentences, not three: the live percent rides along with a dash. */
   completionRule: (threshold: string, percent: string) =>
-    `آزمون این قسمت همیشه باز است. برای کامل شدن، حداقل ${threshold} را ببین یا بشنو — الان ${percent}`,
+    `برای کامل شدن قسمت، حداقل ${threshold} را ببین یا بشنو — الان ${percent}`,
+  /* Same rule, with main's «quiz is open from the start» note in front of it. */
+  completionRuleQuizOpen: (threshold: string, percent: string) =>
+    `آزمون بسته از همان اول باز است؛ دیدن یا شنیدن اجباری نیست. برای کامل شدن قسمت، حداقل ${threshold} را ببین یا بشنو — الان ${percent}`,
   overdueWarning: (count: string) => `مهلت ${count} آموزش گذشته است. هر چه زودتر تمامش کن.`,
   answeredHint: (answered: string, total: string) =>
     `به همه سؤال‌ها پاسخ بده (${answered} از ${total}).`,

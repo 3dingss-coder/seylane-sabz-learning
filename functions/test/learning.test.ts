@@ -198,6 +198,7 @@ describe('quiz & sequential lock (PROMPT 010)', () => {
     const wrong = Object.fromEntries(Object.keys(s1?.answers ?? {}).map((k) => [k, 'a']));
     for (let i = 0; i < 3; i++) {
       ctx.limiter.reset();
+      if (i > 0) await watchSection(ctx, mk.token, s1?.id ?? '', 120);
       const r = await passQuiz(ctx, mk.token, s1?.quizId ?? '', wrong);
       expect(r.body.data.passed).toBe(false);
     }
@@ -212,6 +213,7 @@ describe('quiz & sequential lock (PROMPT 010)', () => {
       .api(mgr.token)
       .post(`/v1/manager/retake-requests/${req.body.data.id}/approve`, {});
     expect(ok.status).toBe(200);
+    await watchSection(ctx, mk.token, s1?.id ?? '', 120);
     const again = await passQuiz(ctx, mk.token, s1?.quizId ?? '', s1?.answers ?? {});
     expect(again.body.data.passed).toBe(true);
     expect(again.body.data.pointsEarned).toBe(0); // not first-try
@@ -234,6 +236,7 @@ describe('quiz & sequential lock (PROMPT 010)', () => {
     const failUntilBlocked = async () => {
       for (;;) {
         ctx.limiter.reset();
+        await watchSection(ctx, mk.token, s1?.id ?? '', 120);
         const st = await ctx.api(mk.token).post(`/v1/me/quizzes/${s1?.quizId}/attempts`);
         if (st.status === 409) return;
         await ctx

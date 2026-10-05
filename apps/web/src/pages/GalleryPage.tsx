@@ -17,6 +17,7 @@ import { OBJECTIONS } from '@/components/character/data';
 import { ObjectionCreature } from '@/components/character/ObjectionCreature';
 import { CHARACTER_NAME, EXPRESSIONS, type CharacterId } from '@/components/character/types';
 import { BrandLogo } from '@/components/brand/BrandLogo';
+import { ResidencePicker, type Residence } from '@/components/common/ResidencePicker';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { Sidebar } from '@/components/layout/Sidebar';
 import {
@@ -75,6 +76,12 @@ const SCREEN_MAP: Array<[string, string, string]> = [
   ['M9 پیام‌ها', 'انسان واقعی', 'آواتار واقعی مدیر (C-05)'],
   ['پنل مدیر/ادمین', '—', 'هیچ کاراکتری مجاز نیست (C-06)'],
 ];
+
+/** «محل سکونت» (province → city) as the sign-up form shows it — live, searchable, scrollable. */
+function ResidencePickerDemo() {
+  const [value, setValue] = useState<Residence>({ province: '', city: '' });
+  return <ResidencePicker value={value} onChange={setValue} />;
+}
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -276,6 +283,9 @@ export function GalleryPage() {
                 icon={<Phone className="size-4" aria-hidden />}
                 error="این شماره قبلاً ثبت شده است."
               />
+            </div>
+            <div className="mt-4 max-w-md">
+              <ResidencePickerDemo />
             </div>
           </Section>
 

@@ -167,6 +167,49 @@ describe('users & roles (PROMPT 007)', () => {
     expect(r.status).toBe(403);
   });
 
+  it('admin sees, searches by and can correct the residence of a user', async () => {
+    const reg = await ctx.api().post('/v1/auth/phone-register', {
+      name: 'مهدی',
+      phone: '09365554433',
+      province: 'خراسان رضوی',
+      city: 'نیشابور',
+    });
+    expect(reg.status).toBe(201);
+    const id = reg.body.data.user.id as string;
+
+    // The list the admin panel reads carries the residence…
+    const list = await ctx.api(admin.token).get('/v1/admin/users?q=نیشابور');
+    expect(list.body.data.map((u: { id: string }) => u.id)).toEqual([id]);
+    expect((await ctx.api(admin.token).get('/v1/admin/users?q=خراسان')).body.data).toHaveLength(1);
+
+    // …and the user detail (used by both the admin and the manager member view) as well.
+    const detail = await ctx.api(admin.token).get(`/v1/admin/users/${id}`);
+    expect(detail.body.data.user.province).toBe('خراسان رضوی');
+    expect(detail.body.data.user.city).toBe('نیشابور');
+
+    // A city that is not in the selected province is refused with a field error.
+    const bad = await ctx.api(admin.token).patch(`/v1/admin/users/${id}`, {
+      province: 'تهران',
+      city: 'نیشابور',
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.details.some((d: { field: string }) => d.field === 'city')).toBe(true);
+
+    // Correcting it through the panel works (and clears the old pair when both are null).
+    const ok = await ctx.api(admin.token).patch(`/v1/admin/users/${id}`, {
+      province: 'اصفهان',
+      city: 'کاشان',
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body.data.user.city).toBe('کاشان');
+    const cleared = await ctx.api(admin.token).patch(`/v1/admin/users/${id}`, {
+      province: null,
+      city: null,
+    });
+    expect(cleared.body.data.user.province).toBeNull();
+    expect(cleared.body.data.user.city).toBeNull();
+  });
+
   it('policy changes are validated and audited', async () => {
     const current = (await ctx.api(admin.token).get('/v1/admin/policies')).body.data;
     const bad = await ctx.api(sa.token).put('/v1/admin/policies', { ...current, passScore: 150 });

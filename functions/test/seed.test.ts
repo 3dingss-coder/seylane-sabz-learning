@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runSeed, type SeedReport } from '../src/seed/seed';
-import type { Brand, Package, Product, Question, Quiz } from '../src/domain/types';
+import type { Brand, Package, Product, Question, Quiz, Section } from '../src/domain/types';
 import { catalogPaths, loadCatalog } from '../src/seed/catalog-source';
 import { createCtx, passQuiz, watchSection, type TestCtx } from './support/ctx';
 
@@ -81,7 +81,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     const s = pkg.body.data.sections[0];
     await watchSection(ctx, token, s.id, s.durationSec);
     const quiz = await ctx.api(token).get(`/v1/me/quizzes/${s.quizId}`);
-    expect(quiz.body.data.questions).toHaveLength(5);
+    expect(quiz.body.data.questions).toHaveLength(10);
     // grade server-side using the stored keys (test only)
     const qs = await ctx.deps.store.query<{ answerKey: string }>({
       collection: `quizzes/${s.quizId}/questions`,
@@ -91,7 +91,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     expect(r.body.data.passed).toBe(true);
   });
 
-  it('section quizzes are the client quiz bank questions (skincare_products_quiz.xlsx)', async () => {
+  it('section quizzes are the client quiz bank questions (skincare_products_quiz_v3.csv)', async () => {
     const bank = JSON.parse(
       fs.readFileSync(path.join(repoRoot, 'data', 'skincare-products-quiz.json'), 'utf8'),
     ) as {
@@ -105,7 +105,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
       if (v === undefined) throw new Error(`missing ${what}`);
       return v;
     };
-    expect(bank.products).toHaveLength(6);
+    expect(bank.products).toHaveLength(7);
 
     const questionsOf = async (quizId: string) => {
       const qs = await ctx.deps.store.query<Question>({
@@ -114,35 +114,41 @@ describe('real catalog seed (PROMPT 003/004)', () => {
       return qs.sort((a, b) => a.order - b.order);
     };
 
-    // formi s1 covers 4ME HYDRATION THERAPY questions 1–5, verbatim, and is not needsReview
+    // One quiz per package: the full 10-question bank sits on the package's podcast (audio) section.
+    // formi s1 (audio) holds all 4ME HYDRATION THERAPY questions, verbatim, and is not needsReview.
     const q4me = must(byKey.get('4ME HYDRATION THERAPY'), '4ME bank entry');
     const formiQuiz = await ctx.deps.store.get<Quiz>('quizzes/seed-pkg-formi-s1-quiz');
     expect(formiQuiz?.needsReview).toBe(false);
-    expect(formiQuiz?.questionCount).toBe(5);
+    expect(formiQuiz?.questionCount).toBe(10);
     const formiQs = await questionsOf('seed-pkg-formi-s1-quiz');
-    expect(formiQs.map((q) => q.stem)).toEqual(q4me.slice(0, 5).map((q) => q.stem));
+    expect(formiQs.map((q) => q.stem)).toEqual(q4me.map((q) => q.stem));
     const firstQ = must(formiQs[0], 'formi s1 q1');
     const firstBank = must(q4me[0], '4ME bank q1');
     expect(firstQ.options.map((o) => o.text)).toEqual(firstBank.options);
     expect(firstQ.answerKey).toBe(firstBank.answer.toLowerCase());
     expect(firstQ.explanation).toBe(firstBank.explanation);
+    // exactly one correct option per question
+    for (const q of formiQs) expect(q.options.filter((o) => o.key === q.answerKey)).toHaveLength(1);
 
-    // WITH US: 10 questions split 5/5 across the ویت آس audio and WITH US video packages
+    // The video section of the same package has no quiz at all.
+    const formiSections = await ctx.deps.store.query<Section>({
+      collection: 'packages/seed-pkg-formi/sections',
+    });
+    const quizless = formiSections.filter((s) => s.quizRequired === false);
+    expect(quizless.length).toBe(formiSections.length - 1);
+    for (const s of quizless) expect(await questionsOf(s.quizId)).toHaveLength(0);
+
+    // WITH US: each of the two Vitas packages carries the full bank on its own quiz.
     const qWithUs = must(byKey.get('WITH US'), 'WITH US bank entry');
     const vitasQs = await questionsOf('seed-pkg-vitas-s1-quiz');
-    const heelQs = await questionsOf('seed-pkg-comeon-heel-s1-quiz');
-    expect(vitasQs.map((q) => q.stem)).toEqual(qWithUs.slice(0, 5).map((q) => q.stem));
-    expect(heelQs.map((q) => q.stem)).toEqual(qWithUs.slice(5).map((q) => q.stem));
+    expect(vitasQs.map((q) => q.stem)).toEqual(qWithUs.map((q) => q.stem));
 
-    // ICE BALL brand package + ZEN single-section package
-    const icebalQs = [
-      ...(await questionsOf('seed-pkg-icebal-s1-quiz')),
-      ...(await questionsOf('seed-pkg-icebal-s2-quiz')),
-    ];
-    expect(icebalQs).toHaveLength(10);
+    // ICE BALL: full bank on the audio section only; ZEN single-section package
+    const icebalQs = await questionsOf('seed-pkg-icebal-s1-quiz');
     expect(icebalQs.map((q) => q.stem)).toEqual(
       must(byKey.get('ICE BALL'), 'ICE BALL bank entry').map((q) => q.stem),
     );
+    expect(await questionsOf('seed-pkg-icebal-s2-quiz')).toHaveLength(0);
     const zenQuiz = await ctx.deps.store.get<Quiz>('quizzes/seed-pkg-zen-s1-quiz');
     expect(zenQuiz?.questionCount).toBe(10);
     expect(zenQuiz?.needsReview).toBe(false);

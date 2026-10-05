@@ -28,7 +28,7 @@ import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { errMsg } from '@/lib/errors';
-import { faDateTime, faDuration } from '@/lib/format';
+import { faDuration } from '@/lib/format';
 import type { AdminAssignment, AdminPackageDetail, AdminPath, AdminSection } from '@/lib/types';
 import { ak, useBrands, useProducts, useTeams, useUsers } from './adminQueries';
 import { AssignmentDialog } from './AssignmentsPage';
@@ -248,12 +248,6 @@ function Editor({ d }: { d: AdminPackageDetail }) {
             })(),
           },
           {
-            label: 'مهلت',
-            done: !!p.deadlineAt || !!p.deadlineHours,
-            hint: 'تا چه روزی باید این آموزش تمام شود؟',
-            action: { text: 'تعیین مهلت', run: () => setEditMeta(true) },
-          },
-          {
             label: 'انتشار',
             done: p.status === 'published',
             hint:
@@ -415,14 +409,6 @@ function Editor({ d }: { d: AdminPackageDetail }) {
         <aside className="flex flex-col gap-3 lg:w-80">
           <Card className="flex flex-col gap-2 text-sm">
             <h2 className="font-bold">انتشار</h2>
-            <p className="text-text-secondary">
-              مهلت:{' '}
-              {p.deadlineHours
-                ? `${p.deadlineHours.toLocaleString('fa-IR')} ساعت برای هر بازاریاب (از زمان ثبت‌نام خودش)`
-                : p.deadlineAt
-                  ? faDateTime(p.deadlineAt)
-                  : 'تعیین نشده'}
-            </p>
             {p.description && <p className="leading-6 text-text-secondary">{p.description}</p>}
             {d.publishIssues.length > 0 && p.status !== 'published' && (
               <ul className="flex flex-col gap-1 rounded-input bg-warning-light p-2">
