@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
-import type { AdminPackageDetail, AdminSection, AdminTeam, Me } from '@/lib/types';
+import type { AdminPackageDetail, AdminSection, AdminTeam, ContentTree, Me } from '@/lib/types';
 import { marketer } from '@/test/fixtures';
 import { mockApi } from '@/test/mockApi';
 import { renderApp } from '@/test/renderApp';
@@ -55,6 +55,34 @@ const team = (over: Partial<AdminTeam> = {}): AdminTeam => ({
   managerId: 'u3',
   managerName: 'رضا مدیر فروش',
   memberCount: 4,
+  ...over,
+});
+
+/** Typed for the same reason as team(): ContentPage reads /admin/content/tree
+ *  (ContentTree), NOT /admin/brands — the two shapes differ, and only this one
+ *  carries the productCount/packageCount the brand card renders. */
+const contentTree = (over: Partial<ContentTree> = {}): ContentTree => ({
+  brands: [
+    {
+      id: 'b1',
+      name: 'آتل',
+      logoUrl: 'https://cdn.test/atl.svg',
+      logoIsFallback: false,
+      productCount: 12,
+      brandLevelPackages: 1,
+      packageCount: 3,
+    },
+    {
+      id: 'b2',
+      name: 'فورمی',
+      logoUrl: '',
+      logoIsFallback: true,
+      productCount: 0,
+      brandLevelPackages: 0,
+      packageCount: 0,
+    },
+  ],
+  unassignedCount: 2,
   ...over,
 });
 
@@ -469,5 +497,32 @@ describe('admin: everything understandable at a glance', () => {
     // Each row keeps an accessible edit affordance.
     expect(within(table).getByRole('button', { name: 'ویرایش تیم تهران' })).toBeInTheDocument();
     expect(within(table).getByRole('button', { name: 'ویرایش تیم اصفهان' })).toBeInTheDocument();
+  });
+
+  // ContentPage had no coverage either. Its brand card renders productCount and
+  // packageCount off /admin/content/tree, and warns when a logo is a placeholder.
+  it('content page counts each brand’s products and trainings, and flags placeholder logos', async () => {
+    mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/content/tree': () => ({ data: contentTree() }),
+      'GET /v1/admin/packages?status=archived': () => ({ data: [] }),
+      'GET /v1/admin/packages?unassigned=true': () => ({ data: [] }),
+    });
+    renderApp('/admin/content');
+    expect(await screen.findByRole('heading', { name: 'محتوای آموزشی' })).toBeInTheDocument();
+
+    const cards = await screen.findAllByTestId('brand-card');
+    expect(cards).toHaveLength(2);
+    // Destructured with a guard: under noUncheckedIndexedAccess `cards[0]` is
+    // `HTMLElement | undefined`, and `within()` needs a definite element.
+    const [first, second] = cards;
+    if (!first || !second) throw new Error('expected two brand cards');
+
+    // Counts go through toPersianDigits (§16.3).
+    expect(within(first).getByText('۱۲ محصول • ۳ بسته')).toBeInTheDocument();
+
+    // The placeholder-logo warning is conditional on logoIsFallback.
+    expect(within(second).getByText('لوگوی موقت هلدینگ')).toBeInTheDocument();
+    expect(within(first).queryByText('لوگوی موقت هلدینگ')).not.toBeInTheDocument();
   });
 });
