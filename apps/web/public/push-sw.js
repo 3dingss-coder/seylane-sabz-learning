@@ -11,7 +11,7 @@ self.addEventListener('push', (event) => {
   const data = p.data || {};
   const link = (p.fcmOptions && p.fcmOptions.link) || data.link || '/notifications';
   event.waitUntil(
-    self.registration.showNotification(n.title || 'سیلانه‌سبز لرنینگ', {
+    self.registration.showNotification(n.title || 'آکادمی سیلانه', {
       body: n.body || '',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',

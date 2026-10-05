@@ -7,7 +7,7 @@ import { getPolicy, track, type Deps } from './context';
 import { checkInput, normalizeFa } from './mentor';
 import { guideContext } from './mentor-guides';
 import { answerQuestion, consumeVoiceQuota, recentTurns, type AnswerResult } from './mentor-ai';
-import { pageContextSchema, renderPageBlock } from './mentor-page';
+import { pageContextSchema, renderPageBlock, resolvePageContext } from './mentor-page';
 import { dayPart, firstName } from './mentor-converse';
 import { evaluateBehavior } from './behavior';
 import type { ChatMessage, User } from '../domain/types';
@@ -264,14 +264,15 @@ export async function voiceTurn(
     recentTurns(d, user.id),
   ]);
   const answerStarted = Date.now();
+  const page = await resolvePageContext(d, user, input.page);
   const answer = await answerQuestion(d, user, {
     question: verdict.text,
-    packageId: input.packageId ?? input.page?.packageId ?? null,
+    packageId: input.packageId ?? page?.packageId ?? null,
     spoken: true,
     mode: 'voice',
     history,
     behavior,
-    page: input.page,
+    page,
   });
   const answerMs = Date.now() - answerStarted;
 
@@ -331,17 +332,22 @@ export async function createVoiceSession(
   const sessionId = `${user.id}-${d.clock().getTime().toString(36)}`;
   // The global behaviour box (if the admin defined one) shapes every Live session; a per-turn
   // box for the brand/product being discussed arrives through the `ground` tool instead.
-  const box = await guideContext(d, {
-    question: input.page?.productName || input.page?.brandName || '',
+  const page = await resolvePageContext(d, user, {
+    ...(input.page ?? {}),
     packageId: input.packageId ?? input.page?.packageId ?? null,
-    brandId: input.page?.brandId ?? null,
-    productId: input.page?.productId ?? null,
-    brandPage: input.page?.kind === 'brand' && !input.page?.productId,
+  });
+  const box = await guideContext(d, {
+    question: page?.productName || page?.brandName || '',
+    packageId: page?.packageId ?? null,
+    user,
+    brandId: page?.brandId ?? null,
+    productId: page?.productId ?? null,
+    brandPage: page?.kind === 'brand' && !page?.productId,
   });
   const systemInstruction = `${prompts.voiceSystem({
     allowQuizAnswers: box.quizAnswers,
     guide: box.block,
-    page: renderPageBlock(input.page),
+    page: renderPageBlock(page),
   })}
 
 اسم کاربر: ${firstName(user) || 'نامشخص'} — الان ${dayPart(d.clock())} است (وقت تهران). اولین جمله‌ات را مثل یک سلام و احوال‌پرسی کوتاه و طبیعی بگو، نه یک معرفی رسمی.

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createCtx } from './support/ctx';
-import { compressOlderChats, renderMemoryBlock, syncMentorMemory, windowUserTexts } from '../src/services/mentor-memory';
+import {
+  compressOlderChats,
+  renderMemoryBlock,
+  syncMentorMemory,
+  windowUserTexts,
+} from '../src/services/mentor-memory';
 
 describe('mentor memory', () => {
   it('keeps 50 user messages and compresses the rest', () => {

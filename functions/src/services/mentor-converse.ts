@@ -151,7 +151,7 @@ export function offlineSmallTalk(
         'گاهی همین‌طوره. بگو چی اذیتت می‌کنه، شاید بتونم کمک کنم.',
       ]);
     default:
-      return 'من منتور سیلانه‌سبز هستم؛ درباره‌ی آموزش‌ها، محصولات و مسیر یادگیریت کمکت می‌کنم. چی می‌خوای بدونی؟';
+      return 'من منتور آکادمی سیلانه هستم؛ درباره‌ی آموزش‌ها، محصولات و مسیر یادگیریت کمکت می‌کنم. چی می‌خوای بدونی؟';
   }
 }
 
@@ -171,6 +171,11 @@ export function cleanConversational(raw: string, scrub: (s: string) => string): 
   if (letters.length > 0 && fa / letters.length < 0.5) return '';
   if (text.length <= 4_000) return text;
   const cut = text.slice(0, 4_000);
-  const stop = Math.max(cut.lastIndexOf('.'), cut.lastIndexOf('؟'), cut.lastIndexOf('!'), cut.lastIndexOf('\n'));
+  const stop = Math.max(
+    cut.lastIndexOf('.'),
+    cut.lastIndexOf('؟'),
+    cut.lastIndexOf('!'),
+    cut.lastIndexOf('\n'),
+  );
   return (stop > 80 ? cut.slice(0, stop + 1) : cut.replace(/\s+\S*$/, '')).trim();
 }

@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Download, FilterX } from 'lucide-react';
+import { Download, FileSpreadsheet, FilterX } from 'lucide-react';
 import { Button, Card, EmptyState, ProgressBar } from '@/components/ui';
 import { DataTable } from '@/components/admin/DataTable';
 import { Select } from '@/components/common/Field';
 import { downloadCsv, toCsv } from '@/lib/csv';
+import { exportExcel } from '@/lib/excel';
 import { fromZonedInput } from '@/lib/dates';
 import { JalaliDateField } from '@/components/common/JalaliDateField';
 import { track } from '@/lib/telemetry';
@@ -13,9 +14,10 @@ import { faDate, faPercent, faRelative } from '@/lib/format';
 import type { CompletionRow } from '@/lib/types';
 
 const STATUS_LABEL = { new: 'شروع‌نشده', in_progress: 'در حال انجام', completed: 'تکمیل' } as const;
-type Filter = 'brand' | 'product' | 'user' | 'status' | 'team' | 'from' | 'to';
+type Filter =
+  'brand' | 'product' | 'user' | 'status' | 'team' | 'province' | 'city' | 'from' | 'to';
 
-/** W2 / A-reports — completion report with filters (URL-synced) and CSV export. */
+/** W2 / A-reports — completion report with filters (URL-synced), city filter and professional Excel export. */
 export function CompletionReport({
   rows,
   memberLink,
@@ -28,11 +30,13 @@ export function CompletionReport({
   const [sp, setSp] = useSearchParams();
   const nav = useNavigate();
   const f = (k: Filter) => sp.get(k) ?? '';
+  const provinceFilter = f('province');
   const set = (k: Filter, v: string) => {
     const next = new URLSearchParams(sp);
     if (v) next.set(k, v);
     else next.delete(k);
     if (k === 'brand') next.delete('product');
+    if (k === 'province') next.delete('city');
     if (v) track('report_filtered', { filter: k });
     setSp(next, { replace: true });
   };
@@ -40,17 +44,30 @@ export function CompletionReport({
     const brands = new Map<string, string>();
     const products = new Map<string, { name: string; brandId: string | null }>();
     const users = new Map<string, string>();
+    const provinces = new Set<string>();
+    const citiesByProvince = new Map<string, Set<string>>();
     for (const r of rows) {
       if (r.brandId && r.brandName) brands.set(r.brandId, r.brandName);
       if (r.productId && r.productName)
         products.set(r.productId, { name: r.productName, brandId: r.brandId });
       users.set(r.userId, r.userName);
+      if (r.province) {
+        provinces.add(r.province);
+        const citySet = citiesByProvince.get(r.province) ?? new Set<string>();
+        if (!citiesByProvince.has(r.province)) citiesByProvince.set(r.province, citySet);
+        if (r.city) citySet.add(r.city);
+      }
     }
-    return { brands: [...brands], products: [...products], users: [...users] };
-  }, [rows]);
+    return {
+      brands: [...brands],
+      products: [...products],
+      users: [...users],
+      provinces: [...provinces].sort(),
+      cities: provinceFilter ? [...(citiesByProvince.get(provinceFilter) ?? [])].sort() : [],
+    };
+  }, [rows, provinceFilter]);
 
   const filtered = useMemo(() => {
-    // Range ends are Tehran days, matching how the dates are displayed in the table.
     const fromStart = fromZonedInput(f('from'));
     const toStart = fromZonedInput(f('to'));
     const from = fromStart ? Date.parse(fromStart) : null;
@@ -60,6 +77,8 @@ export function CompletionReport({
       if (f('product') && r.productId !== f('product')) return false;
       if (f('user') && r.userId !== f('user')) return false;
       if (f('team') && r.teamId !== f('team')) return false;
+      if (f('province') && r.province !== f('province')) return false;
+      if (f('city') && r.city !== f('city')) return false;
       const st = f('status');
       if (st === 'overdue' ? !r.overdue : st && r.status !== st) return false;
       if (from && (!r.deadlineAt || Date.parse(r.deadlineAt) < from)) return false;
@@ -73,6 +92,8 @@ export function CompletionReport({
     const csv = toCsv(
       [
         'نام',
+        'استان',
+        'شهر',
         'آموزش',
         'برند',
         'محصول',
@@ -87,6 +108,8 @@ export function CompletionReport({
       ],
       filtered.map((r) => [
         r.userName,
+        r.province ?? '',
+        r.city ?? '',
         r.packageTitle,
         r.brandName,
         r.productName,
@@ -102,11 +125,53 @@ export function CompletionReport({
     );
     downloadCsv(`completion-report-${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
+
+  const exportXlsx = () => {
+    void exportExcel({
+      sheetName: 'گزارش تکمیل',
+      title: 'گزارش تکمیل آموزشی',
+      subtitle: 'آکادمی سیلانه',
+      fileName: `completion-report-${new Date().toISOString().slice(0, 10)}`,
+      columns: [
+        { header: 'نام بازاریاب', key: 'userName', width: 22 },
+        { header: 'استان', key: 'province', width: 16 },
+        { header: 'شهر', key: 'city', width: 16 },
+        { header: 'آموزش', key: 'packageTitle', width: 28 },
+        { header: 'برند', key: 'brandName', width: 18 },
+        { header: 'محصول', key: 'productName', width: 22 },
+        { header: 'پیشرفت (٪)', key: 'percent', width: 12, isNumber: true, align: 'center' },
+        { header: 'وضعیت', key: 'status', width: 14, align: 'center' },
+        { header: 'دیرکرد', key: 'overdue', width: 10, align: 'center' },
+        { header: 'مهلت', key: 'deadline', width: 14 },
+        { header: 'تاریخ تکمیل', key: 'completed', width: 14 },
+        { header: 'تکمیل به‌موقع', key: 'onTime', width: 14, align: 'center' },
+        { header: 'آخرین فعالیت', key: 'lastActivity', width: 14 },
+        { header: 'گیر کرده در', key: 'stuck', width: 22 },
+      ],
+      rows: filtered.map((r) => ({
+        userName: r.userName,
+        province: r.province ?? '—',
+        city: r.city ?? '—',
+        packageTitle: r.packageTitle,
+        brandName: r.brandName ?? '—',
+        productName: r.productName ?? '—',
+        percent: r.percent,
+        status: r.overdue ? 'دیرکرد' : r.lagging ? 'عقب' : STATUS_LABEL[r.status],
+        overdue: r.overdue ? 'بله' : 'خیر',
+        deadline: r.deadlineAt ? faDate(r.deadlineAt) : '—',
+        completed: r.completedAt ? faDate(r.completedAt) : '—',
+        onTime: r.onTime === null ? '—' : r.onTime ? 'بله' : 'خیر',
+        lastActivity: r.lastActivityAt ? faDate(r.lastActivityAt) : '—',
+        stuck: r.stuckAt ?? '—',
+      })),
+    });
+  };
+
   const any = [...sp.keys()].length > 0;
 
   return (
     <div className="flex flex-col gap-3">
-      <Card className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+      <Card className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-4">
         {teams && (
           <Select label="تیم" value={f('team')} onChange={(e) => set('team', e.target.value)}>
             <option value="">همه</option>
@@ -117,6 +182,26 @@ export function CompletionReport({
             ))}
           </Select>
         )}
+        <Select
+          label="استان"
+          value={f('province')}
+          onChange={(e) => set('province', e.target.value)}
+        >
+          <option value="">همه</option>
+          {opts.provinces.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </Select>
+        <Select label="شهر" value={f('city')} onChange={(e) => set('city', e.target.value)}>
+          <option value="">همه</option>
+          {opts.cities.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </Select>
         <Select label="برند" value={f('brand')} onChange={(e) => set('brand', e.target.value)}>
           <option value="">همه</option>
           {opts.brands.map(([id, n]) => (
@@ -173,6 +258,13 @@ export function CompletionReport({
           >
             خروجی CSV
           </Button>
+          <Button
+            icon={<FileSpreadsheet className="size-4" aria-hidden />}
+            onClick={exportXlsx}
+            disabled={filtered.length === 0}
+          >
+            خروجی اکسل
+          </Button>
         </div>
       </div>
       {filtered.length === 0 ? (
@@ -190,6 +282,18 @@ export function CompletionReport({
               key: 'u',
               header: 'نام',
               cell: (r) => <span className="font-bold">{r.userName}</span>,
+            },
+            {
+              key: 'loc',
+              header: 'شهر',
+              cell: (r) =>
+                r.city ? (
+                  <span className="text-sm">
+                    {r.province} • {r.city}
+                  </span>
+                ) : (
+                  '—'
+                ),
             },
             { key: 'p', header: 'آموزش', cell: (r) => r.packageTitle },
             {

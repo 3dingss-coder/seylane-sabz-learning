@@ -260,8 +260,13 @@ export function visibleUnder(item: KnowledgeItem, scope: RetrievalScope): boolea
   if (scope.kinds && !scope.kinds.includes(item.kind)) return false;
   const s = item.scope;
   if (scope.packageIds && s.packageId && !scope.packageIds.has(s.packageId)) return false;
-  if (scope.brandIds && s.brandIds && s.brandIds.length) {
-    if (!s.brandIds.some((b) => scope.brandIds?.has(b))) return false;
+  if (scope.brandIds) {
+    const allowed = scope.brandIds;
+    // brandIds null means "company-wide" only while the catalog is open. Once the policy
+    // restricts the mentor to assigned brands, a stored brandId is enough to hide the row
+    // without waiting for a full reindex. Training rows stay governed by package assignment.
+    const ids = s.brandIds?.length ? s.brandIds : s.brandId ? [s.brandId] : null;
+    if (!s.packageId && ids && !ids.some((b) => allowed.has(b))) return false;
   }
   return true;
 }

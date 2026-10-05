@@ -4,7 +4,7 @@ import type { Deps, Actor } from './context';
 import { audit, getPolicy, nowIso } from './context';
 import { allBrands, allProducts } from './catalog-cache';
 import { normalizeFa } from './mentor';
-import { itemId, type KnowledgeItem, type KnowledgeScope } from './knowledge';
+import { itemId, KNOWLEDGE_COLLECTION, type KnowledgeItem, type KnowledgeScope } from './knowledge';
 import type { GroundingFact } from '../ai/handoff';
 import type {
   Brand,
@@ -14,6 +14,7 @@ import type {
   MentorGuideTone,
   Package,
   Product,
+  User,
 } from '../domain/types';
 import type { Doc } from '../store/types';
 
@@ -113,10 +114,7 @@ const BAD_VALUE = 'مقدار واردشده قابل قبول نیست.';
 const textOrEmpty = (max: number, message = TOO_LONG) =>
   z.preprocess(
     (v) => (v == null ? '' : v),
-    z
-      .string({ invalid_type_error: BAD_VALUE })
-      .trim()
-      .max(max, message),
+    z.string({ invalid_type_error: BAD_VALUE }).trim().max(max, message),
   );
 
 const strList = (maxItems: number, per: number) =>
@@ -134,7 +132,9 @@ const strList = (maxItems: number, per: number) =>
   );
 
 const pairRows = (v: unknown): Array<Record<string, unknown>> =>
-  Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object') : [];
+  Array.isArray(v)
+    ? v.filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+    : [];
 
 /** Accepts both `{ question, answer }` and `{ objection, answer }` shapes. */
 const objectionList = (max: number) =>
@@ -185,17 +185,33 @@ const TONES = ['friendly', 'professional', 'coach', 'brief'] as const;
 
 export const guideSchema = z.object({
   title: textOrEmpty(160).optional().default(''),
-  enabled: z.preprocess((v) => (v == null ? true : v), z.boolean({ invalid_type_error: BAD_VALUE })).optional().default(true),
-  tone: z.preprocess((v) => {
-    if (v == null || v === '') return 'friendly';
-    if (v === 'formal') return 'professional';
-    if (v === 'seller') return 'coach';
-    return v;
-  }, z.enum(TONES, { errorMap: () => ({ message: 'لحن را از فهرست انتخاب کنید.' }) })).optional().default('friendly'),
+  enabled: z
+    .preprocess((v) => (v == null ? true : v), z.boolean({ invalid_type_error: BAD_VALUE }))
+    .optional()
+    .default(true),
+  tone: z
+    .preprocess(
+      (v) => {
+        if (v == null || v === '') return 'friendly';
+        if (v === 'formal') return 'professional';
+        if (v === 'seller') return 'coach';
+        return v;
+      },
+      z.enum(TONES, { errorMap: () => ({ message: 'لحن را از فهرست انتخاب کنید.' }) }),
+    )
+    .optional()
+    .default('friendly'),
   personaNote: textOrEmpty(2000).optional().default(''),
-  summary: textOrEmpty(20_000, 'متن «آنچه منتور باید بداند» طولانی‌تر از حد مجاز است. فایل دانش را در «سند دانش» بگذارید.').optional().default(''),
+  summary: textOrEmpty(
+    20_000,
+    'متن «آنچه منتور باید بداند» طولانی‌تر از حد مجاز است. فایل دانش را در «سند دانش» بگذارید.',
+  )
+    .optional()
+    .default(''),
   /** Full approved knowledge file (markdown/text). This is what the mentor must follow. */
-  document: textOrEmpty(40_000, 'سند دانش طولانی‌تر از حد مجاز است. آن را کمی کوتاه کنید.').optional().default(''),
+  document: textOrEmpty(40_000, 'سند دانش طولانی‌تر از حد مجاز است. آن را کمی کوتاه کنید.')
+    .optional()
+    .default(''),
   keyPoints: strList(40, 800).optional().default([]),
   sellingPoints: strList(40, 800).optional().default([]),
   objections: objectionList(30).optional().default([]),
@@ -203,14 +219,26 @@ export const guideSchema = z.object({
   dos: strList(30, 800).optional().default([]),
   donts: strList(30, 800).optional().default([]),
   keywords: strList(80, 120).optional().default([]),
-  priority: z.preprocess(
-    (v) => (v == null || v === '' ? 1 : v),
-    z.coerce.number({ invalid_type_error: 'اولویت باید عدد باشد.' }).int().min(0, 'اولویت حداقل ۰ است.').max(2, 'اولویت حداکثر ۲ است.'),
-  ).optional().default(1),
-  quizAnswers: z.preprocess(
-    (v) => (v == null || v === '' ? 'inherit' : v),
-    z.enum(['inherit', 'allow', 'hide'], { errorMap: () => ({ message: 'سیاست آزمون را از فهرست انتخاب کنید.' }) }),
-  ).optional().default('inherit'),
+  priority: z
+    .preprocess(
+      (v) => (v == null || v === '' ? 1 : v),
+      z.coerce
+        .number({ invalid_type_error: 'اولویت باید عدد باشد.' })
+        .int()
+        .min(0, 'اولویت حداقل ۰ است.')
+        .max(2, 'اولویت حداکثر ۲ است.'),
+    )
+    .optional()
+    .default(1),
+  quizAnswers: z
+    .preprocess(
+      (v) => (v == null || v === '' ? 'inherit' : v),
+      z.enum(['inherit', 'allow', 'hide'], {
+        errorMap: () => ({ message: 'سیاست آزمون را از فهرست انتخاب کنید.' }),
+      }),
+    )
+    .optional()
+    .default('inherit'),
 });
 export type GuideInput = z.infer<typeof guideSchema>;
 
@@ -256,7 +284,8 @@ function asText(v: unknown): string {
 /** Fills in the fields older documents lack so a partial record can never crash the pipeline. */
 function normalize(g: Partial<MentorGuide> & { id?: string }): MentorGuide {
   const base = emptyGuide(g.kind ?? 'global', g.targetId ?? null);
-  const priority = typeof g.priority === 'number' && Number.isFinite(g.priority) ? g.priority : base.priority;
+  const priority =
+    typeof g.priority === 'number' && Number.isFinite(g.priority) ? g.priority : base.priority;
   return {
     ...base,
     ...g,
@@ -441,6 +470,27 @@ async function targetName(
   return p?.name ?? '';
 }
 
+/** Writes just this box into the knowledge index so a save is searchable without a full rebuild. */
+async function publishGuideItem(d: Deps, docId: string, now: string): Promise<void> {
+  try {
+    const items = await buildGuideItems(d, now);
+    const id = itemId('guide', docId);
+    const item = items.find((i) => i.id === id);
+    if (item) {
+      await d.store.set(
+        `${KNOWLEDGE_COLLECTION}/${item.id}`,
+        item as unknown as Record<string, unknown>,
+      );
+    } else {
+      await d.store.set(`${KNOWLEDGE_COLLECTION}/${id}`, { archived: true }, { merge: true });
+    }
+    const { invalidateIndexCache } = await import('./retrieval');
+    invalidateIndexCache(d);
+  } catch (err) {
+    console.warn('[guides] incremental index skipped', err instanceof Error ? err.message : err);
+  }
+}
+
 export async function upsertGuide(
   d: Deps,
   actor: Actor,
@@ -473,12 +523,10 @@ export async function upsertGuide(
       'متن جعبه‌ی رفتار برای پایگاه داده خیلی بزرگ است. سند دانش را کوتاه‌تر کنید.',
     );
   }
-  await d.store.set(
-    `${GUIDE_COLLECTION}/${docId}`,
-    next as unknown as Record<string, unknown>,
-  );
+  await d.store.set(`${GUIDE_COLLECTION}/${docId}`, next as unknown as Record<string, unknown>);
   const { markKnowledgeDirty } = await import('./knowledge');
   await markKnowledgeDirty(d);
+  await publishGuideItem(d, docId, now);
   await audit(
     d,
     actor,
@@ -504,6 +552,7 @@ export async function deleteGuide(
   await d.store.delete(`${GUIDE_COLLECTION}/${doc.id}`);
   const { markKnowledgeDirty } = await import('./knowledge');
   await markKnowledgeDirty(d);
+  await publishGuideItem(d, doc.id, nowIso(d));
   await audit(d, actor, 'mentor_guide.deleted', GUIDE_COLLECTION, doc.id, doc, null);
   return { ok: true };
 }
@@ -525,7 +574,7 @@ const GLOBAL_SCOPE: KnowledgeScope = {
 };
 
 /** Full box text injected as a grounding fact. Must not be a 260-char retrieval snippet. */
-const GUIDE_BODY_MAX = 24_000;
+const GUIDE_BODY_MAX = 40_000;
 
 function guideBody(g: MentorGuide, name: string): string {
   const lines: string[] = [];
@@ -680,6 +729,8 @@ export async function selectGuides(
     /** Brand-filter page: do not inherit a product from an older package. */
     brandPage?: boolean;
     facts?: Array<{ id: string; kind: string; title: string } & Record<string, unknown>>;
+    /** When set, a client id, retrieved snippet, or name must not open another brand's box. */
+    allowedBrandIds?: readonly string[] | null;
   },
 ): Promise<GuideSelection> {
   let brandId: string | null = null;
@@ -726,6 +777,18 @@ export async function selectGuides(
   if (brandId && !productId) {
     const live = (await allProducts(d)).filter((p) => !p.archived && p.brandId === brandId);
     if (live.length === 1 && live[0]) productId = live[0].id;
+  }
+
+  if (opts.allowedBrandIds) {
+    const allow = new Set(opts.allowedBrandIds);
+    if (productId) {
+      const owned = await d.store.get<Product>(`products/${productId}`);
+      if (!owned?.brandId || !allow.has(owned.brandId)) productId = null;
+    }
+    if (brandId && !allow.has(brandId)) {
+      brandId = null;
+      productId = null;
+    }
   }
 
   const [globalGuide, brandGuide, productGuide] = await Promise.all([
@@ -798,7 +861,7 @@ export function renderGuideBlock(sel: GuideSelection): string {
     if (g.summary.trim()) lines.push(`- آنچه منتور باید بداند: ${g.summary.trim()}`);
     if ((g.document ?? '').trim())
       lines.push(
-        `- سند دانش تأییدشده (ملاک حرف زدن درباره‌ی این مورد است؛ هر بخشی که به سؤال مربوط است را کامل بگو و چیزی از آن نساز):\n${g.document!.trim().slice(0, 12_000)}`,
+        `- سند دانش تأییدشده (ملاک حرف زدن درباره‌ی این مورد است؛ هر بخشی که به سؤال مربوط است را کامل بگو و چیزی از آن نساز):\n${(g.document ?? '').trim().slice(0, 40_000)}`,
       );
     if (g.dos.length) lines.push(`- حتماً بگو/تأکید کن: ${g.dos.join(' | ')}`);
     if (g.donts.length) lines.push(`- هرگز نگو: ${g.donts.join(' | ')}`);
@@ -904,10 +967,15 @@ export async function guideContext(
     productId?: string | null;
     brandPage?: boolean;
     facts?: Array<{ id: string; kind: string; title: string } & Record<string, unknown>>;
+    user?: Doc<User> | null;
   },
 ): Promise<GuideContext> {
   const policy = await getPolicy(d);
-  const selection = await selectGuides(d, opts);
+  const allowedBrandIds =
+    opts.user && policy.mentorCatalogScope === 'assigned' && opts.user.brandIds.length
+      ? opts.user.brandIds
+      : null;
+  const selection = await selectGuides(d, { ...opts, allowedBrandIds });
   return {
     selection,
     block: renderGuideBlock(selection),

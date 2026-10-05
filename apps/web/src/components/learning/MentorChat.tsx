@@ -1,16 +1,35 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, FileText, ImagePlus, Link2, Mic, PhoneCall, Plus, Send, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import {
+  Bot,
+  FileText,
+  ImagePlus,
+  Link2,
+  Mic,
+  PhoneCall,
+  Plus,
+  Send,
+  ThumbsDown,
+  ThumbsUp,
+  X,
+} from 'lucide-react';
 import { Button, Skeleton, useToast } from '@/components/ui';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { errMsg } from '@/lib/errors';
 import { qk } from '@/lib/queries';
 import { readPageContext } from '@/lib/pageContext';
-import { listenFa, speechSupported, type ListenHandle } from '@/lib/speech';
+import {
+  listenFa,
+  recordUntilSilence,
+  speechSupported,
+  type ListenHandle,
+  type RecordedSpeech,
+} from '@/lib/speech';
+import { micSupported } from '@/lib/voice';
 import { VoiceCallSheet } from './VoiceCallSheet';
 import { track } from '@/lib/telemetry';
-import type { ChatMessage, ChatReply } from '@/lib/types';
+import type { ChatMessage, ChatReply, VoiceTurnReply } from '@/lib/types';
 
 interface PendingAttachment {
   kind: 'image' | 'text' | 'link';
@@ -42,7 +61,7 @@ async function fileToJpeg(file: File): Promise<PendingAttachment> {
     binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   }
   const base64 = btoa(binary);
-  if (base64.length > 500_000) throw new Error('big');
+  if (base64.length > 180_000) throw new Error('big');
   return {
     kind: 'image',
     name: file.name,
@@ -96,16 +115,18 @@ export function MentorChat({
         text: msg.text,
         packageId: packageId ?? page?.packageId ?? null,
         page: page ?? undefined,
-        attachments: msg.attachments?.map(({ preview: _preview, ...rest }) => rest),
+        attachments: msg.attachments?.map((att) => {
+          const next = { ...att };
+          delete next.preview;
+          return next;
+        }),
       });
     },
     onMutate: (msg) => setPending(msg.text || msg.attachments?.[0]?.name || 'پیوست'),
     onSuccess: (r, msg) => {
       const now = new Date().toISOString();
       const shown =
-        msg.text ||
-        msg.attachments?.map((a) => a.name || a.url || 'پیوست').join('، ') ||
-        'پیوست';
+        msg.text || msg.attachments?.map((a) => a.name || a.url || 'پیوست').join('، ') || 'پیوست';
       qc.setQueryData<ChatMessage[]>(key, (old = []) => [
         ...old,
         {
@@ -169,17 +190,83 @@ export function MentorChat({
     stopListen();
     send.mutate({ text: v, attachments: extra.length ? extra : undefined });
   };
+  const pushTurn = (userText: string, reply: ChatReply | VoiceTurnReply) => {
+    const now = new Date().toISOString();
+    qc.setQueryData<ChatMessage[]>(key, (old = []) => [
+      ...old,
+      {
+        id: `local-${now}`,
+        role: 'user',
+        text: userText,
+        sources: [],
+        outcome: null,
+        feedback: null,
+        mode: 'voice',
+        createdAt: now,
+      },
+      {
+        id: ('messageId' in reply ? reply.messageId : null) ?? `local-reply-${now}`,
+        role: 'assistant',
+        text: reply.reply,
+        sources: reply.sources,
+        outcome: reply.outcome,
+        feedback: null,
+        mode: 'voice',
+        provider: reply.provider ?? null,
+        latencyMs: 'latency' in reply ? reply.latency.totalMs : (reply.latencyMs ?? null),
+        createdAt: now,
+      },
+    ]);
+  };
+  const sendAudio = async (audio: RecordedSpeech) => {
+    if (audio.base64.length > 700_000) {
+      toast.show({ type: 'error', message: 'صدا طولانی شد. کوتاه‌تر حرف بزن و دوباره بفرست.' });
+      return;
+    }
+    setPending('در حال شنیدن صدا…');
+    const page = readPageContext();
+    try {
+      const reply = await api.post<VoiceTurnReply>('/me/mentor/voice/turn', {
+        audio: audio.base64,
+        mime: audio.mime,
+        durationSec: audio.durationSec,
+        packageId: packageId ?? page?.packageId ?? null,
+        page: page ?? undefined,
+      });
+      pushTurn(reply.transcript || 'پیام صوتی', reply);
+    } catch (e) {
+      toast.show({ type: 'error', message: errMsg(e) });
+    } finally {
+      setPending(null);
+    }
+  };
   const startMic = () => {
     if (listening) {
-      const said = text.trim();
-      stopListen();
-      if (said) submit(undefined, said);
+      listenRef.current?.finish?.();
+      listenRef.current = null;
+      setListening(false);
+      return;
+    }
+    if (micSupported()) {
+      setListening(true);
+      listenRef.current = recordUntilSilence({
+        onSilence: (audio) => {
+          setListening(false);
+          listenRef.current = null;
+          void sendAudio(audio);
+        },
+        onError: (message) => {
+          setListening(false);
+          listenRef.current = null;
+          toast.show({ type: 'error', message });
+        },
+      });
       return;
     }
     if (!speechSupported()) {
       toast.show({
         type: 'error',
-        message: 'این مرورگر گفتار فارسی را تشخیص نمی‌دهد. سؤال را بنویس یا از تماس صوتی استفاده کن.',
+        message: 'این مرورگر میکروفن را پشتیبانی نمی‌کند. سؤال را بنویس.',
       });
       return;
     }
@@ -332,7 +419,10 @@ export function MentorChat({
           ))}
         </div>
       )}
-      <form onSubmit={submit} className="mt-2 flex gap-2 border-t border-border pt-2">
+      <form
+        onSubmit={submit}
+        className="mt-2 flex w-full min-w-0 items-center gap-1 border-t border-border pt-2"
+      >
         <label htmlFor="mentor-input" className="sr-only">
           سؤال شما
         </label>
@@ -342,7 +432,7 @@ export function MentorChat({
           maxLength={4000}
           onChange={(e) => setText(e.target.value)}
           placeholder={listening ? 'در حال شنیدن… بعد از سکوت ارسال می‌شود' : 'سؤالت را بنویس…'}
-          className="min-h-12 flex-1 rounded-full border border-border bg-surface px-4 text-base shadow-xs transition-[border-color,box-shadow] focus:border-info focus:outline-none focus:ring-4 focus:ring-info/15"
+          className="min-h-12 min-w-0 flex-1 rounded-full border border-border bg-surface px-3 text-base shadow-xs transition-[border-color,box-shadow] focus:border-info focus:outline-none focus:ring-4 focus:ring-info/15"
         />
         <div className="relative shrink-0">
           <Button
@@ -351,10 +441,11 @@ export function MentorChat({
             aria-label="پیوست تصویر، متن یا لینک"
             aria-expanded={plusOpen}
             onClick={() => setPlusOpen((v) => !v)}
+            className="!size-12 !min-h-12 !px-0"
             icon={<Plus className="size-5" aria-hidden />}
           />
           {plusOpen && (
-            <div className="absolute bottom-full z-20 mb-2 flex w-64 flex-col gap-1 rounded-card border border-border bg-surface p-2 shadow-md end-0">
+            <div className="absolute bottom-full z-20 mb-2 flex w-56 max-w-[70vw] flex-col gap-1 rounded-card border border-border bg-surface p-2 shadow-md end-0">
               <button
                 type="button"
                 className="flex min-h-12 items-center gap-2 rounded-input px-2 text-sm hover:bg-surface-2"
@@ -384,10 +475,14 @@ export function MentorChat({
                   onClick={() => {
                     const url = linkDraft.trim();
                     if (!/^https?:\/\//i.test(url)) {
-                      toast.show({ type: 'error', message: 'لینک باید با http:// یا https:// شروع شود.' });
+                      toast.show({
+                        type: 'error',
+                        message: 'لینک باید با http:// یا https:// شروع شود.',
+                      });
                       return;
                     }
-                    setAttachments((old) => [...old, { kind: 'link', url, name: url }].slice(0, 3));
+                    const att: PendingAttachment = { kind: 'link', url, name: url };
+                    setAttachments((old) => [...old, att].slice(0, 3));
                     setLinkDraft('');
                     setPlusOpen(false);
                   }}
@@ -415,11 +510,12 @@ export function MentorChat({
           aria-label={listening ? 'توقف ضبط و ارسال' : 'گفتن سؤال با صدا'}
           aria-pressed={listening}
           onClick={startMic}
+          className="!size-12 !min-h-12 !px-0"
           icon={<Mic className="size-5" aria-hidden />}
         />
         <Button
           type="submit"
-          className="shrink-0 !rounded-full"
+          className="!size-12 !min-h-12 shrink-0 !rounded-full !px-0"
           aria-label="ارسال"
           loading={send.isPending}
           disabled={!text.trim() && attachments.length === 0}
@@ -436,11 +532,24 @@ export function MentorChat({
             if (!file) return;
             void fileToJpeg(file)
               .then((att) => {
-                setAttachments((old) => [...old, att].slice(0, 3));
+                setAttachments((old) => {
+                  const images = old.filter((a) => a.kind === 'image').length;
+                  if (images >= 1) {
+                    toast.show({
+                      type: 'error',
+                      message: 'در هر پیام فقط یک تصویر بفرست تا از حد حجم رد نشود.',
+                    });
+                    return old;
+                  }
+                  return [...old, att].slice(0, 3);
+                });
                 setPlusOpen(false);
               })
               .catch(() =>
-                toast.show({ type: 'error', message: 'این تصویر قابل ارسال نیست. یک عکس کوچک‌تر انتخاب کن.' }),
+                toast.show({
+                  type: 'error',
+                  message: 'این تصویر قابل ارسال نیست. یک عکس کوچک‌تر انتخاب کن.',
+                }),
               );
           }}
         />
@@ -459,9 +568,13 @@ export function MentorChat({
                 toast.show({ type: 'error', message: 'این فایل متنی خالی است.' });
                 return;
               }
-              setAttachments((old) =>
-                [...old, { kind: 'text', name: file.name, text: textBody, mime: 'text/plain' }].slice(0, 3),
-              );
+              const att: PendingAttachment = {
+                kind: 'text',
+                name: file.name,
+                text: textBody,
+                mime: 'text/plain',
+              };
+              setAttachments((old) => [...old, att].slice(0, 3));
               setPlusOpen(false);
             });
           }}

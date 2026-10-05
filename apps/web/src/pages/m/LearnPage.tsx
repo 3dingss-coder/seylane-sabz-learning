@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { EmptyState, PackageCardSkeleton } from '@/components/ui';
 import { Tabs } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -6,7 +7,7 @@ import { QueryState, StaleBanner } from '@/components/common/QueryState';
 import { BrandLogo } from '@/components/brand/BrandLogo';
 import { PackageCard } from '@/components/learning/PackageCard';
 import { cn } from '@/lib/cn';
-import { rememberSubject } from '@/lib/pageContext';
+import { clearSubject, rememberSubject } from '@/lib/pageContext';
 import { usePackages } from '@/lib/queries';
 import type { PackageUserStatus } from '@/lib/types';
 
@@ -19,8 +20,16 @@ const EMPTY: Record<PackageUserStatus, string> = {
 /** M4 — آموزش‌ها: status tabs + brand filter with real brand logos. */
 export function LearnPage() {
   const q = usePackages();
+  const [params, setParams] = useSearchParams();
+  const brand = params.get('brand');
+  const setBrand = (id: string | null) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set('brand', id);
+    else next.delete('brand');
+    setParams(next, { replace: true });
+    if (!id) clearSubject();
+  };
   const [tab, setTab] = useState<PackageUserStatus>('in_progress');
-  const [brand, setBrand] = useState<string | null>(null);
   const counts = useMemo(() => {
     const c = { in_progress: 0, new: 0, completed: 0 };
     for (const p of q.data ?? []) c[p.status]++;
@@ -32,8 +41,9 @@ export function LearnPage() {
     return [...m.values()];
   }, [q.data]);
   useEffect(() => {
-    if (!brand) return;
-    const b = brands.find((x) => x.id === brand);
+    const id = brand ?? (brands.length === 1 ? brands[0]?.id : null);
+    if (!id) return;
+    const b = brands.find((x) => x.id === id);
     if (!b) return;
     rememberSubject({
       kind: 'brand',

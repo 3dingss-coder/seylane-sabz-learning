@@ -398,8 +398,8 @@ describe('admin: everything understandable at a glance', () => {
     if (!editButton) throw new Error('edit button not rendered');
     fireEvent.click(editButton);
     const dialog = await screen.findByRole('dialog', { name: `ویرایش ${withResidence.name}` });
-    expect(within(dialog).getByLabelText('محل سکونت')).toHaveTextContent('خراسان رضوی');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'پاک کردن محل سکونت' }));
+    expect(within(dialog).getByLabelText('محل فعالیت')).toHaveTextContent('خراسان رضوی');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'پاک کردن محل فعالیت' }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'ذخیره' }));
     await waitFor(() =>
       expect(calls.find((c) => c.key === 'PATCH /v1/admin/users/u1')?.body).toMatchObject({

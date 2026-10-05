@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Database, RefreshCw, ThumbsDown, ThumbsUp, Users, Volume2 } from 'lucide-react';
 import { Button, Card, KpiCard, Skeleton, TableSkeleton, useToast } from '@/components/ui';
@@ -54,9 +55,29 @@ export function ReportsPage() {
 }
 
 function Completion() {
+  const [sp] = useSearchParams();
+  const qs = useMemo(() => {
+    const params = new URLSearchParams();
+    for (const k of [
+      'brand',
+      'product',
+      'user',
+      'team',
+      'status',
+      'from',
+      'to',
+      'province',
+      'city',
+    ] as const) {
+      const v = sp.get(k);
+      if (v) params.set(k, v);
+    }
+    return params.toString();
+  }, [sp]);
   const q = useQuery({
-    queryKey: ['admin', 'report', 'completion'],
-    queryFn: ({ signal }) => api.get<Data>('/admin/reports/completion', signal),
+    queryKey: ['admin', 'report', 'completion', qs],
+    queryFn: ({ signal }) =>
+      api.get<Data>(`/admin/reports/completion${qs ? `?${qs}` : ''}`, signal),
   });
   const teams = useTeams();
   return (

@@ -50,9 +50,9 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
     if (!/^09\d{9}$/.test(toLatinDigits(identifier.trim())))
       e.identifier = 'شماره موبایل معتبر وارد کنید.';
     if (mode === 'register') {
-      // Residence is part of sign-up: the admin/manager panels get the region of every marketer.
-      if (!residence.province) e.province = 'استان محل سکونت را انتخاب کنید.';
-      else if (!residence.city) e.city = 'شهر محل سکونت را انتخاب کنید.';
+      // Activity location is part of sign-up: the admin/manager panels get the region of every marketer.
+      if (!residence.province) e.province = 'استان محل فعالیت خود را انتخاب کنید.';
+      else if (!residence.city) e.city = 'شهر محل فعالیت خود را انتخاب کنید.';
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -120,7 +120,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             className="h-14 w-auto"
           />
         </span>
-        <h1 className="text-2xl font-extrabold text-white">سیلانه‌سبز لرنینگ</h1>
+        <h1 className="text-2xl font-extrabold text-white">آکادمی سیلانه</h1>
         <p className="text-sm text-white/85">{title}</p>
       </div>
       <Card className="animate-fade-up relative mt-6 w-full max-w-[400px] p-6 shadow-lg">
@@ -152,6 +152,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             <ResidencePicker
               value={residence}
               onChange={setResidence}
+              label="انتخاب محل فعالیت شما"
               provinceError={errors.province}
               cityError={errors.city}
               disabled={busy}

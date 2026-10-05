@@ -60,7 +60,7 @@ test('sign-up page: residence picker, province and city lists open', async ({ pa
   await expectNoViolations(page);
 
   // The long province list is opened (contrast of the option rows is measured in a real browser).
-  await page.getByLabel('انتخاب محل سکونت').click();
+  await page.getByLabel('انتخاب محل فعالیت شما').click();
   await expect(page.getByRole('listbox', { name: 'استان‌های ایران' })).toBeVisible();
   await expectNoViolations(page);
 

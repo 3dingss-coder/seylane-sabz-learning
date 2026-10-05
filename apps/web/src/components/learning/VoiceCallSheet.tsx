@@ -8,7 +8,7 @@ import { qk } from '@/lib/queries';
 import { useQueryClient } from '@tanstack/react-query';
 import { track } from '@/lib/telemetry';
 import { readPageContext } from '@/lib/pageContext';
-import { listenFa, speechSupported, type ListenHandle } from '@/lib/speech';
+import { listenFa, recordUntilSilence, speechSupported, type ListenHandle } from '@/lib/speech';
 import {
   createRecorder,
   micSupported,
@@ -58,6 +58,9 @@ export function VoiceCallSheet({
 
   const recorder = useMemo(() => (micSupported() ? createRecorder() : null), []);
   const listenRef = useRef<ListenHandle | null>(null);
+  const autoListenRef = useRef(true);
+  const startListenRef = useRef<() => void>(() => undefined);
+  const [voiceNote, setVoiceNote] = useState('');
   const canListen = speechSupported() || micSupported();
   const stopPlayback = useRef<(() => void) | null>(null);
   const turnsRef = useRef(turns);
@@ -84,6 +87,7 @@ export function VoiceCallSheet({
         // Session can fail (voice policy or provider) and the call still works via text ask.
         setSession(null);
         setState('idle');
+        toast.show({ type: 'error', message: errMsg(e) });
       }
     })();
     return () => {
@@ -109,24 +113,40 @@ export function VoiceCallSheet({
   }, []);
 
   const speak = useCallback((reply: VoiceTurnReply) => {
+    const again = () => {
+      window.setTimeout(() => startListenRef.current(), 250);
+    };
     if (reply.audio) {
+      setVoiceNote('');
       stopPlayback.current = playAudioBase64(reply.audio.base64, reply.audio.mime);
       setState('speaking');
-      // The audio element has no completion callback here; the next mic press or a short timer
-      // returns control to the caller. 4 s/100 chars is a safe Persian speaking-rate estimate.
       const ms = Math.min(30_000, 1200 + reply.reply.length * 90);
       setTimeout(() => {
         setState((s) => (s === 'speaking' ? 'idle' : s));
+        again();
       }, ms);
       return;
     }
-    // No server audio (TTS quota / provider down) → use the phone's own Persian voice.
-    if (speakWithBrowser(reply.reply)) setState('speaking');
-    else setState('idle');
+    if (speakWithBrowser(reply.reply)) {
+      setVoiceNote('');
+      setState('speaking');
+      const ms = Math.min(30_000, 1200 + reply.reply.length * 90);
+      setTimeout(() => {
+        setState((s) => (s === 'speaking' ? 'idle' : s));
+        again();
+      }, ms);
+      return;
+    }
+    setVoiceNote('صدای فارسی روی این دستگاه نیست. متن پاسخ همین‌جا خوانده می‌شود.');
+    setState('idle');
+    again();
   }, []);
 
   const sendSpoken = useCallback(
-    async (input: { transcript?: string; audio?: { base64: string; mime: string; durationSec: number } }) => {
+    async (input: {
+      transcript?: string;
+      audio?: { base64: string; mime: string; durationSec: number };
+    }) => {
       if (input.audio && input.audio.base64.length > 700_000) {
         toast.show({
           type: 'error',
@@ -164,7 +184,12 @@ export function VoiceCallSheet({
             outcome: asked.outcome,
             nextAction: asked.nextAction ?? null,
             provider: asked.provider ?? 'ask',
-            latency: { sttMs: 0, answerMs: asked.latencyMs ?? 0, ttsMs: 0, totalMs: asked.latencyMs ?? 0 },
+            latency: {
+              sttMs: 0,
+              answerMs: asked.latencyMs ?? 0,
+              ttsMs: 0,
+              totalMs: asked.latencyMs ?? 0,
+            },
           };
         }
         append('user', reply.transcript);
@@ -184,6 +209,26 @@ export function VoiceCallSheet({
     if (state === 'speaking' || state === 'thinking' || state === 'connecting') return;
     stopPlayback.current?.();
     stopAudio();
+    if (micSupported()) {
+      if (state === 'recording') {
+        listenRef.current?.finish?.();
+        setState('thinking');
+        return;
+      }
+      setState('recording');
+      listenRef.current = recordUntilSilence({
+        onSilence: (audio) => {
+          listenRef.current = null;
+          void sendSpoken({ audio });
+        },
+        onError: (message) => {
+          listenRef.current = null;
+          toast.show({ type: 'error', message });
+          setState('idle');
+        },
+      });
+      return;
+    }
     if (speechSupported()) {
       if (state === 'recording') {
         listenRef.current?.stop();
@@ -204,36 +249,29 @@ export function VoiceCallSheet({
       });
       return;
     }
-    if (!recorder) {
-      toast.show({ type: 'error', message: 'مرورگر شما از ضبط صدا پشتیبانی نمی‌کند.' });
-      return;
-    }
-    if (state === 'recording') {
-      setState('thinking');
-      try {
-        const rec = await recorder.stop();
-        await sendSpoken({ audio: rec });
-      } catch (e) {
-        toast.show({ type: 'error', message: errMsg(e) });
+    toast.show({ type: 'error', message: 'مرورگر شما از ضبط صدا پشتیبانی نمی‌کند.' });
+  }, [sendSpoken, state, toast]);
+  startListenRef.current = () => {
+    if (!autoListenRef.current || listenRef.current) return;
+    if (!micSupported()) return;
+    setState('recording');
+    listenRef.current = recordUntilSilence({
+      onSilence: (audio) => {
+        listenRef.current = null;
+        void sendSpoken({ audio });
+      },
+      onError: (message) => {
+        listenRef.current = null;
+        toast.show({ type: 'error', message });
         setState('idle');
-      }
-      return;
-    }
-    try {
-      await recorder.start();
-      setState('recording');
-    } catch {
-      toast.show({
-        type: 'error',
-        message: 'دسترسی به میکروفن داده نشد. اجازه بده و دوباره تلاش کن.',
-      });
-      setState('idle');
-    }
-  }, [recorder, sendSpoken, state, toast]);
+      },
+    });
+  };
 
   const hangUp = useCallback(async () => {
     if (closingRef.current) return;
     closingRef.current = true;
+    autoListenRef.current = false;
     stopPlayback.current?.();
     stopAudio();
     try {
@@ -288,6 +326,7 @@ export function VoiceCallSheet({
         <p className="text-center text-sm text-text" aria-live="polite">
           {STATE_LABEL[state]}
         </p>
+        {voiceNote ? <p className="text-center text-xs text-text-secondary">{voiceNote}</p> : null}
         {active && <p className="text-xs text-text-secondary">{mmss}</p>}
 
         {(turns.length > 0 || last) && (

@@ -39,12 +39,43 @@ export function clipAtBoundary(text: string, max: number): string {
   const t = text.trim();
   if (t.length <= max) return t;
   const cut = t.slice(0, max);
-  const stop = Math.max(cut.lastIndexOf('.'), cut.lastIndexOf('؟'), cut.lastIndexOf('!'), cut.lastIndexOf('\n'));
+  const stop = Math.max(
+    cut.lastIndexOf('.'),
+    cut.lastIndexOf('؟'),
+    cut.lastIndexOf('!'),
+    cut.lastIndexOf('\n'),
+  );
   if (stop > Math.min(80, max * 0.4)) return cut.slice(0, stop + 1).trim();
   return cut.replace(/\s+\S*$/, '').trim();
 }
 
 /** Folds older user questions into a rolling summary. Keeps the newest tail when it grows. */
+async function summarizeFold(d: Deps, previous: string, older: string[]): Promise<string> {
+  const fallback = compressOlderChats(previous, older);
+  if (!older.length) return previous.trim();
+  try {
+    const { aiHub } = await import('../ai/hub');
+    const run = await aiHub(d).chat({
+      system:
+        'تو حافظه‌ی منتور هستی. سؤال‌های قدیمی همین کاربر را در حداکثر ۸ خط فارسی خلاصه کن: موضوع‌ها، محصولات و خواسته‌اش. قیمت یا ادعای تازه نساز.',
+      prompt: [
+        previous.trim() ? `خلاصه‌ی قبلی:\n${previous.trim()}` : '',
+        'سؤال‌هایی که باید وارد خلاصه شوند:',
+        ...older.map((t) => `- ${t.replace(/\s+/g, ' ').trim().slice(0, 400)}`),
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      maxTokens: 280,
+      temperature: 0.1,
+    });
+    const text = run.value.text.trim();
+    if (text.length < 40 || text.startsWith('نمی‌دانم')) return fallback;
+    return text.slice(0, MEMORY_SUMMARY_BUDGET);
+  } catch {
+    return fallback;
+  }
+}
+
 export function compressOlderChats(previous: string, olderUserTexts: string[]): string {
   const lines = olderUserTexts
     .map((t) => t.replace(/\s+/g, ' ').trim())
@@ -53,7 +84,10 @@ export function compressOlderChats(previous: string, olderUserTexts: string[]): 
   const block = lines.length ? `سؤالات قبلی:\n${lines.join('\n')}` : '';
   const next = [previous.trim(), block].filter(Boolean).join('\n');
   if (next.length <= MEMORY_SUMMARY_BUDGET) return next;
-  return next.slice(next.length - MEMORY_SUMMARY_BUDGET).replace(/^[^\n]*\n?/, '').trim();
+  return next
+    .slice(next.length - MEMORY_SUMMARY_BUDGET)
+    .replace(/^[^\n]*\n?/, '')
+    .trim();
 }
 
 export function windowUserTexts(
@@ -102,17 +136,23 @@ export async function syncMentorMemory(d: Deps, userId: string): Promise<MentorM
   const windowRows = pending.slice(-MEMORY_USER_TURNS);
   const olderRows = pending.slice(0, Math.max(0, pending.length - windowRows.length));
   const toFold = olderRows;
-  let summary = compressOlderChats(
+  let summary = await summarizeFold(
+    d,
     stored?.summary ?? '',
     toFold.map((m) => m.text),
   );
-  let newestFolded = toFold.length ? (toFold[toFold.length - 1]?.createdAt ?? coveredUntil) : coveredUntil;
+  let newestFolded = toFold.length
+    ? (toFold[toFold.length - 1]?.createdAt ?? coveredUntil)
+    : coveredUntil;
 
   const keptRows = [...windowRows];
-  while (keptRows.length > 1 && keptRows.map((m) => m.text.trim()).join('\n').length > MEMORY_USER_BUDGET) {
+  while (
+    keptRows.length > 1 &&
+    keptRows.map((m) => m.text.trim()).join('\n').length > MEMORY_USER_BUDGET
+  ) {
     const dropped = keptRows.shift();
     if (!dropped) break;
-    summary = compressOlderChats(summary, [dropped.text]);
+    summary = await summarizeFold(d, summary, [dropped.text]);
     newestFolded = dropped.createdAt;
   }
   const userTexts = keptRows.map((m) => m.text.trim());
@@ -134,7 +174,8 @@ export async function syncMentorMemory(d: Deps, userId: string): Promise<MentorM
   const lastAt = chronological.length
     ? Date.parse(chronological[chronological.length - 1]?.createdAt ?? '')
     : 0;
-  const fresh = !chronological.length || Number.isNaN(lastAt) || d.clock().getTime() - lastAt > FRESH_MS;
+  const fresh =
+    !chronological.length || Number.isNaN(lastAt) || d.clock().getTime() - lastAt > FRESH_MS;
 
   return { summary, userTexts, recentTurns, fresh };
 }

@@ -8,6 +8,7 @@ import { PageTransition } from '@/components/layout/PageTransition';
 import { CountBadge } from '@/components/ui/CountBadge';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
+import { clearSubject, isSubjectRoute } from '@/lib/pageContext';
 import { flushBeats } from '@/lib/offline-queue';
 import { useOnline } from '@/lib/online';
 import { useMessages, useNotifications } from '@/lib/queries';
@@ -29,6 +30,10 @@ export function MarketerLayout() {
   const online = useOnline();
   const unreadMessages = messages.data?.filter((m) => !m.readAt).length ?? 0;
   const unread = (notifications.data?.unread ?? 0) + unreadMessages;
+
+  useEffect(() => {
+    if (!isSubjectRoute(pathname)) clearSubject();
+  }, [pathname]);
 
   useEffect(() => {
     const sync = () =>

@@ -265,9 +265,17 @@ function GuideForm({
   const save = useMutation({
     mutationFn: () => {
       if ((payload.summary ?? '').length > 20_000)
-        throw new ApiError('VALIDATION', 'متن «آنچه منتور باید بداند» طولانی است. فایل دانش را در «سند دانش» بگذارید.', 400);
+        throw new ApiError(
+          'VALIDATION',
+          'متن «آنچه منتور باید بداند» طولانی است. فایل دانش را در «سند دانش» بگذارید.',
+          400,
+        );
       if ((payload.document ?? '').length > 40_000)
-        throw new ApiError('VALIDATION', 'سند دانش طولانی‌تر از حد مجاز است. آن را کمی کوتاه کنید.', 400);
+        throw new ApiError(
+          'VALIDATION',
+          'سند دانش طولانی‌تر از حد مجاز است. آن را کمی کوتاه کنید.',
+          400,
+        );
       return api.put<MentorGuideDetail>(url, payload);
     },
     onSuccess: () => {
@@ -346,7 +354,10 @@ function GuideForm({
     >
       <div className="flex flex-col gap-5">
         {formError && (
-          <p role="alert" className="rounded-card border border-danger/40 bg-danger-light p-3 text-sm leading-7 text-danger-fg">
+          <p
+            role="alert"
+            className="rounded-card border border-danger/40 bg-danger-light p-3 text-sm leading-7 text-danger-fg"
+          >
             {formError}
           </p>
         )}
@@ -429,7 +440,7 @@ function GuideForm({
             value={g.document ?? ''}
             onChange={(e) => patch({ document: e.target.value })}
             error={errors.document}
-            hint="فایل دانش تأییدشده را اینجا بگذار یا بارگذاری کن. منتور عین همین متن را ملاک قرار می‌دهد."
+            hint="همین متن، تا ۴۰هزار نویسه، بدون کوتاه‌شدن به منتور داده می‌شود."
             rows={8}
           />
           <div className="flex flex-wrap items-center gap-2">
@@ -450,7 +461,9 @@ function GuideForm({
                   const clipped = text.slice(0, 40_000);
                   patch({ document: clipped, title: g.title || file.name.replace(/\.[^.]+$/, '') });
                   setFormError(
-                    text.length > 40_000 ? 'انتهای فایل به‌خاطر سقف طول حذف شد، ولی بقیه ذخیره می‌شود.' : '',
+                    text.length > 40_000
+                      ? 'انتهای فایل به‌خاطر سقف طول حذف شد، ولی بقیه ذخیره می‌شود.'
+                      : '',
                   );
                 });
               }}

@@ -66,28 +66,28 @@ export function QuizPage() {
     <QueryState query={quiz} loading={loading}>
       {(d) => (
         <>
-        {section.data && (
-          <RememberPage
-            kind="quiz"
-            brandId={section.data.package.brand?.id ?? null}
-            brandName={section.data.package.brand?.name ?? null}
-            productId={section.data.package.product?.id ?? null}
-            productName={section.data.package.product?.name ?? null}
-            packageId={section.data.package.id}
-            packageTitle={section.data.package.title}
+          {section.data && (
+            <RememberPage
+              kind="quiz"
+              brandId={section.data.package.brand?.id ?? null}
+              brandName={section.data.package.brand?.name ?? null}
+              productId={section.data.package.product?.id ?? null}
+              productName={section.data.package.product?.name ?? null}
+              packageId={section.data.package.id}
+              packageTitle={section.data.package.title}
+              sectionId={sectionId}
+              sectionTitle={section.data.section.title}
+              activityLine={`آزمون «${section.data.section.title}» را باز کرد`}
+            />
+          )}
+          <QuizFlow
+            // Keyed by quiz only: the post-submit refetch bumps attemptInfo.used and must not
+            // remount the flow (that would drop the result screen).
+            key={d.quiz.id}
+            d={d}
             sectionId={sectionId}
-            sectionTitle={section.data.section.title}
-            activityLine={`آزمون «${section.data.section.title}» را باز کرد`}
+            nextSectionId={section.data?.nextSectionId ?? null}
           />
-        )}
-        <QuizFlow
-          // Keyed by quiz only: the post-submit refetch bumps attemptInfo.used and must not
-          // remount the flow (that would drop the result screen).
-          key={d.quiz.id}
-          d={d}
-          sectionId={sectionId}
-          nextSectionId={section.data?.nextSectionId ?? null}
-        />
         </>
       )}
     </QueryState>

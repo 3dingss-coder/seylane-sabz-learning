@@ -7,7 +7,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
  */
 const config: CapacitorConfig = {
   appId: process.env.CAP_APP_ID ?? 'ir.seylanesabz.learning',
-  appName: 'سیلانه‌سبز لرنینگ',
+  appName: 'آکادمی سیلانه',
   webDir: 'dist',
   android: { allowMixedContent: false },
   server: { androidScheme: 'https' },

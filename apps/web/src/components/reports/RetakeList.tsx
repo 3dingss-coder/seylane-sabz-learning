@@ -81,6 +81,12 @@ export function RetakeList({
                       <Link to={memberLink(r.userId)} className="font-bold text-primary">
                         {r.userName}
                       </Link>
+                      {r.userCity && (
+                        <span className="ms-2 text-xs text-text-secondary">
+                          ({r.userCity}
+                          {r.userProvince ? ` • ${r.userProvince}` : ''})
+                        </span>
+                      )}
                       <p className="text-text">
                         {r.packageTitle} • {r.sectionTitle}
                       </p>

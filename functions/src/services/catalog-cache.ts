@@ -11,8 +11,7 @@ export async function allBrands(d: Deps): Promise<Doc<Brand>[]> {
   const brands = await d.store.query<Brand>({ collection: 'brands' });
   brands.sort(
     (a, b) =>
-      (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
-      (a.name ?? '').localeCompare(b.name ?? '', 'fa'),
+      (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.name ?? '').localeCompare(b.name ?? '', 'fa'),
   );
   brandCache.set(d, { at: now, brands });
   return brands;

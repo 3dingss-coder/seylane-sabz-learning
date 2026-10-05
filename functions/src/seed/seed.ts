@@ -543,6 +543,16 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
   );
 
   if (opts.demo) report.demoUsers = await (await import('./demo')).seedDemo(d);
+
+  // Seed mentor behavior files (product knowledge for the AI mentor) — idempotent, skips existing.
+  try {
+    const { seedMentorBehavior } = await import('./mentor-behavior');
+    const n = await seedMentorBehavior(d, opts.repoRoot, log);
+    log(`mentor behavior guides seeded: ${n}`);
+  } catch (e) {
+    log(`mentor behavior seed skipped: ${(e as Error).message}`);
+  }
+
   log('seed complete');
   return report;
 }

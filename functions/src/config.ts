@@ -103,6 +103,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
         : 1,
     smtpUrl: env.SMTP_URL ?? '',
     appUrl: (env.APP_URL ?? env.URL ?? env.DEPLOY_PRIME_URL ?? '').replace(/\/$/, ''),
-    mailFrom: env.MAIL_FROM ?? 'سیلانه‌سبز لرنینگ <no-reply@seylane-sabz.local>',
+    mailFrom: env.MAIL_FROM ?? 'آکادمی سیلانه <no-reply@seylane-sabz.local>',
   };
 }

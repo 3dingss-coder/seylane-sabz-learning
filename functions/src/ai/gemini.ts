@@ -129,7 +129,10 @@ export class GeminiProvider implements AiProvider {
       { role: 'user', parts: [{ text: req.prompt }] },
     ];
     const body = await this.post<{
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      candidates?: Array<{
+        finishReason?: string;
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
     }>(
       `models/${req.maxTokens <= 200 ? this.model : this.model}:generateContent`,
       {
@@ -157,6 +160,7 @@ export class GeminiProvider implements AiProvider {
       approxTokens: approxTokens(
         req.system.length + req.prompt.length + text.length + (req.messages ?? []).length * 120,
       ),
+      truncated: body.candidates?.[0]?.finishReason === 'MAX_TOKENS',
     };
   }
 

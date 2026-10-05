@@ -65,6 +65,8 @@ export interface ChatResult {
   model: string;
   provider: AiProviderId;
   approxTokens: number;
+  /** True when the provider stopped because it hit maxOutputTokens, not because the sentence ended. */
+  truncated?: boolean;
 }
 
 export type MediaKind = 'image' | 'audio' | 'video' | 'pdf' | 'text';
