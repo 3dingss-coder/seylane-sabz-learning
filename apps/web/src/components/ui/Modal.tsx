@@ -89,6 +89,9 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
       <div
         aria-hidden
         className={cn(
+          // DESIGN-REFRESH §6 keeps this one blur on purpose: the scrim is transient (only while
+          // the modal is open), so nothing re-blurs while the page scrolls. The §7.3 ban is about
+          // sticky/scrolling surfaces — see scripts/check-perf-budget.mjs.
           'absolute inset-0 bg-scrim backdrop-blur-sm',
           closing ? 'animate-fade-out' : 'animate-fade-in',
         )}

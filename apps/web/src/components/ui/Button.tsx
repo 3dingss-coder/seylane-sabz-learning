@@ -64,6 +64,9 @@ export function Button({
         'disabled:cursor-not-allowed disabled:opacity-40 disabled:[box-shadow:none] disabled:active:translate-y-0',
         VARIANTS[variant],
         SIZES[size],
+        // A-06 (PHASE-7): the info-blue ring is invisible on a filled key, so filled variants ask
+        // for the white ring defined in styles/index.css.
+        (variant === 'primary' || variant === 'cta' || variant === 'danger') && 'focus-on-fill',
         block && 'w-full',
         className,
       )}

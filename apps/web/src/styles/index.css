@@ -436,6 +436,11 @@
     outline: 2px solid var(--color-info);
     outline-offset: 2px;
   }
+  /* A-06 (PHASE-7): a ring the same colour as its background is invisible — filled keys (green
+     CTA, red danger) get a white ring instead, same 2px and same offset. */
+  .focus-on-fill:focus-visible {
+    outline-color: #ffffff;
+  }
   button,
   input,
   select,

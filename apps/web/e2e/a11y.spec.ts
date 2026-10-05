@@ -64,6 +64,33 @@ test('marketer: home, catalog, package page', async ({ page }) => {
   await expectNoViolations(page);
 });
 
+test('marketer: profile — coin wallet and mastery (PHASE-3)', async ({ page }) => {
+  await login(page, '09120000005');
+  await page.goto('/profile');
+  // §3.3: spendable coins with a real-goods catalogue; the redemption list must be reachable
+  await expect(page.getByTestId('coin-wallet')).toBeVisible();
+  await expectNoViolations(page);
+});
+
+test('design system gallery — the whole cast carries a Persian accessible name (PHASE-2 A-03)', async ({ page }) => {
+  await page.goto('/gallery');
+  // 5 human characters × 8 expressions render as role="img" with an aria-label; Seyla is the
+  // official mascot PNG plus an sr-only label, so she is not counted here.
+  const labelled = page.locator('svg[role="img"][aria-label]');
+  await expect(labelled.first()).toBeVisible();
+  expect(await labelled.count()).toBeGreaterThanOrEqual(40);
+  await expectNoViolations(page);
+});
+
+test('admin dashboard — learning quality metrics carry no streak data (PHASE-3 G-03)', async ({ page }) => {
+  await login(page, '09120000002');
+  await page.goto('/admin');
+  await expect(page.getByTestId('learning-quality')).toBeVisible();
+  // G-03 is a product rule, so assert it in the browser too, not only in the API test
+  await expect(page.getByTestId('learning-quality')).not.toContainText(/پیوستگی\s*\d/);
+  await expectNoViolations(page);
+});
+
 test('manager dashboard', async ({ page }) => {
   await login(page, '09120000003');
   await expect(page).toHaveURL(/\/manager/);

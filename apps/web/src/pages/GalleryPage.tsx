@@ -112,7 +112,7 @@ export function GalleryPage() {
 
   return (
     <div className="min-h-dvh pb-24 lg:pb-0">
-      <header className="sticky top-0 z-30 border-b border-border bg-surface/95 backdrop-blur safe-top">
+      <header className="sticky top-0 z-30 border-b border-border bg-surface safe-top">
         <div className="mx-auto flex h-16 max-w-[1200px] items-center justify-between px-4 lg:px-6">
           <AppLogo />
           <span className="text-sm font-medium text-text-secondary">نمایشگاه اجزای طراحی</span>

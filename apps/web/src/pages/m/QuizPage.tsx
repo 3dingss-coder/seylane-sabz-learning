@@ -507,7 +507,7 @@ function QuizFlow({
           })}
         </fieldset>
       </div>
-      <div className="sticky bottom-24 z-20 flex gap-2 rounded-card border border-border/70 bg-surface/95 p-2 shadow-md backdrop-blur lg:bottom-4">
+      <div className="sticky bottom-24 z-20 flex gap-2 rounded-card border border-border/70 bg-surface p-2 shadow-md lg:bottom-4">
         <Button
           variant="secondary"
           disabled={idx === 0}
