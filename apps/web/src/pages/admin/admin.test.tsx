@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
-import type { AdminPackageDetail, AdminSection, Me } from '@/lib/types';
+import type { AdminPackageDetail, AdminSection, AdminTeam, Me } from '@/lib/types';
 import { marketer } from '@/test/fixtures';
 import { mockApi } from '@/test/mockApi';
 import { renderApp } from '@/test/renderApp';
@@ -26,7 +26,7 @@ const asAdmin = () => {
     }),
     'GET /v1/admin/products': () => ({ data: [] }),
     'GET /v1/admin/products?brandId=b1': () => ({ data: [] }),
-    'GET /v1/admin/teams': () => ({ data: [{ id: 't1', name: 'تیم تهران' }] }),
+    'GET /v1/admin/teams': () => ({ data: [team()] }),
     'GET /v1/admin/users': () => ({ data: [] }),
     'GET /v1/admin/paths': () => ({ data: [] }),
   };
@@ -45,6 +45,18 @@ const kpis = {
   completions: 0,
   nudgeReengagementRate: 0,
 };
+
+/** Typed on purpose: an untyped literal here silently dropped `managerName` and
+ *  `memberCount`, so two of the four TeamsPage columns were never exercised. Live
+ *  `GET /v1/admin/teams` returns all five fields. */
+const team = (over: Partial<AdminTeam> = {}): AdminTeam => ({
+  id: 't1',
+  name: 'تیم تهران',
+  managerId: 'u3',
+  managerName: 'رضا مدیر فروش',
+  memberCount: 4,
+  ...over,
+});
 
 const section = (over: Partial<AdminSection> = {}): AdminSection => ({
   id: 's1',
@@ -418,5 +430,44 @@ describe('admin: everything understandable at a glance', () => {
       'true',
     );
     expect(await screen.findByRole('button', { name: 'ساخت اولین مسیر' })).toBeInTheDocument();
+  });
+
+  // TeamsPage had no test at all, and the shared teams mock was an untyped
+  // `{ id, name }` literal — so the manager column and the member-count column
+  // never rendered in any test. Both branches are pinned here.
+  it('teams page names each team’s manager and falls back when there is none', async () => {
+    mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/teams': () => ({
+        data: [
+          team(),
+          team({
+            id: 't2',
+            name: 'تیم اصفهان',
+            managerId: null,
+            managerName: null,
+            memberCount: 0,
+          }),
+        ],
+      }),
+    });
+    renderApp('/admin/teams');
+    expect(await screen.findByRole('heading', { name: 'تیم‌ها' })).toBeInTheDocument();
+
+    // Scoped to the table: DataTable also renders a mobile <ul> with the same
+    // text, so an unscoped getByText would match twice. Awaited, because the
+    // PageHeader heading above paints before the teams query resolves.
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('تیم تهران')).toBeInTheDocument();
+    expect(within(table).getByText('رضا مدیر فروش')).toBeInTheDocument();
+    expect(within(table).getByText('تعیین نشده')).toBeInTheDocument();
+
+    // Member counts go through toPersianDigits (§16.3).
+    expect(within(table).getByText('۴')).toBeInTheDocument();
+    expect(within(table).getByText('۰')).toBeInTheDocument();
+
+    // Each row keeps an accessible edit affordance.
+    expect(within(table).getByRole('button', { name: 'ویرایش تیم تهران' })).toBeInTheDocument();
+    expect(within(table).getByRole('button', { name: 'ویرایش تیم اصفهان' })).toBeInTheDocument();
   });
 });
