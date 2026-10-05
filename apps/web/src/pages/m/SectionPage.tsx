@@ -67,9 +67,9 @@ function Player({ d }: { d: SectionDetail }) {
   };
   const tracker = usePlaybackTracker(s.id, onResult);
 
-  const quizRequired = s.quizRequired !== false;
-  const quizReady = quizRequired && !s.quizPassed;
-  const sectionDone = quizRequired ? s.quizPassed : progress.completed;
+  const quizSectionId = d.quizSectionId ?? s.id;
+  const quizReady = !(d.packageQuizPassed ?? s.quizPassed);
+  const sectionDone = !quizReady;
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -139,7 +139,7 @@ function Player({ d }: { d: SectionDetail }) {
                   <CheckCircle2 className="size-4" aria-hidden /> این قسمت را کامل کردی.
                 </span>
               ) : (
-                `${quizRequired ? 'آزمون این قسمت همیشه باز است. ' : ''}برای کامل شدن قسمت، حداقل ${faPercent(d.completionThreshold)} را ببین یا بشنو. (${faPercent(progress.percent)})`
+                `${quizReady ? 'آزمون بسته از همان اول باز است؛ دیدن یا شنیدن اجباری نیست. ' : ''}برای کامل شدن قسمت، حداقل ${faPercent(d.completionThreshold)} را ببین یا بشنو. (${faPercent(progress.percent)})`
               )}
             </p>
           </Card>
@@ -149,14 +149,10 @@ function Player({ d }: { d: SectionDetail }) {
               size="lg"
               block
               icon={<ClipboardCheck className="size-5" aria-hidden />}
-              onClick={() => nav(`/quiz/${s.id}`)}
+              onClick={() => nav(`/quiz/${quizSectionId}`)}
               data-testid="start-quiz"
             >
               شروع آزمون
-            </Button>
-          ) : sectionDone && d.nextSectionId ? (
-            <Button size="lg" block onClick={() => nav(`/sections/${d.nextSectionId}`)}>
-              قسمت بعد
             </Button>
           ) : sectionDone ? (
             <Button size="lg" block variant="secondary" onClick={() => nav(`/packages/${p.id}`)}>

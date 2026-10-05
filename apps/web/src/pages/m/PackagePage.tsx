@@ -37,6 +37,7 @@ export function PackagePage() {
     >
       {({ package: p, sections, notes }) => {
         const live = sections.filter((s) => !s.archived);
+        const quizSection = live.find((s) => s.quizRequired !== false && s.quizId);
         const current = live.find((s) => s.state !== 'completed' && s.state !== 'locked');
         return (
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
@@ -94,6 +95,20 @@ export function PackagePage() {
                   ))}
                 </div>
               )}
+              {quizSection && !quizSection.quizPassed && (
+                <Link
+                  to={`/quiz/${quizSection.id}`}
+                  data-testid="package-quiz"
+                  className="pressable flex min-h-14 items-center justify-center gap-2 rounded-card border border-info/30 bg-info-light text-base font-bold text-info-fg hover:shadow-sm"
+                >
+                  <ClipboardCheck className="size-5" aria-hidden /> آزمون این محصول
+                </Link>
+              )}
+              {quizSection?.quizPassed && (
+                <p className="rounded-card bg-success-light p-3 text-center text-sm font-bold text-success-fg">
+                  آزمون این محصول را قبول شده‌ای ✅
+                </p>
+              )}
               {current && (
                 <Button
                   size="lg"
@@ -106,7 +121,7 @@ export function PackagePage() {
                   }
                 >
                   {current.state === 'quiz'
-                    ? 'شروع آزمون قسمت'
+                    ? 'شروع آزمون'
                     : current.state === 'in_progress'
                       ? 'ادامه قسمت فعلی'
                       : 'شروع قسمت'}
@@ -115,7 +130,7 @@ export function PackagePage() {
             </div>
             <section aria-labelledby="sections-title" className="flex flex-col gap-2 lg:w-96">
               <h2 id="sections-title" className="text-base font-bold text-text">
-                قسمت‌ها ({toPersianDigits(live.length)})
+                ویدیو و پادکست ({toPersianDigits(live.length)})
               </h2>
               {live.length === 0 ? (
                 <EmptyState
@@ -186,14 +201,6 @@ function SectionRow({ s }: { s: SectionView }) {
       <Link to={`/sections/${s.id}`} data-testid="section-row">
         {body}
       </Link>
-      {!s.quizPassed && s.quizId && s.quizRequired !== false && (
-        <Link
-          to={`/quiz/${s.id}`}
-          className="pressable flex min-h-12 items-center justify-center gap-2 rounded-card border border-info/30 bg-info-light text-sm font-bold text-info-fg hover:shadow-sm"
-        >
-          <ClipboardCheck className="size-4" aria-hidden /> آزمون این قسمت
-        </Link>
-      )}
     </li>
   );
 }

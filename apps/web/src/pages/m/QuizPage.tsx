@@ -70,7 +70,7 @@ export function QuizPage() {
           key={d.quiz.id}
           d={d}
           sectionId={sectionId}
-          nextSectionId={section.data?.nextSectionId ?? null}
+          nextSectionId={null}
         />
       )}
     </QueryState>
@@ -219,9 +219,11 @@ function QuizFlow({
               <Sparkles className="size-4" aria-hidden />+{faNumber(result.pointsEarned)} امتیاز
             </p>
           )}
-          {!result.passed && result.remainingAttempts > 0 && (
+          {!result.passed && (
             <p className="text-sm text-text-secondary">
-              {toPersianDigits(result.remainingAttempts)} فرصت دیگر داری.
+              برای تلاش بعدی، یک بار ویدیو را ببین یا پادکست را گوش بده.
+              {result.remainingAttempts > 0 &&
+                ` (${toPersianDigits(result.remainingAttempts)} فرصت دیگر داری)`}
             </p>
           )}
         </Card>
@@ -277,24 +279,14 @@ function QuizFlow({
             {result.packageCompleted ? 'بسته تمام شد — بازگشت به خانه' : 'بازگشت به بسته'}
           </Button>
         ) : result.nextAction === 'retry' ? (
-          <div className="flex flex-col gap-2">
-            <Button
-              size="lg"
-              block
-              icon={<RotateCcw className="size-5" aria-hidden />}
-              loading={start.isPending}
-              onClick={() => {
-                setResult(null);
-                setAttempt(null);
-                start.mutate();
-              }}
-            >
-              تلاش دوباره
-            </Button>
-            <Button variant="ghost" block onClick={() => nav(`/sections/${sectionId}`)}>
-              دوباره دیدن قسمت
-            </Button>
-          </div>
+          <Button
+            size="lg"
+            block
+            icon={<RotateCcw className="size-5" aria-hidden />}
+            onClick={() => nav(`/packages/${d.quiz.packageId}`)}
+          >
+            دیدن ویدیو یا گوش دادن به پادکست
+          </Button>
         ) : result.nextAction === 'request_retake' ? (
           <Button size="lg" block loading={retake.isPending} onClick={() => retake.mutate()}>
             درخواست آزمون مجدد از مدیر
@@ -326,6 +318,18 @@ function QuizFlow({
             }
           >
             {nextSectionId ? 'قسمت بعد' : 'بازگشت به بسته'}
+          </Button>
+        </>
+      );
+    else if (info.rewatchRequired && !info.pendingRetake)
+      body = (
+        <>
+          <EmptyState
+            title="نمره‌ات زیر حد قبولی بود"
+            description="یک بار ویدیو را ببین یا پادکست را گوش بده؛ بعد دوباره آزمون باز می‌شود."
+          />
+          <Button size="lg" block onClick={() => nav(`/packages/${d.quiz.packageId}`)}>
+            رفتن به ویدیو و پادکست
           </Button>
         </>
       );
