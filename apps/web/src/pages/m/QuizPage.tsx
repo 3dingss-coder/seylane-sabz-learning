@@ -24,6 +24,7 @@ import {
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Character } from '@/components/character/Character';
+import { COPY } from '@/lib/copy/fa';
 import { CelebrationScreen } from '@/components/learning/CelebrationScreen';
 import { playMoment } from '@/lib/sound';
 import { QueryState } from '@/components/common/QueryState';
@@ -266,7 +267,7 @@ function QuizFlow({
           {result.passed ? (
             /* a pass = the customer was convinced. Simin says it; Seyla only celebrates. */
             <div className="flex items-end justify-center gap-1">
-              <Character id="simin" expression="happy" size="sm" speech="قانع شدم." />
+              <Character id="simin" expression="happy" size="sm" speech={COPY.success.duelPassedCustomer} />
               <Character id="seyla" expression="celebrate" mastery={1} size="lg" />
             </div>
           ) : (

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ListChecks, Route } from 'lucide-react';
 import { EmptyState, PackageCardSkeleton } from '@/components/ui';
+import { COPY } from '@/lib/copy/fa';
 import { Tabs } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState, StaleBanner } from '@/components/common/QueryState';
@@ -95,7 +96,7 @@ export function LearnPage() {
               <EmptyState
                 character="seyla"
                 title="هنوز آموزشی نداری"
-                description="سیلا منتظرته؛ به محض فعال‌شدن اولین بسته، مسیر همین‌جا ساخته می‌شود."
+                description={COPY.empty.home}
                 actionText="رفتن به کارت‌های من"
                 onAction={() => nav('/cards')}
               />

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Brain, Check, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { COPY } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { qk, useGamification } from '@/lib/queries';
@@ -55,9 +56,7 @@ export function ReviewDeck() {
         </span>
         <div className="min-w-0">
           <p className="text-sm font-bold text-text">مرور امروز انجام شد</p>
-          <p className="text-xs leading-6 text-text-secondary">
-            سؤال‌ها وقتی برمی‌گردند که نزدیک فراموشی باشند — نه زودتر.
-          </p>
+          <p className="text-xs leading-6 text-text-secondary">{COPY.empty.reviews}</p>
         </div>
       </Card>
     );
@@ -139,7 +138,7 @@ export function ReviewDeck() {
                   setIndex((i) => i + 1);
                 }}
               >
-                {index + 1 >= items.length ? 'بستن' : 'سؤال بعدی'}
+                {index + 1 >= items.length ? COPY.actions.close : COPY.actions.next}
               </Button>
             </div>
           )}

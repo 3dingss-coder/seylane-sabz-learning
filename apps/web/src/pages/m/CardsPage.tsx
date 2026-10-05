@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CountUp, EmptyState, Skeleton, StreakChip } from '@/components/ui';
+import { COPY } from '@/lib/copy/fa';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
@@ -125,7 +126,7 @@ export function CardsPage() {
           empty={
             <EmptyState
               title="هنوز امتیازی نگرفته‌ای"
-              description="با تکمیل به‌موقع آموزش‌ها و قبولی در آزمون امتیاز بگیر."
+              description={COPY.empty.cards}
             />
           }
         >

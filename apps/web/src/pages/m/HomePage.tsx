@@ -14,6 +14,7 @@ import {
 import { QueryState, StaleBanner } from '@/components/common/QueryState';
 import { Reveal } from '@/components/common/Reveal';
 import { Character } from '@/components/character/Character';
+import { COPY } from '@/lib/copy/fa';
 import type { Expression } from '@/components/character/types';
 import { ProductImage } from '@/components/common/ProductImage';
 import { PackageCard } from '@/components/learning/PackageCard';
@@ -81,7 +82,7 @@ export function HomePage() {
           <EmptyState
             character="seyla"
             title="هنوز آموزشی ندارید"
-            description="سیلا منتظرته؛ به محض فعال‌شدن اولین بسته، همین‌جا می‌بینی."
+            description={COPY.empty.home}
             actionText="رفتن به کارت‌های من"
             onAction={() => nav('/cards')}
           />

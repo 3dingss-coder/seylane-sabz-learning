@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCheck, MessageSquareText } from 'lucide-react';
 import { Button, EmptyState, TableSkeleton } from '@/components/ui';
+import { COPY } from '@/lib/copy/fa';
 import { Tabs } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
@@ -68,7 +69,7 @@ export function MessagesPage() {
             <EmptyState
               character="seyla"
               title="اعلانی نداری"
-              description="هر وقت آموزش جدید یا مهلتی در راه باشد، سیلا همین‌جا خبرت می‌کند."
+              description={COPY.empty.messages}
               actionText="رفتن به مسیر یادگیری"
               onAction={() => nav('/learn')}
             />

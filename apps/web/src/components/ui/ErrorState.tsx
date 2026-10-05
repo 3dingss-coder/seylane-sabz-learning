@@ -1,4 +1,5 @@
 import { RotateCw } from 'lucide-react';
+import { COPY } from '@/lib/copy/fa';
 import { Button } from './Button';
 import { ErrorIllustration } from './illustrations';
 
@@ -9,7 +10,7 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({
-  message = 'اطلاعات بارگذاری نشد. اتصال اینترنت را بررسی کنید.',
+  message = COPY.error.generic,
   onRetry,
 }: ErrorStateProps) {
   return (
@@ -26,7 +27,7 @@ export function ErrorState({
           icon={<RotateCw className="size-4" aria-hidden />}
           onClick={onRetry}
         >
-          تلاش مجدد
+          {COPY.actions.retry}
         </Button>
       )}
     </div>

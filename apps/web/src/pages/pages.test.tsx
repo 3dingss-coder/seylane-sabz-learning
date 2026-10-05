@@ -61,7 +61,7 @@ describe('routing', () => {
   it('gallery shows retry on manifest failure', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     renderAt('/gallery');
-    expect(await screen.findByRole('button', { name: 'تلاش مجدد' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'تلاش دوباره' })).toBeInTheDocument();
   });
 
   it('redirects anonymous users from the marketer home to login', async () => {

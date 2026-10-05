@@ -69,7 +69,7 @@ describe('Card / Skeleton / States', () => {
     const onRetry = vi.fn();
     render(<ErrorState onRetry={onRetry} />);
     expect(screen.getByRole('alert')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'تلاش مجدد' }));
+    fireEvent.click(screen.getByRole('button', { name: 'تلاش دوباره' }));
     expect(onRetry).toHaveBeenCalled();
   });
 });
