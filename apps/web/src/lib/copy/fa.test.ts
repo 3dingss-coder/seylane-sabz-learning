@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   allCopyStrings,
+  allFormatSamples,
   BANNED_PHRASES,
   COPY,
   copyViolations,
   MAX_EMOJI_PER_BUBBLE,
   MAX_SENTENCES,
+  QUIZ_LINES,
 } from './fa';
 
 /**
@@ -15,6 +17,16 @@ describe('PHASE-6 — copy quality (§6.4)', () => {
   it('no string in the module breaks the voice rules', () => {
     const violations = copyViolations(allCopyStrings());
     expect(violations).toEqual([]);
+  });
+
+  it('the numbered lines are gated too — not just the static ones', () => {
+    expect(copyViolations(allFormatSamples())).toEqual([]);
+  });
+
+  it('every numbered line is actually covered by the samples', () => {
+    const samples = allFormatSamples();
+    expect(samples.length).toBe(Object.keys(QUIZ_LINES).length);
+    for (const [, text] of samples) expect(text).toMatch(/[\u0600-\u06FF]/);
   });
 
   it('the gate actually catches each rule (otherwise it is decoration)', () => {

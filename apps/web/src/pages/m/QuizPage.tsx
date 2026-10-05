@@ -24,7 +24,7 @@ import {
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Character } from '@/components/character/Character';
-import { COPY } from '@/lib/copy/fa';
+import { COPY, QUIZ_LINES, QUIZ_OPTION_LABEL } from '@/lib/copy/fa';
 import { CelebrationScreen } from '@/components/learning/CelebrationScreen';
 import { playMoment } from '@/lib/sound';
 import { QueryState } from '@/components/common/QueryState';
@@ -35,7 +35,6 @@ import { faNumber, faPercent } from '@/lib/format';
 import { qk } from '@/lib/queries';
 import type { QuizData, SectionDetail, StartAttempt, SubmitResult } from '@/lib/types';
 
-const OPTION_LABEL: Record<string, string> = { a: 'الف', b: 'ب', c: 'ج', d: 'د' };
 const draftKey = (attemptId: string) => `ssl.quiz.${attemptId}`;
 
 /** M7 آزمون + M8 نتیجه. Grading happens only on the server; the client never sees answer keys. */
@@ -132,9 +131,7 @@ function QuizFlow({
   // Silent under prefers-reduced-motion and when the sound switch is off (then haptics instead).
   useEffect(() => {
     if (!result) return;
-    playMoment(
-      result.passed ? (result.packageCompleted ? 'celebrate' : 'correct') : 'wrong',
-    );
+    playMoment(result.passed ? (result.packageCompleted ? 'celebrate' : 'correct') : 'wrong');
   }, [result]);
 
   const start = useMutation({
@@ -148,7 +145,10 @@ function QuizFlow({
       void qc.invalidateQueries({ queryKey: qk.quiz(d.quiz.id) });
     },
     onError: (e) =>
-      toast.show({ type: 'error', message: e instanceof ApiError ? e.message : 'خطایی رخ داد.' }),
+      toast.show({
+        type: 'error',
+        message: e instanceof ApiError ? e.message : COPY.quiz.genericError,
+      }),
   });
   const submit = useMutation({
     mutationFn: (attemptId: string) =>
@@ -163,8 +163,7 @@ function QuizFlow({
       setConfirm(false);
       toast.show({
         type: 'error',
-        message:
-          e instanceof ApiError ? e.message : 'ارسال نشد؛ پاسخ‌هایت ذخیره شده. دوباره تلاش کن.',
+        message: e instanceof ApiError ? e.message : COPY.quiz.submitFailed,
       });
     },
   });
@@ -172,12 +171,15 @@ function QuizFlow({
     mutationFn: () =>
       api.post<{ id: string; status: string }>(`/me/quizzes/${d.quiz.id}/retake-requests`),
     onSuccess: () => {
-      toast.show({ type: 'success', message: 'درخواست آزمون مجدد برای مدیر ارسال شد.' });
+      toast.show({ type: 'success', message: COPY.quiz.retakeRequested });
       void qc.invalidateQueries({ queryKey: qk.quiz(d.quiz.id) });
       nav(`/packages/${d.quiz.packageId}`);
     },
     onError: (e) =>
-      toast.show({ type: 'error', message: e instanceof ApiError ? e.message : 'خطایی رخ داد.' }),
+      toast.show({
+        type: 'error',
+        message: e instanceof ApiError ? e.message : COPY.quiz.genericError,
+      }),
   });
 
   const answered = useMemo(
@@ -186,7 +188,7 @@ function QuizFlow({
   );
   const header = (
     <PageHeader
-      title="آزمون"
+      title={COPY.quiz.title}
       back={`/sections/${sectionId}`}
       subtitle={`${d.quiz.packageTitle} • ${d.quiz.sectionTitle}`}
     />
@@ -199,7 +201,7 @@ function QuizFlow({
       <>
         {result.nextAction === 'next_section' && nextSectionId ? (
           <Button size="lg" block onClick={() => nav(`/sections/${nextSectionId}`)}>
-            قسمت بعد
+            {COPY.quiz.nextSection}
           </Button>
         ) : result.nextAction === 'package_complete' || result.nextAction === 'next_section' ? (
           <Button
@@ -207,7 +209,7 @@ function QuizFlow({
             block
             onClick={() => nav(result.packageCompleted ? '/' : `/packages/${d.quiz.packageId}`)}
           >
-            {result.packageCompleted ? 'بسته تمام شد — بازگشت به خانه' : 'بازگشت به بسته'}
+            {result.packageCompleted ? COPY.quiz.packageDoneHome : COPY.quiz.backToPackage}
           </Button>
         ) : result.nextAction === 'retry' ? (
           <div className="flex flex-col gap-2">
@@ -222,18 +224,18 @@ function QuizFlow({
                 start.mutate();
               }}
             >
-              تلاش دوباره
+              {COPY.actions.retry}
             </Button>
             <Button variant="ghost" block onClick={() => nav(`/sections/${sectionId}`)}>
-              دوباره دیدن قسمت
+              {COPY.quiz.rewatch}
             </Button>
           </div>
         ) : result.nextAction === 'request_retake' ? (
           <Button size="lg" block loading={retake.isPending} onClick={() => retake.mutate()}>
-            درخواست آزمون مجدد از مدیر
+            {COPY.quiz.requestRetake}
           </Button>
         ) : (
-          <EmptyState title="درخواست آزمون مجددت در انتظار تأیید مدیر است." />
+          <EmptyState title={COPY.quiz.requestPending} />
         )}
       </>
     );
@@ -244,12 +246,14 @@ function QuizFlow({
           {header}
           <CelebrationScreen
             testId="quiz-result"
-            title="بسته تمام شد! 🎉"
-            subtitle={`${toPersianDigits(result.correctCount)} پاسخ درست از ${toPersianDigits(
-              result.total,
-            )} • نمره ${faPercent(result.score)}`}
+            title={COPY.quiz.packageDoneTitle}
+            subtitle={QUIZ_LINES.scoreSummary(
+              toPersianDigits(result.correctCount),
+              toPersianDigits(result.total),
+              faPercent(result.score),
+            )}
             pointsEarned={result.pointsEarned}
-            actionLabel="بازگشت به خانه"
+            actionLabel={COPY.quiz.backHome}
             onAction={() => nav('/')}
           />
         </div>
@@ -267,24 +271,24 @@ function QuizFlow({
           {result.passed ? (
             /* a pass = the customer was convinced. Simin says it; Seyla only celebrates. */
             <div className="flex items-end justify-center gap-1">
-              <Character id="simin" expression="happy" size="sm" speech={COPY.success.duelPassedCustomer} />
+              <Character
+                id="simin"
+                expression="happy"
+                size="sm"
+                speech={COPY.success.duelPassedCustomer}
+              />
               <Character id="seyla" expression="celebrate" mastery={1} size="lg" />
             </div>
           ) : (
             /* a fail is never shown on the customer's face — Kamran teaches, in an
                empathy voice (C-06 fail rule). Simin never says «نتونستم». */
-            <Character
-              id="kamran"
-              expression="empathy"
-              size="lg"
-              speech="بذار یه بار دیگه با هم مرور کنیم."
-            />
+            <Character id="kamran" expression="empathy" size="lg" speech={COPY.quiz.mentorRetry} />
           )}
           <ProgressRing
             value={result.score}
             size={120}
             stroke={10}
-            label="نمره آزمون"
+            label={COPY.quiz.scoreLabel}
             tone={result.passed ? 'success' : 'danger'}
             center={
               <span className="absolute flex flex-col items-center leading-tight">
@@ -298,26 +302,30 @@ function QuizFlow({
             }
           />
           <h2 className="mt-1 text-xl font-bold text-text">
-            {result.passed ? 'قبول شدی! 🎉' : 'این بار قبول نشدی'}
+            {result.passed ? COPY.quiz.passedTitle : COPY.quiz.failedTitle}
           </h2>
           <p className="text-sm text-text-secondary">
-            {toPersianDigits(result.correctCount)} پاسخ درست از {toPersianDigits(result.total)} •
-            نمره قبولی {faPercent(result.passScore)}
+            {QUIZ_LINES.correctOfTotal(
+              toPersianDigits(result.correctCount),
+              toPersianDigits(result.total),
+            )}{' '}
+            • {QUIZ_LINES.passScoreNote(faPercent(result.passScore))}
           </p>
           {result.pointsEarned > 0 && (
             <p className="animate-pop inline-flex items-center gap-1 rounded-full bg-accent-light px-3 py-1 text-sm font-bold text-accent-fg">
-              <Sparkles className="size-4" aria-hidden />+{faNumber(result.pointsEarned)} امتیاز
+              <Sparkles className="size-4" aria-hidden />
+              {QUIZ_LINES.points(faNumber(result.pointsEarned))}
             </p>
           )}
           {!result.passed && result.remainingAttempts > 0 && (
             <p className="text-sm text-text-secondary">
-              {toPersianDigits(result.remainingAttempts)} فرصت دیگر داری.
+              {QUIZ_LINES.attemptsLeft(toPersianDigits(result.remainingAttempts))}
             </p>
           )}
         </Card>
         <section aria-labelledby="review" className="flex flex-col gap-2">
           <h3 id="review" className="text-base font-bold">
-            مرور پاسخ‌ها
+            {COPY.quiz.reviewAnswers}
           </h3>
           <div className="stagger flex flex-col gap-2">
             {result.review.map((r, i) => {
@@ -333,12 +341,12 @@ function QuizFlow({
                   {r.correct ? (
                     <CheckCircle2
                       className="animate-pop size-5 shrink-0 text-success"
-                      aria-label="درست"
+                      aria-label={COPY.quiz.correctAria}
                     />
                   ) : (
                     <XCircle
                       className="animate-shake size-5 shrink-0 text-danger"
-                      aria-label="نادرست"
+                      aria-label={COPY.quiz.incorrectAria}
                     />
                   )}
                   <div className="text-sm">
@@ -366,9 +374,9 @@ function QuizFlow({
       body = (
         <>
           <EmptyState
-            title="این آزمون را قبول شده‌ای ✅"
+            title={COPY.quiz.passedBadge}
             description={
-              info.lastAttempt ? `نمره: ${faPercent(info.lastAttempt.score)}` : undefined
+              info.lastAttempt ? QUIZ_LINES.scoreNote(faPercent(info.lastAttempt.score)) : undefined
             }
           />
           <Button
@@ -378,46 +386,35 @@ function QuizFlow({
               nav(nextSectionId ? `/sections/${nextSectionId}` : `/packages/${d.quiz.packageId}`)
             }
           >
-            {nextSectionId ? 'قسمت بعد' : 'بازگشت به بسته'}
+            {nextSectionId ? COPY.quiz.nextSection : COPY.quiz.backToPackage}
           </Button>
         </>
       );
     else if (info.pendingRetake)
-      body = (
-        <EmptyState
-          title="در انتظار تأیید مدیر"
-          description="درخواست آزمون مجددت ثبت شده است. بعد از تأیید، اینجا فعال می‌شود."
-        />
-      );
+      body = <EmptyState title={COPY.quiz.pendingTitle} description={COPY.quiz.pendingDesc} />;
     else if (!info.canAttempt)
       body = (
         <>
-          <EmptyState
-            title="فرصت‌های آزمون تمام شد"
-            description="می‌توانی از مدیرت درخواست آزمون مجدد کنی."
-          />
+          <EmptyState title={COPY.quiz.attemptsOutTitle} description={COPY.quiz.attemptsOutDesc} />
           <Button size="lg" block loading={retake.isPending} onClick={() => retake.mutate()}>
-            درخواست آزمون مجدد از مدیر
+            {COPY.quiz.requestRetake}
           </Button>
         </>
       );
     else if (questions.length === 0)
-      body = (
-        <EmptyState
-          title="آزمونی برای این قسمت تعریف نشده است"
-          description="به مدیر اطلاع داده شد."
-        />
-      );
+      body = <EmptyState title={COPY.quiz.noQuizTitle} description={COPY.quiz.noQuizDesc} />;
     else
       body = (
         <>
           <Card className="flex flex-col gap-2 text-sm text-text">
-            <p>• {toPersianDigits(d.quiz.questionCount)} سؤال چهارگزینه‌ای</p>
-            <p>• نمره قبولی: {faPercent(d.quiz.passScore)}</p>
+            <p>{QUIZ_LINES.questionCount(toPersianDigits(d.quiz.questionCount))}</p>
+            <p>{QUIZ_LINES.passScoreLine(faPercent(d.quiz.passScore))}</p>
             <p>
-              • فرصت باقی‌مانده: {toPersianDigits(info.remaining)} از {toPersianDigits(info.max)}
+              {QUIZ_LINES.remainingLine(toPersianDigits(info.remaining), toPersianDigits(info.max))}
             </p>
-            {info.lastAttempt && <p>• آخرین نمره: {faPercent(info.lastAttempt.score)}</p>}
+            {info.lastAttempt && (
+              <p>{QUIZ_LINES.lastScoreLine(faPercent(info.lastAttempt.score))}</p>
+            )}
           </Card>
           <Button
             size="lg"
@@ -426,7 +423,7 @@ function QuizFlow({
             onClick={() => start.mutate()}
             data-testid="quiz-start"
           >
-            شروع آزمون
+            {COPY.quiz.start}
           </Button>
         </>
       );
@@ -447,11 +444,11 @@ function QuizFlow({
       <div className="flex items-center gap-3">
         <ProgressBar
           value={((idx + 1) / questions.length) * 100}
-          label="پیشرفت آزمون"
+          label={COPY.quiz.progressLabel}
           className="flex-1"
         />
         <span className="text-sm font-bold text-text-secondary">
-          سؤال {toPersianDigits(idx + 1)} از {toPersianDigits(questions.length)}
+          {QUIZ_LINES.questionProgress(toPersianDigits(idx + 1), toPersianDigits(questions.length))}
         </span>
       </div>
       <div
@@ -461,7 +458,7 @@ function QuizFlow({
         <fieldset className="stagger flex flex-col gap-3">
           {/* The question itself is the speech bubble below; the legend only names the group
               (duplicating the stem would double-announce it to screen readers). */}
-          <legend className="sr-only">سؤال آزمون</legend>
+          <legend className="sr-only">{COPY.quiz.questionLegend}</legend>
           <div className="mb-1 flex items-start gap-2">
             {/* PHASE-2 §2.4: on M7 the asker is always Simin, the hesitating customer.
                 The mentor never grades and never celebrates (C-05 / S-09). */}
@@ -496,7 +493,7 @@ function QuizFlow({
                       : 'bg-surface-2 text-text-secondary',
                   )}
                 >
-                  {OPTION_LABEL[o.key] ?? o.key}
+                  {QUIZ_OPTION_LABEL[o.key] ?? o.key}
                 </span>
                 <span className="flex-1 text-text">{o.text}</span>
                 {checked && (
@@ -514,7 +511,7 @@ function QuizFlow({
           onClick={() => go(idx - 1)}
           icon={<ChevronRight className="size-5" aria-hidden />}
         >
-          قبلی
+          {COPY.quiz.prev}
         </Button>
         {last ? (
           <Button
@@ -525,7 +522,7 @@ function QuizFlow({
             icon={<Send className="size-5" aria-hidden />}
             data-testid="quiz-submit"
           >
-            ارسال پاسخ‌ها
+            {COPY.quiz.submit}
           </Button>
         ) : (
           <Button
@@ -535,7 +532,7 @@ function QuizFlow({
             onClick={() => go(idx + 1)}
           >
             <span className="inline-flex items-center gap-1">
-              بعدی
+              {COPY.quiz.next}
               <ChevronLeft className="size-5" aria-hidden />
             </span>
           </Button>
@@ -543,30 +540,29 @@ function QuizFlow({
       </div>
       {answered < questions.length && last && (
         <p className="text-center text-sm text-warning-fg">
-          به همه سؤال‌ها پاسخ بده ({toPersianDigits(answered)} از{' '}
-          {toPersianDigits(questions.length)}).
+          {QUIZ_LINES.answeredHint(toPersianDigits(answered), toPersianDigits(questions.length))}
         </p>
       )}
       <Modal
         open={confirm}
         onClose={() => setConfirm(false)}
-        title="ارسال پاسخ‌ها؟"
+        title={COPY.quiz.submitConfirmTitle}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirm(false)}>
-              بازبینی
+              {COPY.quiz.review}
             </Button>
             <Button
               loading={submit.isPending}
               onClick={() => submit.mutate(attempt.attemptId)}
               data-testid="quiz-confirm"
             >
-              ارسال
+              {COPY.quiz.send}
             </Button>
           </>
         }
       >
-        <p className="text-sm text-text-secondary">بعد از ارسال نمی‌توانی پاسخ‌ها را تغییر بدهی.</p>
+        <p className="text-sm text-text-secondary">{COPY.quiz.lockedNote}</p>
       </Modal>
     </div>
   );

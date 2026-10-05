@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/check-hardcoded-copy.mjs",
-  "total": 1408,
-  "marketer": 354,
+  "total": 1356,
+  "marketer": 302,
   "perFile": {
     "apps/web/src/components/admin/ConfirmDialog.tsx": 2,
     "apps/web/src/components/admin/LearningQualityCard.tsx": 20,
@@ -79,7 +79,7 @@
     "apps/web/src/pages/m/MessagesPage.tsx": 13,
     "apps/web/src/pages/m/PackagePage.tsx": 16,
     "apps/web/src/pages/m/ProfilePage.tsx": 19,
-    "apps/web/src/pages/m/QuizPage.tsx": 54,
+    "apps/web/src/pages/m/QuizPage.tsx": 2,
     "apps/web/src/pages/m/SectionPage.tsx": 16,
     "apps/web/src/pages/manager/ManagerDashboard.tsx": 28,
     "apps/web/src/pages/manager/ManagerMember.tsx": 1,

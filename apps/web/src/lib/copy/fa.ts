@@ -74,6 +74,50 @@ export const COPY = {
     soon: 'مهلت این بسته نزدیکه. یه ایستگاه کوتاه مونده.',
   },
 
+  /**
+   * §6.2.6 — the quiz/duel surface. A duel is a conversation with a customer, so the language
+   * stays a conversation: what happened, what it is worth, what to do next. Never a courtroom
+   * («مردود» is banned) and never a code (§15.0 rule 3).
+   */
+  quiz: {
+    title: 'آزمون',
+    questionLegend: 'سؤال آزمون',
+    progressLabel: 'پیشرفت آزمون',
+    scoreLabel: 'نمره آزمون',
+    start: 'شروع آزمون',
+    prev: 'قبلی',
+    next: 'بعدی',
+    submit: 'ارسال پاسخ‌ها',
+    submitConfirmTitle: 'ارسال پاسخ‌ها؟',
+    review: 'بازبینی',
+    send: 'ارسال',
+    lockedNote: 'بعد از ارسال نمی‌توانی پاسخ‌ها را تغییر بدهی.',
+    reviewAnswers: 'مرور پاسخ‌ها',
+    correctAria: 'درست',
+    incorrectAria: 'نادرست',
+    passedTitle: 'قبول شدی! 🎉',
+    failedTitle: 'این بار قبول نشدی',
+    passedBadge: 'این آزمون را قبول شده‌ای ✅',
+    packageDoneTitle: 'بسته تمام شد! 🎉',
+    backHome: 'بازگشت به خانه',
+    nextSection: 'قسمت بعد',
+    backToPackage: 'بازگشت به بسته',
+    packageDoneHome: 'بسته تمام شد — بازگشت به خانه',
+    rewatch: 'دوباره دیدن قسمت',
+    requestRetake: 'درخواست آزمون مجدد از مدیر',
+    retakeRequested: 'درخواست آزمون مجدد برای مدیر ارسال شد.',
+    requestPending: 'درخواست آزمون مجددت در انتظار تأیید مدیر است.',
+    pendingTitle: 'در انتظار تأیید مدیر',
+    pendingDesc: 'درخواست آزمون مجددت ثبت شده است. بعد از تأیید، اینجا فعال می‌شود.',
+    attemptsOutTitle: 'فرصت‌های آزمون تمام شد',
+    attemptsOutDesc: 'می‌توانی از مدیرت درخواست آزمون مجدد کنی.',
+    noQuizTitle: 'آزمونی برای این قسمت تعریف نشده است',
+    noQuizDesc: 'به مدیر اطلاع داده شد.',
+    submitFailed: 'ارسال نشد؛ پاسخ‌هایت ذخیره شده. دوباره تلاش کن.',
+    genericError: 'خطایی رخ داد.',
+    mentorRetry: 'بذار یه بار دیگه با هم مرور کنیم.',
+  },
+
   /** Shared action labels — one verb, no decoration. */
   actions: {
     retry: 'تلاش دوباره',
@@ -102,10 +146,13 @@ export function copyViolations(
     if (emojis && emojis.length > MAX_EMOJI_PER_BUBBLE)
       violations.push({ path, rule: 'too-many-emoji', text });
     const sentences = text.split(/[.!?؟…]+/).filter((s) => s.trim().length > 0);
-    if (sentences.length > MAX_SENTENCES)
-      violations.push({ path, rule: 'too-long', text });
+    if (sentences.length > MAX_SENTENCES) violations.push({ path, rule: 'too-long', text });
     // an error code must never reach a human (§15.0 rule 3) — Persian digits included
-    if (/(?:\b|\s)[45]\d{2}(?:\b|\s)/.test(text) || /[۴۵][۰-۹]{2}/.test(text) || /error:/i.test(text))
+    if (
+      /(?:\b|\s)[45]\d{2}(?:\b|\s)/.test(text) ||
+      /[۴۵][۰-۹]{2}/.test(text) ||
+      /error:/i.test(text)
+    )
       violations.push({ path, rule: 'error-code', text });
   }
   return violations;
@@ -123,4 +170,45 @@ export function allCopyStrings(
     else if (value && typeof value === 'object') out.push(...allCopyStrings(value, path));
   }
   return out;
+}
+
+/**
+ * §6.4 — lines that carry a number. The Persian still lives here so a copywriter never has to
+ * open a component; `QuizPage` only passes formatted digits in.
+ */
+export const QUIZ_LINES = {
+  scoreSummary: (correct: string, total: string, score: string) =>
+    `${correct} پاسخ درست از ${total} • نمره ${score}`,
+  correctOfTotal: (correct: string, total: string) => `${correct} پاسخ درست از ${total}`,
+  passScoreNote: (passScore: string) => `نمره قبولی ${passScore}`,
+  points: (points: string) => `+${points} امتیاز`,
+  attemptsLeft: (remaining: string) => `${remaining} فرصت دیگر داری.`,
+  scoreNote: (score: string) => `نمره: ${score}`,
+  questionCount: (count: string) => `• ${count} سؤال چهارگزینه‌ای`,
+  passScoreLine: (passScore: string) => `• نمره قبولی: ${passScore}`,
+  remainingLine: (remaining: string, max: string) => `• فرصت باقی‌مانده: ${remaining} از ${max}`,
+  lastScoreLine: (score: string) => `• آخرین نمره: ${score}`,
+  questionProgress: (index: string, total: string) => `سؤال ${index} از ${total}`,
+  answeredHint: (answered: string, total: string) =>
+    `به همه سؤال‌ها پاسخ بده (${answered} از ${total}).`,
+} as const;
+
+/** Persian option letters — data, not a sentence. */
+export const QUIZ_OPTION_LABEL: Record<string, string> = {
+  a: 'الف',
+  b: 'ب',
+  c: 'ج',
+  d: 'د',
+};
+
+/**
+ * Feeds the numbered lines through the same quality gate as the static ones. Each function is
+ * called with as many Persian-digit fillers as it declares, so arity changes cannot hide a string
+ * from the gate.
+ */
+export function allFormatSamples(): Array<[path: string, text: string]> {
+  return Object.entries(QUIZ_LINES).map(([key, fn]) => [
+    `QUIZ_LINES.${key}`,
+    (fn as (...args: string[]) => string)(...Array.from({ length: fn.length }, (_, i) => `۱${i}`)),
+  ]);
 }
