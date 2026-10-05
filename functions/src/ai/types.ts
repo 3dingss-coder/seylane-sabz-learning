@@ -58,6 +58,8 @@ export interface ChatRequest {
   temperature?: number;
   /** Ask for strict JSON output where the provider supports a JSON mode. */
   json?: boolean;
+  /** Let the provider ground the answer with live web search (Gemini «google_search» tool). */
+  webSearch?: boolean;
 }
 
 export interface ChatResult {
@@ -67,6 +69,8 @@ export interface ChatResult {
   approxTokens: number;
   /** True when the provider stopped because it hit maxOutputTokens, not because the sentence ended. */
   truncated?: boolean;
+  /** Pages the provider used when `webSearch` was on. */
+  webSources?: Array<{ title: string; url: string }>;
 }
 
 export type MediaKind = 'image' | 'audio' | 'video' | 'pdf' | 'text';

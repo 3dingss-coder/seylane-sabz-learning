@@ -152,9 +152,19 @@ export async function transcribeTurn(
       ms: Date.now() - started,
     };
   } catch (e) {
-    const msg =
-      e instanceof AllProvidersFailed ? 'سرویس تبدیل گفتار در دسترس نیست' : (e as Error).message;
-    throw new ApiError('INTERNAL', `صدا را متوجه نشدم (${msg}). دوباره بگو یا متن را بنویس.`);
+    const last = e instanceof AllProvidersFailed ? e.errors[e.errors.length - 1] : undefined;
+    const empty = /Empty transcript/i.test(last?.error ?? (e as Error).message);
+    console.warn(
+      '[voice] transcription failed',
+      last?.provider,
+      last?.error ?? (e as Error).message,
+    );
+    throw new ApiError(
+      empty ? 'VALIDATION' : 'INTERNAL',
+      empty
+        ? 'صدایی شنیده نشد. نزدیک‌تر به میکروفن و کمی بلندتر بگو، یا سؤال را بنویس.'
+        : 'صدا را متوجه نشدم؛ سرویس تبدیل گفتار الان پاسخ نمی‌دهد. دوباره بگو یا سؤال را بنویس.',
+    );
   }
 }
 

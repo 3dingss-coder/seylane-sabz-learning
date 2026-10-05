@@ -9,6 +9,8 @@ import {
   type RealtimeOffer,
   type SpeechResult,
   type SynthesizeRequest,
+  type TranscribeRequest,
+  type TranscriptResult,
   type VisionRequest,
   type VisionResult,
 } from './types';
@@ -52,7 +54,14 @@ export const GEMINI_LIVE_WS =
  */
 export class GeminiProvider implements AiProvider {
   readonly id = 'gemini' as const;
-  private readonly tasks = new Set<AiTask>(['chat', 'classify', 'vision', 'embed', 'synthesize']);
+  private readonly tasks = new Set<AiTask>([
+    'chat',
+    'classify',
+    'vision',
+    'embed',
+    'synthesize',
+    'transcribe',
+  ]);
 
   constructor(
     private readonly apiKey: string,
@@ -132,12 +141,17 @@ export class GeminiProvider implements AiProvider {
       candidates?: Array<{
         finishReason?: string;
         content?: { parts?: Array<{ text?: string }> };
+        groundingMetadata?: {
+          groundingChunks?: Array<{ web?: { uri?: string; title?: string } }>;
+        };
       }>;
     }>(
-      `models/${req.maxTokens <= 200 ? this.model : this.model}:generateContent`,
+      `models/${this.model}:generateContent`,
       {
         systemInstruction: { parts: [{ text: req.system }] },
         contents,
+        // Live Google Search grounding. It cannot be combined with JSON mode.
+        ...(req.webSearch && !req.json ? { tools: [{ google_search: {} }] } : {}),
         generationConfig: {
           temperature: req.temperature ?? 0.2,
           maxOutputTokens: req.maxTokens,
@@ -161,6 +175,14 @@ export class GeminiProvider implements AiProvider {
         req.system.length + req.prompt.length + text.length + (req.messages ?? []).length * 120,
       ),
       truncated: body.candidates?.[0]?.finishReason === 'MAX_TOKENS',
+      ...(req.webSearch
+        ? {
+            webSources: (body.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [])
+              .map((c) => ({ title: (c.web?.title ?? '').slice(0, 120), url: c.web?.uri ?? '' }))
+              .filter((c) => c.url)
+              .slice(0, 5),
+          }
+        : {}),
     };
   }
 
@@ -197,6 +219,53 @@ export class GeminiProvider implements AiProvider {
       provider: this.id,
       approxTokens: approxTokens(text.length + req.prompt.length + req.parts.length * 800),
     };
+  }
+
+  /**
+   * Speech → text for Persian. Groq Whisper is the fast lane, but it needs its own API key; Gemini
+   * understands audio natively, so the mic keeps working with only GEMINI_API_KEY configured.
+   */
+  async transcribe(req: TranscribeRequest): Promise<TranscriptResult> {
+    const model = this.opts.visionModel ?? this.model;
+    if (!req.base64) throw new AiError('Empty audio payload', this.id, 'transcribe', false);
+    const mime = (req.mime.split(';')[0] ?? 'audio/webm').trim().toLowerCase() || 'audio/webm';
+    const hint = req.prompt ? `\nواژه‌هایی که ممکن است بیایند: ${req.prompt.slice(0, 600)}` : '';
+    const body = await this.post<{
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    }>(
+      `models/${model}:generateContent`,
+      {
+        systemInstruction: {
+          parts: [
+            {
+              text: 'You are a speech-to-text engine for Persian (Farsi). Transcribe exactly what the speaker says, in Persian script. Output only the transcript: no quotes, no timestamps, no translation, no commentary. If there is no intelligible speech, output exactly: NO_SPEECH',
+            },
+          ],
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { inlineData: { mimeType: mime, data: req.base64 } },
+              { text: `این صدا را کلمه‌به‌کلمه به متن فارسی تبدیل کن.${hint}` },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0,
+          maxOutputTokens: 800,
+          ...(/2\.5-flash/.test(model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+        },
+        safetySettings: GeminiProvider.safety(),
+      },
+      'transcribe',
+    );
+    const text = GeminiProvider.textOf(body)
+      .replace(/^["«»'`\s]+|["«»'`\s]+$/g, '')
+      .trim();
+    if (!text || /^NO_SPEECH\.?$/i.test(text))
+      throw new AiError('Empty transcript', this.id, 'transcribe', false);
+    return { text, model, provider: this.id, language: 'fa' };
   }
 
   /**
