@@ -167,4 +167,22 @@ describe('a11y (axe, jsdom)', () => {
     await screen.findByRole('heading', { name: 'بنیادهای توکن (فاز ۱)' });
     expect(await violations(container)).toEqual([]);
   });
+
+  // §7.2 asks for *every* marketer page. `/onboarding` was the one route in App.tsx the suite
+  // did not render: everything else — including `packages/:id`, already covered above — was.
+  it('onboarding (/onboarding)', async () => {
+    // RequireAuth only routes a marketer here while `onboardedAt` is still null, so the
+    // fixture has to be un-onboarded — otherwise the route is not the one under test.
+    const fresh: typeof marketer = { ...marketer, onboardedAt: null };
+    mockApi({
+      ...signedIn(),
+      'GET /v1/me': () => ({ data: fresh }),
+      'POST /v1/auth/refresh': () => ({
+        data: { user: fresh, idToken: 't1', refreshToken: 'r2', expiresIn: 3600 },
+      }),
+    });
+    const { container } = renderApp('/onboarding');
+    await screen.findByRole('heading', { name: 'چه چیزی یاد بگیرم؟' });
+    expect(await violations(container)).toEqual([]);
+  });
 });
