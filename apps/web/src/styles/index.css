@@ -78,24 +78,24 @@
      Green/white house + light-green dynamic layer; purple reserved for the
      official mascot & its aura (docs/design-system/PHASE-0.5, D-101..D-107).
      Contrast verified by docs/design-system/tools/contrast.py (v3: 18 pairs, 0 fail). */
-  --color-leaf: #21a55f;        /* bright green — fills/icons/glow (decorative) */
-  --color-leaf-glow: #4fc77f;   /* hover/glow */
-  --color-mint: #e7f5ee;        /* soft mint surface / harmony bridge */
-  --color-green-lip: #115e3d;   /* 3D lip for green CTA */
-  --color-mascot: #7048a3;      /* mascot body ONLY (white text 6.68:1) */
+  --color-leaf: #21a55f; /* bright green — fills/icons/glow (decorative) */
+  --color-leaf-glow: #4fc77f; /* hover/glow */
+  --color-mint: #e7f5ee; /* soft mint surface / harmony bridge */
+  --color-green-lip: #115e3d; /* 3D lip for green CTA */
+  --color-mascot: #7048a3; /* mascot body ONLY (white text 6.68:1) */
   --color-mascot-deep: #472475; /* purple text on light (11.82:1) */
-  --color-mascot-100: #efe7f9;  /* mascot halo/bubble */
-  --color-mascot-950: #2a1447;  /* rare deep-purple hero (big celebration) */
-  --color-mastery: #6d28d9;     /* rare mastery moment (7.10:1) */
-  --color-streak: #c55d41;      /* crest red — streak/celebration fill/icon only */
-  --color-streak-100: #fbeae4;  /* streak chip bg */
+  --color-mascot-100: #efe7f9; /* mascot halo/bubble */
+  --color-mascot-950: #2a1447; /* rare deep-purple hero (big celebration) */
+  --color-mastery: #6d28d9; /* rare mastery moment (7.10:1) */
+  --color-streak: #c55d41; /* crest red — streak/celebration fill/icon only */
+  --color-streak-100: #fbeae4; /* streak chip bg */
   --color-streak-deep: #8a3423; /* streak chip text (6.93:1) */
-  --color-beak: #ddb8ab;        /* warm cream surface */
-  --color-beak-ink: #3c1e59;    /* text on cream (7.57:1) */
-  --color-reward: #ffc800;      /* XP/points */
-  --color-reward-fg: #4a3600;   /* text on yellow (7.43:1) */
-  --radius-pill: 9999px;        /* chips, flame, progress */
-  --radius-station: 24px;       /* path station tiles */
+  --color-beak: #ddb8ab; /* warm cream surface */
+  --color-beak-ink: #3c1e59; /* text on cream (7.57:1) */
+  --color-reward: #ffc800; /* XP/points */
+  --color-reward-fg: #4a3600; /* text on yellow (7.43:1) */
+  --radius-pill: 9999px; /* chips, flame, progress */
+  --radius-station: 24px; /* path station tiles */
   --lip-sm: 0 2px 0 var(--color-green-lip);
   --lip-md: 0 4px 0 var(--color-green-lip);
   --lip-lg: 0 6px 0 var(--color-green-lip);

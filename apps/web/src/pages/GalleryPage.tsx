@@ -410,7 +410,9 @@ export function GalleryPage() {
                       {EXPRESSIONS.map((e) => (
                         <div key={e} className="flex flex-col items-center gap-1">
                           <Character id={id} expression={e} size="sm" />
-                          <span className="text-[10px] text-text-secondary">{EXPRESSION_FA[e]}</span>
+                          <span className="text-[10px] text-text-secondary">
+                            {EXPRESSION_FA[e]}
+                          </span>
                         </div>
                       ))}
                     </div>

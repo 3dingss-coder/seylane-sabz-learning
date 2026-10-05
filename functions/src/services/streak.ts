@@ -65,7 +65,11 @@ function addDays(key: string, n: number): string {
  *    streak drops to **half the peak, not to zero** (ramp-down), and a new 3-day window opens
  *  • on approved leave the streak freezes: it neither grows nor breaks
  */
-export function advanceStreak(prev: Streak, today: string, now: Date): {
+export function advanceStreak(
+  prev: Streak,
+  today: string,
+  now: Date,
+): {
   next: Streak;
   events: StreakEvent[];
 } {

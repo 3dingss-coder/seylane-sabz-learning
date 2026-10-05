@@ -58,7 +58,15 @@ export async function onDuelSubmitted(d: Deps, user: Doc<User>, o: DuelOutcome) 
     const refId = `${o.quizId}_${o.attemptNumber}`;
     const coinAmount = firstTry ? COIN_EARN.duelFirstPass : COIN_EARN.duelRetryPass;
     const xp = firstTry ? XP_EARN.duelFirstPass : XP_EARN.duelRetryPass;
-    if (await awardCoins(d, user.id, firstTry ? 'duel_first_pass' : 'duel_retry_pass', refId, coinAmount))
+    if (
+      await awardCoins(
+        d,
+        user.id,
+        firstTry ? 'duel_first_pass' : 'duel_retry_pass',
+        refId,
+        coinAmount,
+      )
+    )
       coins += coinAmount;
     if (await awardPoints(d, user.id, 'duel_pass', refId, xp)) points += xp;
     await track(d, 'duel_attempt', user.id, {

@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import type { CoinBalance, CoinCatalogItem, CoinEntry, CoinRedemption, CoinReason } from '../domain/types';
+import type {
+  CoinBalance,
+  CoinCatalogItem,
+  CoinEntry,
+  CoinRedemption,
+  CoinReason,
+} from '../domain/types';
 import { track, type Deps } from './context';
 
 /**
@@ -137,7 +143,9 @@ export async function awardCoins(
 }
 
 export async function coinBalance(d: Deps, userId: string): Promise<CoinBalance> {
-  return (await d.store.get<CoinBalance>(`coin_balance/${userId}`)) ?? emptyBalance(userId, d.clock());
+  return (
+    (await d.store.get<CoinBalance>(`coin_balance/${userId}`)) ?? emptyBalance(userId, d.clock())
+  );
 }
 
 export async function myCoins(d: Deps, userId: string) {
@@ -184,11 +192,7 @@ export type RedeemResult =
   | { ok: false; reason: 'unknown_item' | 'insufficient_balance' };
 
 /** Spends coins on a real good. The record is user-visible and auditable — never silent (G-04). */
-export async function redeemCoin(
-  d: Deps,
-  userId: string,
-  code: string,
-): Promise<RedeemResult> {
+export async function redeemCoin(d: Deps, userId: string, code: string): Promise<RedeemResult> {
   const item = catalogItem(code);
   if (!item) return { ok: false, reason: 'unknown_item' };
   assertCatalogIsFair();
@@ -197,7 +201,8 @@ export async function redeemCoin(
   const redemptionId = `coin_redemptions/${userId}_${code}_${now.getTime()}`;
   const out = await d.store.runTransaction(async (tx) => {
     const bal = (await tx.get<CoinBalance>(balancePath)) ?? emptyBalance(userId, now);
-    if (bal.balance < item.price) return { ok: false as const, reason: 'insufficient_balance' as const };
+    if (bal.balance < item.price)
+      return { ok: false as const, reason: 'insufficient_balance' as const };
     const redemption: CoinRedemption = {
       userId,
       code: item.code,

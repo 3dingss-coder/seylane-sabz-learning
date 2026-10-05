@@ -29,7 +29,10 @@ export function Switch({
         className,
       )}
     >
-      <span aria-hidden className="switch-knob absolute start-0.5 top-0.5 size-6 rounded-pill bg-surface shadow-sm" />
+      <span
+        aria-hidden
+        className="switch-knob absolute start-0.5 top-0.5 size-6 rounded-pill bg-surface shadow-sm"
+      />
     </button>
   );
 }

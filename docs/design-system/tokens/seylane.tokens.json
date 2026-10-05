@@ -2,22 +2,54 @@
   "$schema": "https://tr.designtokens.org/format/",
   "seylane": {
     "color": {
-      "leaf": { "$value": "#21A55F", "$type": "color", "$description": "bright green dynamic fills/icons (decorative)" },
+      "leaf": {
+        "$value": "#21A55F",
+        "$type": "color",
+        "$description": "bright green dynamic fills/icons (decorative)"
+      },
       "leafGlow": { "$value": "#4FC77F", "$type": "color" },
-      "mint": { "$value": "#E7F5EE", "$type": "color", "$description": "soft mint surface / harmony bridge" },
+      "mint": {
+        "$value": "#E7F5EE",
+        "$type": "color",
+        "$description": "soft mint surface / harmony bridge"
+      },
       "greenLip": { "$value": "#115E3D", "$type": "color", "$description": "3D lip for green CTA" },
-      "mascot": { "$value": "#7048A3", "$type": "color", "$description": "mascot body ONLY; white celebration text 6.68:1" },
-      "mascotDeep": { "$value": "#472475", "$type": "color", "$description": "purple text on light 11.82:1" },
+      "mascot": {
+        "$value": "#7048A3",
+        "$type": "color",
+        "$description": "mascot body ONLY; white celebration text 6.68:1"
+      },
+      "mascotDeep": {
+        "$value": "#472475",
+        "$type": "color",
+        "$description": "purple text on light 11.82:1"
+      },
       "mascot100": { "$value": "#EFE7F9", "$type": "color", "$description": "mascot halo/bubble" },
       "mascot950": { "$value": "#2A1447", "$type": "color" },
-      "mastery": { "$value": "#6D28D9", "$type": "color", "$description": "rare mastery moment 7.10:1" },
-      "streak": { "$value": "#C55D41", "$type": "color", "$description": "crest red; fill/icon only" },
+      "mastery": {
+        "$value": "#6D28D9",
+        "$type": "color",
+        "$description": "rare mastery moment 7.10:1"
+      },
+      "streak": {
+        "$value": "#C55D41",
+        "$type": "color",
+        "$description": "crest red; fill/icon only"
+      },
       "streak100": { "$value": "#FBEAE4", "$type": "color" },
-      "streakDeep": { "$value": "#8A3423", "$type": "color", "$description": "streak chip text 6.93:1" },
+      "streakDeep": {
+        "$value": "#8A3423",
+        "$type": "color",
+        "$description": "streak chip text 6.93:1"
+      },
       "beak": { "$value": "#DDB8AB", "$type": "color" },
       "beakInk": { "$value": "#3C1E59", "$type": "color", "$description": "text on cream 7.57:1" },
       "reward": { "$value": "#FFC800", "$type": "color" },
-      "rewardFg": { "$value": "#4A3600", "$type": "color", "$description": "text on yellow 7.43:1" },
+      "rewardFg": {
+        "$value": "#4A3600",
+        "$type": "color",
+        "$description": "text on yellow 7.43:1"
+      },
       "chunkBorder": { "$value": "#CBD5E1", "$type": "color" },
       "track": { "$value": "#E2E8F0", "$type": "color" }
     },

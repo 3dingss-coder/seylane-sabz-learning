@@ -1,10 +1,10 @@
 {
   "generatedBy": "scripts/check-hardcoded-copy.mjs",
-  "total": 1141,
+  "total": 1137,
   "marketer": 37,
   "perFile": {
     "apps/web/src/components/admin/ConfirmDialog.tsx": 2,
-    "apps/web/src/components/admin/LearningQualityCard.tsx": 20,
+    "apps/web/src/components/admin/LearningQualityCard.tsx": 16,
     "apps/web/src/components/admin/MediaPicker.tsx": 14,
     "apps/web/src/components/admin/PublishGuide.tsx": 15,
     "apps/web/src/components/admin/Uploader.tsx": 7,

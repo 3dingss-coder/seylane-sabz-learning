@@ -20,10 +20,16 @@ export function Eyes({ expression, ...g }: FaceGeometry & { expression: Expressi
   const stroke = { stroke: g.ink, strokeWidth: 2, strokeLinecap: 'round' as const, fill: 'none' };
   const dot = (cx: number) => <circle cx={cx} cy={y} r={2.6 * s} fill={g.ink} />;
   const happyArc = (cx: number) => (
-    <path d={`M ${cx - 3.4 * s} ${y + 1 * s} Q ${cx} ${y - 3.2 * s} ${cx + 3.4 * s} ${y + 1 * s}`} {...stroke} />
+    <path
+      d={`M ${cx - 3.4 * s} ${y + 1 * s} Q ${cx} ${y - 3.2 * s} ${cx + 3.4 * s} ${y + 1 * s}`}
+      {...stroke}
+    />
   );
   const softArc = (cx: number) => (
-    <path d={`M ${cx - 3.2 * s} ${y - 1 * s} Q ${cx} ${y + 2.4 * s} ${cx + 3.2 * s} ${y - 1 * s}`} {...stroke} />
+    <path
+      d={`M ${cx - 3.2 * s} ${y - 1 * s} Q ${cx} ${y + 2.4 * s} ${cx + 3.2 * s} ${y - 1 * s}`}
+      {...stroke}
+    />
   );
 
   switch (expression) {
@@ -98,8 +104,14 @@ export function Brows({ expression, ...g }: FaceGeometry & { expression: Express
     case 'celebrate':
       return (
         <g>
-          <path d={`M ${-x - w} ${y - 3 * s} Q ${-x} ${y - 6 * s} ${-x + w} ${y - 3 * s}`} {...stroke} />
-          <path d={`M ${x - w} ${y - 3 * s} Q ${x} ${y - 6 * s} ${x + w} ${y - 3 * s}`} {...stroke} />
+          <path
+            d={`M ${-x - w} ${y - 3 * s} Q ${-x} ${y - 6 * s} ${-x + w} ${y - 3 * s}`}
+            {...stroke}
+          />
+          <path
+            d={`M ${x - w} ${y - 3 * s} Q ${x} ${y - 6 * s} ${x + w} ${y - 3 * s}`}
+            {...stroke}
+          />
         </g>
       );
     case 'happy':
@@ -135,7 +147,10 @@ export function Brows({ expression, ...g }: FaceGeometry & { expression: Express
       return (
         <g>
           <path d={`M ${-x - w} ${y} l ${2 * w} 0`} {...stroke} />
-          <path d={`M ${x - w} ${y - 1 * s} Q ${x} ${y - 4 * s} ${x + w} ${y - 1 * s}`} {...stroke} />
+          <path
+            d={`M ${x - w} ${y - 1 * s} Q ${x} ${y - 4 * s} ${x + w} ${y - 1 * s}`}
+            {...stroke}
+          />
         </g>
       );
     default:
@@ -161,19 +176,36 @@ export function Mouth({ expression, ...g }: FaceGeometry & { expression: Express
     case 'thinking':
       return <circle cx={1 * s} cy={y + 1 * s} r={1.9 * s} {...stroke} />;
     case 'worried':
-      return <path d={`M ${-4 * s} ${y + 2.5 * s} Q 0 ${y - 1 * s} ${4 * s} ${y + 2.5 * s}`} {...stroke} />;
+      return (
+        <path
+          d={`M ${-4 * s} ${y + 2.5 * s} Q 0 ${y - 1 * s} ${4 * s} ${y + 2.5 * s}`}
+          {...stroke}
+        />
+      );
     case 'empathy':
       return <path d={`M ${-3.4 * s} ${y + 2 * s} Q 0 ${y} ${3.4 * s} ${y + 2 * s}`} {...stroke} />;
     case 'nudge':
-      return <path d={`M ${-4 * s} ${y + 0.5 * s} Q ${1 * s} ${y + 4 * s} ${5 * s} ${y - 1 * s}`} {...stroke} />;
+      return (
+        <path
+          d={`M ${-4 * s} ${y + 0.5 * s} Q ${1 * s} ${y + 4 * s} ${5 * s} ${y - 1 * s}`}
+          {...stroke}
+        />
+      );
     default:
       return <path d={`M ${-4 * s} ${y} Q 0 ${y + 2.4 * s} ${4 * s} ${y}`} {...stroke} />;
   }
 }
 
-
 /** One soft ground ellipse and nothing else (§2.5.4). Dark mode only deepens it. */
-export function GroundShadow({ cx = 48, cy = 115, rx = 24 }: { cx?: number; cy?: number; rx?: number }) {
+export function GroundShadow({
+  cx = 48,
+  cy = 115,
+  rx = 24,
+}: {
+  cx?: number;
+  cy?: number;
+  rx?: number;
+}) {
   return (
     <ellipse
       cx={cx}

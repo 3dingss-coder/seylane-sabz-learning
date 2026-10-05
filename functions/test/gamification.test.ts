@@ -7,7 +7,14 @@ import * as quest from '../src/services/quest';
 import * as spaced from '../src/services/spaced';
 import type { Streak } from '../src/domain/types';
 import * as streak from '../src/services/streak';
-import { buildFixture, createCtx, passQuiz, watchSection, type Fixture, type TestCtx } from './support/ctx';
+import {
+  buildFixture,
+  createCtx,
+  passQuiz,
+  watchSection,
+  type Fixture,
+  type TestCtx,
+} from './support/ctx';
 
 let ctx: TestCtx;
 let fx: Fixture;
@@ -63,7 +70,10 @@ describe('PHASE-3 §3.2 — پیوستگی (streak)', () => {
   });
 
   it('a shield absorbs one missed day — forgiveness from day one', () => {
-    const withShield = { ...streak.advanceStreak(base(), day0, at(`${day0}T08:00:00Z`)).next, shields: 1 };
+    const withShield = {
+      ...streak.advanceStreak(base(), day0, at(`${day0}T08:00:00Z`)).next,
+      shields: 1,
+    };
     const after = streak.advanceStreak(withShield, '2026-03-03', at('2026-03-03T08:00:00Z'));
     expect(after.events).toContain('shield_used');
     expect(after.next.current).toBe(2);
@@ -181,20 +191,28 @@ describe('PHASE-3 §3.2 — پیوستگی (streak)', () => {
 
 describe('PHASE-3 §3.4 — مرور هوشمند (spaced repetition)', () => {
   const mem = (halfLifeDays: number, daysAgo = 0) =>
-    spaced.emptyMemory(at('2026-03-01T00:00:00Z'), {
-      userId: 'u1',
-      questionId: 'q1',
-      quizId: 'quiz1',
-      sectionId: 's1',
-      packageId: 'p1',
-    }, true) && {
-      ...spaced.emptyMemory(at('2026-03-01T00:00:00Z'), {
+    spaced.emptyMemory(
+      at('2026-03-01T00:00:00Z'),
+      {
         userId: 'u1',
         questionId: 'q1',
         quizId: 'quiz1',
         sectionId: 's1',
         packageId: 'p1',
-      }, true),
+      },
+      true,
+    ) && {
+      ...spaced.emptyMemory(
+        at('2026-03-01T00:00:00Z'),
+        {
+          userId: 'u1',
+          questionId: 'q1',
+          quizId: 'quiz1',
+          sectionId: 's1',
+          packageId: 'p1',
+        },
+        true,
+      ),
       halfLifeDays,
       lastSeenAt: new Date(Date.parse('2026-03-10T00:00:00Z') - daysAgo * DAY).toISOString(),
       nextReviewAt: new Date(
@@ -259,7 +277,7 @@ describe('PHASE-3 §3.4 — مرور هوشمند (spaced repetition)', () => {
     }>;
     const [dueA, dueB] = twoDue(due);
     const first = await ctx.api(token).post(`/v1/me/reviews/${dueA.questionId}/answer`, {
-      answerKey: (section.answers[dueA.questionId] ?? ''),
+      answerKey: section.answers[dueA.questionId] ?? '',
     });
     expect(first.status).toBe(200);
     expect(first.body.data.correct).toBe(true);
@@ -269,7 +287,7 @@ describe('PHASE-3 §3.4 — مرور هوشمند (spaced repetition)', () => {
     // AC-03: the next answer arrives <3s later (same fake instant) → recorded, but unrewarded
     ctx.limiter.reset();
     const second = await ctx.api(token).post(`/v1/me/reviews/${dueB.questionId}/answer`, {
-      answerKey: (section.answers[dueB.questionId] ?? ''),
+      answerKey: section.answers[dueB.questionId] ?? '',
     });
     expect(second.body.data.rewarded).toBe(false);
     expect(second.body.data.reason).toBe('too_fast');
@@ -452,7 +470,9 @@ describe('PHASE-3 §3.5 — استادی محصول', () => {
 
     const again = await mastery.refreshMastery(d(), user, { id: fx.packageId });
     expect(again.justMastered).toBe(false); // paid once, not on every refresh
-    expect((await coin.coinBalance(d(), m.id)).balance).toBeGreaterThanOrEqual(coin.COIN_EARN.mastery);
+    expect((await coin.coinBalance(d(), m.id)).balance).toBeGreaterThanOrEqual(
+      coin.COIN_EARN.mastery,
+    );
   });
 });
 
@@ -470,7 +490,7 @@ describe('PHASE-3 DoD — analytics + admin visibility', () => {
     if (!dueA) throw new Error('expected a due review');
     ctx.limiter.reset();
     await ctx.api(token).post(`/v1/me/reviews/${dueA.questionId}/answer`, {
-      answerKey: (section.answers[dueA.questionId] ?? ''),
+      answerKey: section.answers[dueA.questionId] ?? '',
     });
     await coin.awardCoins(d(), m.id, 'mastery', 'p1', 1000);
     await ctx.api(token).post('/v1/me/coins/redeem', { code: 'tester_sample' });

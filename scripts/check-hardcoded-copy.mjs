@@ -44,7 +44,9 @@ let total = 0;
 let marketer = 0;
 for (const file of walk(SRC)) {
   const rel = relative(ROOT, file);
-  const lines = readFileSync(file, 'utf8').split('\n').filter((l) => PERSIAN.test(l)).length;
+  const lines = readFileSync(file, 'utf8')
+    .split('\n')
+    .filter((l) => PERSIAN.test(l)).length;
   if (!lines) continue;
   perFile[rel] = lines;
   total += lines;
@@ -58,7 +60,9 @@ if (update) {
     `${JSON.stringify({ generatedBy: 'scripts/check-hardcoded-copy.mjs', total, marketer, perFile }, null, 2)}\n`,
     'utf8',
   );
-  console.log(`[copy] baseline recorded: total=${total} marketer=${marketer} files=${Object.keys(perFile).length}`);
+  console.log(
+    `[copy] baseline recorded: total=${total} marketer=${marketer} files=${Object.keys(perFile).length}`,
+  );
   process.exit(0);
 }
 
@@ -76,12 +80,16 @@ for (const [file, n] of Object.entries(perFile)) {
   if (n > before) grew.push(`  ${file}: ${before} → ${n}`);
 }
 
-console.log(`[copy] hardcoded Persian lines: total ${total} (baseline ${base.total}), marketer-facing ${marketer} (baseline ${base.marketer})`);
+console.log(
+  `[copy] hardcoded Persian lines: total ${total} (baseline ${base.total}), marketer-facing ${marketer} (baseline ${base.marketer})`,
+);
 if (grew.length) {
   console.error('[copy] FAILED — new hardcoded copy. Use apps/web/src/lib/copy/fa.ts instead:');
   for (const line of grew) console.error(line);
   process.exit(1);
 }
 if (total < base.total)
-  console.log(`[copy] down by ${base.total - total} lines — run with --update to lock the new low.`);
+  console.log(
+    `[copy] down by ${base.total - total} lines — run with --update to lock the new low.`,
+  );
 console.log('[copy] ok — no file added hardcoded Persian copy.');

@@ -5,14 +5,7 @@
 export type CharacterId = 'seyla' | 'raha' | 'kamran' | 'simin' | 'bahram' | 'golnar';
 
 export type Expression =
-  | 'idle'
-  | 'happy'
-  | 'celebrate'
-  | 'thinking'
-  | 'worried'
-  | 'proud'
-  | 'nudge'
-  | 'empathy';
+  'idle' | 'happy' | 'celebrate' | 'thinking' | 'worried' | 'proud' | 'nudge' | 'empathy';
 
 export const EXPRESSIONS: readonly Expression[] = [
   'idle',

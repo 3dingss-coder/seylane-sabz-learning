@@ -1,4 +1,3 @@
-
 /**
  * The five human silhouettes (PHASE-2 §2.2 / §2.5).
  *
@@ -16,7 +15,6 @@ const SKIN = {
   golnar: '#efcba8',
 } as const;
 
-
 const stroke = { stroke: INK, strokeWidth: 2, strokeLinejoin: 'round' as const };
 
 /** 🔬 دکتر رها — مستطیل گِرد (ثبات و دقت)، روپوش سفید، شال بنفش استادی، عینک */
@@ -24,7 +22,11 @@ export function RahaBody() {
   return (
     <g>
       {/* coat: the dominant rounded rectangle */}
-      <path d="M26 112 V74 a10 10 0 0 1 10 -10 h24 a10 10 0 0 1 10 10 v38 Z" fill="#ffffff" {...stroke} />
+      <path
+        d="M26 112 V74 a10 10 0 0 1 10 -10 h24 a10 10 0 0 1 10 10 v38 Z"
+        fill="#ffffff"
+        {...stroke}
+      />
       <path d="M48 64 v48" stroke="#e2e8f0" strokeWidth={2} />
       {/* mastery scarf */}
       <path d="M36 62 q12 10 24 0 l-4 22 q-8 5 -16 0 Z" fill="#6d28d9" {...stroke} />
@@ -56,7 +58,13 @@ export function KamranBody() {
       <circle cx={48} cy={32} r={20} fill={SKIN.kamran} {...stroke} />
       <path d="M29 28 a20 20 0 0 1 38 0 q-8 -6 -19 -6 t-19 6Z" fill="#9ca3af" {...stroke} />
       {/* moustache: warmth, not authority */}
-      <path d="M40 42 q8 5 16 0" fill="none" stroke="#9ca3af" strokeWidth={3} strokeLinecap="round" />
+      <path
+        d="M40 42 q8 5 16 0"
+        fill="none"
+        stroke="#9ca3af"
+        strokeWidth={3}
+        strokeLinecap="round"
+      />
     </g>
   );
 }
@@ -99,7 +107,11 @@ export function GolnarBody() {
   return (
     <g>
       {/* chador: one soft rounded shape around head and shoulders */}
-      <path d="M48 8 a26 26 0 0 1 26 26 v22 q0 12 -10 16 H32 q-10 -4 -10 -16 V34 A26 26 0 0 1 48 8Z" fill="#8edcae" {...stroke} />
+      <path
+        d="M48 8 a26 26 0 0 1 26 26 v22 q0 12 -10 16 H32 q-10 -4 -10 -16 V34 A26 26 0 0 1 48 8Z"
+        fill="#8edcae"
+        {...stroke}
+      />
       {/* face oval inside the chador */}
       <ellipse cx={48} cy={36} rx={16} ry={18} fill={SKIN.golnar} {...stroke} />
       {/* prayer beads: tradition, respected (C-04) */}

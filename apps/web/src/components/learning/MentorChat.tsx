@@ -155,7 +155,9 @@ export function MentorChat({
                 )}
                 {(m.sources?.length ?? 0) > 0 && (
                   <p className="mt-1 text-xs text-text-secondary">
-                    {LINES.sources((m.sources ?? []).map((s) => s.title).join(COPY.punctuation.listSeparator))}
+                    {LINES.sources(
+                      (m.sources ?? []).map((s) => s.title).join(COPY.punctuation.listSeparator),
+                    )}
                   </p>
                 )}
               </div>

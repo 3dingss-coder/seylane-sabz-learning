@@ -52,7 +52,9 @@ for (const file of walk(SRC)) {
 }
 
 if (offenders.length) {
-  console.error(`[no-hex] FAILED — ${offenders.length} hardcoded colour(s) outside the token source:`);
+  console.error(
+    `[no-hex] FAILED — ${offenders.length} hardcoded colour(s) outside the token source:`,
+  );
   for (const o of offenders) console.error(`  ${o}`);
   console.error(
     '\nUse a token from styles/index.css (§8.4.2). A new colour needs a semantic role (R-03)\n' +

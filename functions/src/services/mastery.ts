@@ -18,11 +18,7 @@ import { awardPoints } from './rewards';
  * never imports the learning service — `learning.ts` imports *this* module, and a cycle here would
  * be a runtime hazard.
  */
-async function stationsComplete(
-  d: Deps,
-  userId: string,
-  packageId: string,
-): Promise<boolean> {
+async function stationsComplete(d: Deps, userId: string, packageId: string): Promise<boolean> {
   const [pkg, progress] = await Promise.all([
     d.store.get<Package>(`packages/${packageId}`),
     d.store.query<SectionProgress>({
@@ -99,7 +95,8 @@ export async function evaluateMastery(
   packageId: string,
 ): Promise<MasteryRecord> {
   const now = d.clock();
-  const prev = (await d.store.get<MasteryRecord>(masteryPath(user.id, packageId))) ??
+  const prev =
+    (await d.store.get<MasteryRecord>(masteryPath(user.id, packageId))) ??
     emptyMastery(user.id, packageId, now);
   const [stationDone, attempts, memories, approval] = await Promise.all([
     stationsComplete(d, user.id, packageId),

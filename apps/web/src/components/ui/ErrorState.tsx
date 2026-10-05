@@ -9,10 +9,7 @@ export interface ErrorStateProps {
   onRetry?: () => void;
 }
 
-export function ErrorState({
-  message = COPY.error.generic,
-  onRetry,
-}: ErrorStateProps) {
+export function ErrorState({ message = COPY.error.generic, onRetry }: ErrorStateProps) {
   return (
     <div
       role="alert"

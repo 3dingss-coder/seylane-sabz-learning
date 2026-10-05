@@ -72,7 +72,9 @@ test('marketer: profile — coin wallet and mastery (PHASE-3)', async ({ page })
   await expectNoViolations(page);
 });
 
-test('design system gallery — the whole cast carries a Persian accessible name (PHASE-2 A-03)', async ({ page }) => {
+test('design system gallery — the whole cast carries a Persian accessible name (PHASE-2 A-03)', async ({
+  page,
+}) => {
   await page.goto('/gallery');
   // 5 human characters × 8 expressions render as role="img" with an aria-label; Seyla is the
   // official mascot PNG plus an sr-only label, so she is not counted here.
@@ -82,7 +84,9 @@ test('design system gallery — the whole cast carries a Persian accessible name
   await expectNoViolations(page);
 });
 
-test('admin dashboard — learning quality metrics carry no streak data (PHASE-3 G-03)', async ({ page }) => {
+test('admin dashboard — learning quality metrics carry no streak data (PHASE-3 G-03)', async ({
+  page,
+}) => {
   await login(page, '09120000002');
   await page.goto('/admin');
   await expect(page.getByTestId('learning-quality')).toBeVisible();

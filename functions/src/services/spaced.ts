@@ -191,7 +191,9 @@ export async function answerReview(
   // AC-03: a review answered faster than a human can read earns nothing (no farming).
   const throttlePath = `review_throttle/${userId}`;
   const throttle = await d.store.get<{ lastAt: string }>(throttlePath);
-  const tooFast = throttle ? now.getTime() - Date.parse(throttle.lastAt) < MIN_ANSWER_GAP_MS : false;
+  const tooFast = throttle
+    ? now.getTime() - Date.parse(throttle.lastAt) < MIN_ANSWER_GAP_MS
+    : false;
   await d.store.set(throttlePath, { lastAt: now.toISOString() });
 
   const { next, onTime } = applyAnswer(prev, correct, now);

@@ -14,14 +14,15 @@ import { awardCoins } from './coin';
  */
 const TZ = DEFAULT_POLICY.timezone;
 
-export const QUEST_POOL: Array<{ kind: QuestKind; title: string; target: number; coins: number }> = [
-  { kind: 'stations', title: '۲ ایستگاه را تمام کن', target: 2, coins: 20 },
-  { kind: 'perfect_duel', title: 'یک دوئل را بدون غلط ببر', target: 1, coins: 30 },
-  { kind: 'reviews', title: '۴ مرور امروزت را انجام بده', target: 4, coins: 25 },
-  { kind: 'roleplay', title: 'یک سناریوی فروش را با صدای خودت ضبط کن', target: 1, coins: 40 },
-  // 'help' (اجتماعی) stays out of the pool until a real teammate Q&A trigger exists — shipping a
-  // quest nobody can complete is worse than not shipping it.
-];
+export const QUEST_POOL: Array<{ kind: QuestKind; title: string; target: number; coins: number }> =
+  [
+    { kind: 'stations', title: '۲ ایستگاه را تمام کن', target: 2, coins: 20 },
+    { kind: 'perfect_duel', title: 'یک دوئل را بدون غلط ببر', target: 1, coins: 30 },
+    { kind: 'reviews', title: '۴ مرور امروزت را انجام بده', target: 4, coins: 25 },
+    { kind: 'roleplay', title: 'یک سناریوی فروش را با صدای خودت ضبط کن', target: 1, coins: 40 },
+    // 'help' (اجتماعی) stays out of the pool until a real teammate Q&A trigger exists — shipping a
+    // quest nobody can complete is worse than not shipping it.
+  ];
 
 /** Chest contents are fixed per quality (no loot-box surprise on *what*, only on *how much*). */
 export const CHEST: Record<ChestQuality, { coins: number; weight: number; label: string }> = {
@@ -55,7 +56,12 @@ export function todaysQuestIds(userId: string, day: string): QuestKind[] {
 
 export function questDoc(userId: string, day: string, kind: QuestKind): Quest {
   // the pool is a fixed literal, so the fallback is only there to keep the lookup total
-  const fallback = { kind: 'stations' as QuestKind, title: '۲ ایستگاه را تمام کن', target: 2, coins: 20 };
+  const fallback = {
+    kind: 'stations' as QuestKind,
+    title: '۲ ایستگاه را تمام کن',
+    target: 2,
+    coins: 20,
+  };
   const def = QUEST_POOL.find((q) => q.kind === kind) ?? fallback;
   return {
     userId,
@@ -126,9 +132,7 @@ export async function bumpQuest(
     before = await d.store.get<Quest>(path);
   }
   if (!before || before.doneAt)
-    return before
-      ? [{ quest: before, completed: false, chest: before.chest, coinsEarned: 0 }]
-      : [];
+    return before ? [{ quest: before, completed: false, chest: before.chest, coinsEarned: 0 }] : [];
 
   const progress = Math.min(before.target, before.progress + by);
   const done = progress >= before.target;

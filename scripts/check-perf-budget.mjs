@@ -103,7 +103,12 @@ const audioFiles = existsSync(DIST)
   ? readdirSync(DIST).filter((f) => /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(f))
   : [];
 const audioBytes = audioFiles.reduce((s, f) => s + statSync(join(DIST, f)).size, 0);
-check('sound + haptics assets', audioBytes, BUDGETS.soundHaptics, `${audioFiles.length} audio file(s)`);
+check(
+  'sound + haptics assets',
+  audioBytes,
+  BUDGETS.soundHaptics,
+  `${audioFiles.length} audio file(s)`,
+);
 
 // ── 3. stylesheet ──────────────────────────────────────────────────────────────────────
 const css = largest(/\.css$/);

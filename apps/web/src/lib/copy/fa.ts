@@ -487,6 +487,10 @@ export const LINES = {
   redeemRecorded: (title: string, price: string) => `${title} ثبت شد (${price} سکه)`,
   coinPrice: (price: string) => `${price} سکه`,
   dueAndCap: (due: string, cap: string) => `${due} مورد · سقف ${cap}`,
+  masteredOfEvaluated: (mastered: string, evaluated: string) =>
+    `${mastered} از ${evaluated} ارزیابی‌شده`,
+  reviewStatus: (onTime: string, done: string, overdue: string, next7: string) =>
+    `${onTime} از ${done} مرور · ${overdue} مورد عقب‌افتاده · ${next7} مورد در ۷ روز آینده`,
   coinsEarned: (coins: string) => `+${coins} سکه`,
   doneOfTotal: (done: string, total: string) => `${done} از ${total}`,
   sources: (titles: string) => `منبع: ${titles}`,

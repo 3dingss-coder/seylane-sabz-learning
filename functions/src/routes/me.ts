@@ -203,9 +203,7 @@ export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
       if (!out.ok)
         throw new ApiError(
           'VALIDATION',
-          out.reason === 'too_long'
-            ? 'مرخصی حداکثر ۷ روز است.'
-            : 'این فصل یک بار مرخصی گرفتی.',
+          out.reason === 'too_long' ? 'مرخصی حداکثر ۷ روز است.' : 'این فصل یک بار مرخصی گرفتی.',
         );
       return out;
     }),

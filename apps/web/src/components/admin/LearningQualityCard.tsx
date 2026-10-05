@@ -1,4 +1,5 @@
 import { Brain, GraduationCap, Info } from 'lucide-react';
+import { LINES } from '@/lib/copy/fa';
 import { toPersianDigits } from '@/lib/digits';
 import { faPercent } from '@/lib/format';
 import { useAdminGamification } from '@/lib/queries';
@@ -32,16 +33,21 @@ export function LearningQualityCard() {
             <Brain className="size-3.5" aria-hidden />
             مرورِ به‌موقع
           </p>
-          <p className="text-2xl font-extrabold text-text">{onTime === null ? '—' : faPercent(onTime)}</p>
+          <p className="text-2xl font-extrabold text-text">
+            {onTime === null ? '—' : faPercent(onTime)}
+          </p>
           <ProgressBar
             value={onTime === null ? 0 : Math.round(onTime * 100)}
             label="درصد مرورهای به‌موقع"
             className="h-2"
           />
           <p className="text-[11px] leading-5 text-text-secondary">
-            {toPersianDigits(d.reviews.reviewsOnTime)} از {toPersianDigits(d.reviews.reviewsDone)}{' '}
-            مرور · {toPersianDigits(d.reviews.overdueNow)} مورد عقب‌افتاده ·{' '}
-            {toPersianDigits(d.reviews.dueNext7Days)} مورد در ۷ روز آینده
+            {LINES.reviewStatus(
+              toPersianDigits(d.reviews.reviewsOnTime),
+              toPersianDigits(d.reviews.reviewsDone),
+              toPersianDigits(d.reviews.overdueNow),
+              toPersianDigits(d.reviews.dueNext7Days),
+            )}
           </p>
         </div>
 
@@ -59,7 +65,10 @@ export function LearningQualityCard() {
             className="h-2"
           />
           <p className="text-[11px] leading-5 text-text-secondary">
-            {toPersianDigits(d.mastery.mastered)} از {toPersianDigits(d.mastery.evaluated)} ارزیابی‌شده
+            {LINES.masteredOfEvaluated(
+              toPersianDigits(d.mastery.mastered),
+              toPersianDigits(d.mastery.evaluated),
+            )}
           </p>
         </div>
       </div>

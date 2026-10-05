@@ -287,13 +287,7 @@ export interface Streak {
 }
 
 export type StreakEvent =
-  | 'started'
-  | 'extended'
-  | 'unchanged'
-  | 'shield_used'
-  | 'broken'
-  | 'repaired'
-  | 'on_leave';
+  'started' | 'extended' | 'unchanged' | 'shield_used' | 'broken' | 'repaired' | 'on_leave';
 
 /** Per-question memory for spaced repetition (§3.4, Half-Life Regression, simplified). */
 export interface QuestionMemory {
