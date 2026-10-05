@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { LIPS, RADII, TOKEN_SECTION, TOKEN_SWATCHES, TYPE_SCALE } from './galleryTokens';
 import {
   BookOpen,
   ChevronLeft,
@@ -75,47 +76,6 @@ const SCREEN_MAP: Array<[string, string, string]> = [
   ['پنل مدیر/ادمین', '—', 'هیچ کاراکتری مجاز نیست (C-06)'],
 ];
 
-/** PHASE-1 §1.8 — the gallery renders the real tokens, so this list must stay in sync with
- *  `styles/index.css` @theme. Values shown are the light-theme ones. */
-const TOKEN_SWATCHES: [string, string, string][] = [
-  ['سبز اصلی — اقدام', 'bg-primary', '#177a50'],
-  ['سبز موفقیت', 'bg-success', '#16a34a'],
-  ['خطر', 'bg-danger', '#dc2626'],
-  ['هشدار', 'bg-warning', '#d97706'],
-  ['اطلاع', 'bg-info', '#2563eb'],
-  ['بوم (canvas)', 'bg-background', '#f1f9f4'],
-  ['سطح', 'bg-surface', '#ffffff'],
-  ['برگ (لایهٔ پویا)', 'bg-leaf', '#21a55f'],
-  ['نعناعی (پس‌زمینهٔ نرم)', 'bg-mint', '#e7f5ee'],
-  ['بنفش — فقط مسکات', 'bg-mascot', '#7048a3'],
-];
-
-const TYPE_SCALE: [string, string, string][] = [
-  ['text-4xl', 'نمایشی — عدد بزرگ', '40px'],
-  ['text-3xl', 'عنوان صفحه', '34px'],
-  ['text-2xl', 'عنوان بخش', '28px'],
-  ['text-xl', 'زیرعنوان', '22px'],
-  ['text-base', 'متن بدنه — ۱۶px برای خوانایی در RTL', '16px'],
-  ['text-sm', 'متن کمکی', '14px'],
-  ['text-xs', 'برچسب', '12px'],
-];
-
-const RADII: [string, string, string][] = [
-  ['rounded-input', 'ورودی', '14'],
-  ['rounded-btn', 'دکمه', '16'],
-  ['rounded-card', 'کارت', '20'],
-  ['rounded-station', 'ایستگاه', '24'],
-  ['rounded-hero', 'قهرمان', '28'],
-  ['rounded-pill', 'قرص', '∞'],
-];
-
-const LIPS: [string, string][] = [
-  ['var(--lip-sm)', '۲'],
-  ['var(--lip-md)', '۴'],
-  ['var(--lip-lg)', '۶'],
-  ['var(--lip-danger)', 'خطر'],
-];
-
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-3">
@@ -173,17 +133,17 @@ export function GalleryPage() {
 
         <main className="flex-1 space-y-10 px-4 py-6 lg:px-6">
           {/* PHASE-1 §1.8 DoD — every foundation token, rendered, not described. */}
-          <Section title="بنیادهای توکن (فاز ۱)">
+          <Section title={TOKEN_SECTION.title}>
             <div className="grid gap-3 md:grid-cols-2">
               <Card className="space-y-3">
-                <h3 className="text-sm font-bold text-text">رنگ‌های نقش‌دار</h3>
+                <h3 className="text-sm font-bold text-text">{TOKEN_SECTION.colours}</h3>
                 <ul className="space-y-1.5">
-                  {TOKEN_SWATCHES.map(([label, cls, value]) => (
+                  {TOKEN_SWATCHES.map(([label, cls]) => (
                     <li key={label} className="flex items-center gap-2">
                       <span className={`h-7 w-12 rounded-input ${cls}`} aria-hidden="true" />
                       <span className="text-sm font-medium text-text">{label}</span>
                       <span className="ms-auto text-xs text-text-secondary" dir="ltr">
-                        {value}
+                        {cls}
                       </span>
                     </li>
                   ))}
@@ -191,13 +151,13 @@ export function GalleryPage() {
               </Card>
 
               <Card className="space-y-3">
-                <h3 className="text-sm font-bold text-text">مقیاس تایپ — Vazirmatn RD</h3>
+                <h3 className="text-sm font-bold text-text">{TOKEN_SECTION.type}</h3>
                 <ul className="space-y-1.5">
-                  {TYPE_SCALE.map(([cls, label, value]) => (
+                  {TYPE_SCALE.map(([cls, label]) => (
                     <li key={label} className="flex items-baseline gap-2">
                       <span className={`font-bold text-text ${cls}`}>{label}</span>
                       <span className="ms-auto text-xs text-text-secondary" dir="ltr">
-                        {value}
+                        {cls}
                       </span>
                     </li>
                   ))}
@@ -205,9 +165,9 @@ export function GalleryPage() {
               </Card>
 
               <Card className="space-y-3">
-                <h3 className="text-sm font-bold text-text">شعاع‌ها</h3>
+                <h3 className="text-sm font-bold text-text">{TOKEN_SECTION.radii}</h3>
                 <ul className="flex flex-wrap gap-2">
-                  {RADII.map(([cls, label, value]) => (
+                  {RADII.map(([cls, label]) => (
                     <li key={label} className="flex flex-col items-center gap-1">
                       <span
                         className={`block h-12 w-12 border-2 border-primary bg-primary-100 ${cls}`}
@@ -215,7 +175,7 @@ export function GalleryPage() {
                       />
                       <span className="text-xs text-text-secondary">{label}</span>
                       <span className="text-xs text-muted" dir="ltr">
-                        {value}
+                        {cls}
                       </span>
                     </li>
                   ))}
@@ -223,7 +183,7 @@ export function GalleryPage() {
               </Card>
 
               <Card className="space-y-3">
-                <h3 className="text-sm font-bold text-text">لیپ (سایهٔ سه‌بعدی دکمه)</h3>
+                <h3 className="text-sm font-bold text-text">{TOKEN_SECTION.lips}</h3>
                 <ul className="flex flex-wrap items-end gap-3">
                   {LIPS.map(([shadow, label]) => (
                     <li key={label} className="flex flex-col items-center gap-1.5">
@@ -237,10 +197,7 @@ export function GalleryPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="text-xs text-text-secondary">
-                  لیپ با <span dir="ltr">transform</span> جمع می‌شود، نه با سایهٔ نرم — همان چیزی که
-                  دکمه را «قابل فشار دادن» نشان می‌دهد (A-01).
-                </p>
+                <p className="text-xs text-text-secondary">{TOKEN_SECTION.lipNote}</p>
               </Card>
             </div>
           </Section>

@@ -48,8 +48,25 @@ TOKENS: dict[str, str] = {
     "accent-fg": "#92400E",
     "danger-light": "#FEE2E2",
     "danger-fg": "#B91C1C",
+    # PHASE-2/3 surfaces — the canvas every page sits on, the mint speech bubble,
+    # and the quest-chest chips (added the day the colours shipped, not before)
+    "canvas": "#F1F9F4",
+    "warn": "#D97706",
+    "warn-fg": "#B45309",
     "duo-feather": "#58CC02",
 }
+
+def blend(top: str, bottom: str, alpha: float) -> str:
+    """The colour the browser actually paints for `bg-x/alpha` over `bottom`."""
+    t, b = top.lstrip("#"), bottom.lstrip("#")
+    return "#" + "".join(
+        f"{round(alpha * int(t[i : i + 2], 16) + (1 - alpha) * int(b[i : i + 2], 16)):02X}"
+        for i in (0, 2, 4)
+    )
+
+
+# `bg-warning/25` on a white card — computed, because a chip's contrast is a blend, not a token
+TOKENS["warn-25"] = blend(TOKENS["warn"], TOKENS["surface"], 0.25)
 
 PAIRS: list[tuple[str, str, str, float]] = [
     # house green
@@ -74,6 +91,15 @@ PAIRS: list[tuple[str, str, str, float]] = [
     ("reward-fg روی reward (چیپ امتیاز)", "reward-fg", "reward", 4.5),
     ("accent-fg روی accent-light", "accent-fg", "accent-light", 4.5),
     ("danger-fg روی danger-light", "danger-fg", "danger-light", 4.5),
+    # ── PHASE-2 cast surfaces (the pairs §1.8 was waiting for) ─────────────────────────
+    ("متن اصلی روی بوم سبز روشن (canvas)", "ink", "canvas", 4.5),
+    ("متن فرعی روی بوم سبز روشن", "ink-2", "canvas", 4.5),
+    ("متن حباب گفتار روی mint (Character.tsx)", "ink", "g-mint", 4.5),
+    ("نام گوینده روی mint (۱۱px extrabold)", "ink-2", "g-mint", 4.5),
+    ("سفید روی p-mastery (لحظهٔ نادر استادی)", "surface", "p-mastery", 4.5),
+    # ── PHASE-3 quest chest chips (QuestList.tsx) ─────────────────────────────────────
+    ("نقره: متن فرعی روی border (swan)", "ink-2", "swan", 4.5),
+    ("برنز: accent-fg روی warning/25 (QuestList)", "accent-fg", "warn-25", 4.5),
 ]
 
 INFO: list[tuple[str, str, str]] = [

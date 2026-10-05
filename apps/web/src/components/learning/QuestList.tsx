@@ -21,7 +21,7 @@ const CHEST_FA: Record<ChestQuality, string> = {
 /* §8.4.2 rule 1: semantic tokens only — the chest tiers reuse gated colour pairs
    (warning / border / reward) instead of three new decorative hexes. */
 const CHEST_STYLE: Record<ChestQuality, string> = {
-  bronze: 'bg-warning/25 text-warning-fg',
+  bronze: 'bg-warning/25 text-accent-fg', // 5.41:1 — warn-fg on /25 was only 3.83:1
   silver: 'bg-border text-text-secondary',
   gold: 'bg-reward text-reward-fg',
 };
