@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/check-hardcoded-copy.mjs",
-  "total": 1143,
-  "marketer": 89,
+  "total": 1141,
+  "marketer": 87,
   "perFile": {
     "apps/web/src/components/admin/ConfirmDialog.tsx": 2,
     "apps/web/src/components/admin/LearningQualityCard.tsx": 20,
@@ -20,11 +20,11 @@
     "apps/web/src/components/layout/Breadcrumb.tsx": 3,
     "apps/web/src/components/layout/Sidebar.tsx": 2,
     "apps/web/src/components/learning/CoinWallet.tsx": 1,
-    "apps/web/src/components/learning/MentorChat.tsx": 2,
+    "apps/web/src/components/learning/MentorChat.tsx": 1,
     "apps/web/src/components/learning/MentorSheet.tsx": 1,
     "apps/web/src/components/learning/QuestList.tsx": 1,
     "apps/web/src/components/learning/ReviewDeck.tsx": 1,
-    "apps/web/src/components/learning/VoiceCallSheet.tsx": 2,
+    "apps/web/src/components/learning/VoiceCallSheet.tsx": 1,
     "apps/web/src/components/reports/CompletionReport.tsx": 47,
     "apps/web/src/components/reports/MemberTimeline.tsx": 13,
     "apps/web/src/components/reports/RetakeList.tsx": 15,

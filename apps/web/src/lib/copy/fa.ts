@@ -390,6 +390,15 @@ export const COPY = {
     loading: 'در حال بارگذاری…',
   },
 
+  /**
+   * Punctuation is copy too: the Persian comma (U+060C) is not the Latin one, and a translation
+   * pass has to be able to change it without touching a component.
+   */
+  punctuation: {
+    /** separator for inline lists — «الف، ب و ج» */
+    listSeparator: '، ',
+  },
+
   /** Shared action labels — one verb, no decoration. */
   actions: {
     retry: 'تلاش دوباره',

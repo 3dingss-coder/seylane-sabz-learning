@@ -249,7 +249,7 @@ export function VoiceCallSheet({
             ))}
             {last?.sources.length ? (
               <p className="text-xs text-text-secondary">
-                {LINES.sources(last.sources.map((s) => s.title).join('، '))}
+                {LINES.sources(last.sources.map((s) => s.title).join(COPY.punctuation.listSeparator))}
               </p>
             ) : null}
             {last?.nextAction?.label ? (
