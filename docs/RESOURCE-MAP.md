@@ -29,14 +29,14 @@ Local dev/PWA serves a mirror at `/catalog/brands/{brandId}/logo.*` and `/catalo
 
 ## 3. Sample training files (repo root) — mapping status
 
-Decisions applied: **D27** (reactivate فورمی / آتل / آیس بابل / ویت آس in the learning catalog), **D28** (video = YouTube link **or** uploaded file in any common format; m4a allowed), **D30** (WITH US → کامان).
+Decisions applied: **D27** (reactivate فورمی / آتل / آیس بال / ویت آس in the learning catalog), **D28** (video = YouTube link **or** uploaded file in any common format; m4a allowed), **D30** (WITH US → کامان).
 
 | Training file | Type | Brand | Product | Package / Part | Status |
 |---|---|---|---|---|---|
 | `آموزش کامل محصول فورمی.mp4` | video file (D28) | فورمی (D27) | sb-310350101 «کیت درمانی فورمی» | «فورمی» / part 2 | ✅ resolved |
 | `معرفی کلی محصول فورمی.m4a` | audio | فورمی (D27) | sb-310350101 | «فورمی» / part 1 | ✅ resolved |
-| `کتابچه_جامع_فروش_BUBBLE.mp4` | video file | آیس بابل (D27) | sb-370276101 «فوم شستشوی صورت آیس بابل» | «بابل» / part 2 | ✅ resolved |
-| `معرفی کلی بابل.m4a` | audio | آیس بابل (D27) | sb-370276101 | «بابل» / part 1 | ✅ resolved |
+| `کتابچه_جامع_فروش_BUBBLE.mp4` | video file | آیس بال (D27) | sb-370276101 «فوم شستشوی صورت آیس بال» | «آیس بال» / part 2 | ✅ resolved |
+| `معرفی کلی آیس بال.m4a` | audio | آیس بال (D27) | sb-370276101 | «آیس بال» / part 1 | ✅ resolved |
 | `آموزش_ویدیویی_ATL.mp4` | video file | آتل (D27) | sb-220306101 «کرم گرم کننده و ضد درد کتف و گردن آتل» | «آتل» / part 2 | ✅ resolved |
 | `ای_تی_ال_پادزهر_دردهای_دیجیتال.m4a` | audio | آتل (D27) | sb-220306101 | «آتل» / part 1 | ✅ resolved |
 | `معرفی کلی ویت آس.m4a` | audio | ویت آس (D27, logo `vitas.webp`) | sb-340122101 «کرم ترک پا 75 میل ویت آس» | «ویت آس» / part 1 | ✅ resolved |
@@ -47,7 +47,7 @@ Decisions applied: **D27** (reactivate فورمی / آتل / آیس بابل / �
 | `معرفی کلی آیس بال.m4a` | audio | آیس بال ✅ | ❓ as above | «آیس بال» / part 1 | ⏳ needs product |
 | `معرفی کلی‌ دارت.m4a` | audio | ❌ «دارت» not in brands / products / hidden list / logos | ❌ | — | ⏳ needs brand + product |
 
-Missing logos for reactivated brands (D27): **فورمی, آتل, آیس بابل**. The client will provide them. Until then, the UI shows the brand name as text (no placeholder image).
+Missing logos for reactivated brands (D27): **فورمی, آتل, آیس بال**. The client will provide them. Until then, the UI shows the brand name as text (no placeholder image).
 
 ## 4. Helper UI kit — «کامپوننت های کمکی برای تکمیل UI UX اپلیکیشن»
 

@@ -115,7 +115,7 @@ export async function seedDemo(d: Deps) {
         fromUserId: managerId,
         toUserId: sara[0].id,
         type: 'note',
-        body: 'سارا جان، دوره‌های آموزشی جدید محصولات فورمی و آیس بابل منتشر شده است. لطفاً پیش از پایان مهلت ویدیوها را مشاهده کن و آزمون را بده.',
+        body: 'سارا جان، دوره‌های آموزشی جدید محصولات فورمی و آیس بال منتشر شده است. لطفاً پیش از پایان مهلت ویدیوها را مشاهده کن و آزمون را بده.',
         packageId: 'seed-pkg-formi',
         readAt: null,
         createdAt: iso,

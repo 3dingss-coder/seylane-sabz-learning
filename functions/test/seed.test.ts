@@ -16,9 +16,9 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('real catalog seed (PROMPT 003/004)', () => {
-  it('seeds 12 catalog + 5 reactivated brands and every product verbatim', async () => {
+  it('seeds 12 catalog + 4 reactivated brands and every product verbatim', async () => {
     const cat = loadCatalog(catalogPaths(repoRoot));
-    expect(report.brands).toBe(17);
+    expect(report.brands).toBe(16);
     expect(report.products).toBe(cat.products.length + 5 + 1);
     for (const b of cat.brands)
       expect((await ctx.deps.store.get<Brand>(`brands/${b.id}`))?.name).toBe(b.name);
@@ -34,7 +34,7 @@ describe('real catalog seed (PROMPT 003/004)', () => {
         .filter((b) => b.logoIsFallback)
         .map((b) => b.id)
         .sort(),
-    ).toEqual(['brand-sb-atl', 'brand-sb-formi', 'brand-sb-icebubble']);
+    ).toEqual(['brand-sb-atl', 'brand-sb-formi']);
     const products = await ctx.deps.store.query<Product>({ collection: 'products' });
     expect(products.every((p) => !!p.imageUrl)).toBe(true);
     expect(

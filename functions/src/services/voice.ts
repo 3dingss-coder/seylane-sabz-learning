@@ -81,7 +81,7 @@ export interface VoiceTurnResult {
 
 /**
  * Vocabulary hint for Whisper: brand + product names the model would otherwise mangle.
- * This single line is the difference between «آیس بابل» and «اس بیبل» in the transcript.
+ * This single line is the difference between «آیس بال» and «اس بیبل» in the transcript.
  */
 export async function sttVocabulary(d: Deps, limit = 60): Promise<string> {
   const brands = await allBrands(d);

@@ -17,7 +17,7 @@ import { getPolicy, type Deps } from './context';
  * Hybrid retriever (keyword BM25-lite ⊕ embeddings ⊕ RRF), scope-aware.
  *
  * Why hybrid and not "just vectors": the corpus is dominated by exact Persian product names,
- * brand names, barcodes and codes («آیس بابل»، «کد ۱۰۲۴»). Embeddings blur those; keyword search
+ * brand names, barcodes and codes («آیس بال»، «کد ۱۰۲۴»). Embeddings blur those; keyword search
  * nails them. Conversely, paraphrased questions («این کرم چربی پوست را کم می‌کند؟») need vectors.
  * Running both and fusing with Reciprocal Rank Fusion gives us the best of each with no training.
  */

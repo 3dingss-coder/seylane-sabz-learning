@@ -125,7 +125,7 @@ const short = (s: string) => createHash('sha1').update(s).digest('hex').slice(0,
 const SEED_MEDIA_DURATIONS: Record<string, number> = {
   'معرفی کلی محصول فورمی.m4a': 419,
   'آموزش کامل محصول فورمی.mp4': 527,
-  'معرفی کلی بابل.m4a': 333,
+  'معرفی کلی آیس بال.m4a': 333,
   'کتابچه_جامع_فروش_BUBBLE.mp4': 564,
   'ای_تی_ال_پادزهر_دردهای_دیجیتال.m4a': 454,
   'آموزش_ویدیویی_ATL.mp4': 564,

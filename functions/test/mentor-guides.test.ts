@@ -244,7 +244,7 @@ describe('mentor behaviour boxes (جعبه‌ی رفتار منتور)', () => {
     const iso = ctx.deps.clock().toISOString();
     const otherBrand = `brand-${ctx.deps.store.newId().slice(0, 6).toLowerCase()}`;
     await ctx.deps.store.set(`brands/${otherBrand}`, {
-      name: 'برند ناشناس آیس بابل',
+      name: 'برند ناشناس آیس بال',
       nameLatin: null,
       logoUrl: '',
       logoPath: null,
@@ -258,7 +258,7 @@ describe('mentor behaviour boxes (جعبه‌ی رفتار منتور)', () => {
     const otherProduct = `sb-${ctx.deps.store.newId().slice(0, 8)}`;
     await ctx.deps.store.set(`products/${otherProduct}`, {
       brandId: otherBrand,
-      name: 'ژل شستشوی آیس بابل',
+      name: 'ژل شستشوی آیس بال',
       code: null,
       barcode: null,
       category: 'پاک‌کننده',
@@ -275,12 +275,12 @@ describe('mentor behaviour boxes (جعبه‌ی رفتار منتور)', () => {
     await rebuildKnowledgeIndex(ctx.deps);
     const user = await loadUser(ctx, stranger.id);
 
-    const found = await searchKnowledge(ctx.deps, { query: 'ژل شستشوی آیس بابل' });
+    const found = await searchKnowledge(ctx.deps, { query: 'ژل شستشوی آیس بال' });
     expect(found.chunks.some((c) => c.item.id === `product:${otherProduct}`)).toBe(true);
 
-    const r = await answerQuestion(ctx.deps, user, { question: 'ژل شستشوی آیس بابل چیست؟' });
+    const r = await answerQuestion(ctx.deps, user, { question: 'ژل شستشوی آیس بال چیست؟' });
     expect(r.outcome).toBe('answered');
-    expect(r.sources.some((s) => s.id === otherProduct || s.title.includes('آیس بابل'))).toBe(true);
+    expect(r.sources.some((s) => s.id === otherProduct || s.title.includes('آیس بال'))).toBe(true);
   });
 
   it('injects the box into the system prompt the model actually receives', async () => {

@@ -8,8 +8,8 @@ Brands: 17 • Products: 244 (real images: 242) • Training packages: 9
 |---|---|---|---|---|---|---|---|---|
 | `معرفی کلی محصول فورمی.m4a` | فورمی | کیت درمانی فورمی | آموزش کیت درمانی فورمی (`seed-pkg-formi`) | 1 | `seed-pkg-formi-s1` | 419s | client-quiz-bank | published |
 | `آموزش کامل محصول فورمی.mp4` | فورمی | کیت درمانی فورمی | آموزش کیت درمانی فورمی (`seed-pkg-formi`) | 2 | `seed-pkg-formi-s2` | 527s | client-quiz-bank | published |
-| `معرفی کلی بابل.m4a` | آیس بابل | فوم شستشوی صورت آیس بابل | آموزش فوم شستشوی صورت آیس بابل (`seed-pkg-bubble`) | 1 | `seed-pkg-bubble-s1` | 333s | client-quiz-bank | published |
-| `کتابچه_جامع_فروش_BUBBLE.mp4` | آیس بابل | فوم شستشوی صورت آیس بابل | آموزش فوم شستشوی صورت آیس بابل (`seed-pkg-bubble`) | 2 | `seed-pkg-bubble-s2` | 564s | client-quiz-bank | published |
+| `معرفی کلی آیس بال.m4a` | آیس بال | فوم شستشوی صورت آیس بال | آموزش فوم شستشوی صورت آیس بال (`seed-pkg-bubble`) | 1 | `seed-pkg-bubble-s1` | 333s | client-quiz-bank | published |
+| `کتابچه_جامع_فروش_BUBBLE.mp4` | آیس بال | فوم شستشوی صورت آیس بال | آموزش فوم شستشوی صورت آیس بال (`seed-pkg-bubble`) | 2 | `seed-pkg-bubble-s2` | 564s | client-quiz-bank | published |
 | `ای_تی_ال_پادزهر_دردهای_دیجیتال.m4a` | آتل | کرم گرم کننده و ضد درد کتف و گردن آتل | آموزش کرم گرم کننده و ضد درد کتف و گردن آتل (`seed-pkg-atl`) | 1 | `seed-pkg-atl-s1` | 454s | client-quiz-bank | published |
 | `آموزش_ویدیویی_ATL.mp4` | آتل | کرم گرم کننده و ضد درد کتف و گردن آتل | آموزش کرم گرم کننده و ضد درد کتف و گردن آتل (`seed-pkg-atl`) | 2 | `seed-pkg-atl-s2` | 564s | client-quiz-bank | published |
 | `معرفی کلی ویت آس.m4a` | ویت آس | کرم ترک پا 75 میل ویت آس | آموزش کرم ترک پا ویت آس (`seed-pkg-vitas`) | 1 | `seed-pkg-vitas-s1` | 430s | client-quiz-bank | published |
@@ -36,10 +36,9 @@ Brands: 17 • Products: 244 (real images: 242) • Training packages: 9
 | `brand-sb-5` | پیکسل | pixel.png |
 | `brand-sb-12` | میس لیپ | mislip.png |
 | `brand-sb-10` | آیس بال | icebal.png |
-| `brand-sb-11` | کالمین | kalamin.webp |
+| `brand-sb-11` | کلامین | kalamin.webp |
 | `brand-sb-formi` | فورمی | (holding logo — D34) |
 | `brand-sb-atl` | آتل | (holding logo — D34) |
-| `brand-sb-icebubble` | آیس بابل | (holding logo — D34) |
 | `brand-sb-vitas` | ویت آس | vitas.webp |
 | `brand-sb-zen` | زِن | zen.jpg |
 
