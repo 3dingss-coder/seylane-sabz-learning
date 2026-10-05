@@ -27,12 +27,12 @@ const ICONS: Record<string, LucideIcon> = {
   star: Star,
 };
 const REASON: Record<string, string> = {
-  on_time_completion: 'تکمیل به‌موقع',
-  first_pass_quiz: 'قبولی در تلاش اول',
-  package_completion: 'تکمیل بسته',
-  badge: 'نشان جدید',
-  policy_penalty: 'کسر امتیاز',
-  manual: 'تنظیم مدیر',
+  on_time_completion: COPY.cards.reasonOnTime,
+  first_pass_quiz: COPY.cards.reasonFirstPass,
+  package_completion: COPY.cards.reasonPackage,
+  badge: COPY.cards.reasonBadge,
+  policy_penalty: COPY.cards.reasonPenalty,
+  manual: COPY.cards.reasonManual,
 };
 
 /** M10 — امتیاز و نشان‌ها (points awarded server-side only). */
@@ -49,7 +49,7 @@ export function CardsPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="امتیاز و نشان‌ها"
+        title={COPY.cards.title}
         actions={streak > 0 ? <StreakChip count={streak} /> : undefined}
       />
       <QueryState query={points} loading={<Skeleton className="h-24 w-full" />}>
@@ -63,7 +63,7 @@ export function CardsPage() {
               <Award className="size-9" aria-hidden />
             </span>
             <div className="relative">
-              <p className="text-sm text-white/85">امتیاز کل</p>
+              <p className="text-sm text-white/85">{COPY.cards.totalPoints}</p>
               <p className="text-4xl font-extrabold text-white" data-testid="points-balance">
                 <CountUp value={p.balance} format={faNumber} />
               </p>
@@ -73,7 +73,7 @@ export function CardsPage() {
       </QueryState>
       <section aria-labelledby="badges-title">
         <h2 id="badges-title" className="mb-2 text-base font-bold">
-          نشان‌ها
+          {COPY.cards.badges}
         </h2>
         <QueryState query={badges} loading={<Skeleton className="h-32 w-full" />}>
           {(list) => (
@@ -117,18 +117,13 @@ export function CardsPage() {
       </section>
       <section aria-labelledby="ledger-title">
         <h2 id="ledger-title" className="mb-2 text-base font-bold">
-          تاریخچه امتیاز
+          {COPY.cards.history}
         </h2>
         <QueryState
           query={points}
           loading={<Skeleton className="h-20 w-full" />}
           isEmpty={(p) => p.ledger.length === 0}
-          empty={
-            <EmptyState
-              title="هنوز امتیازی نگرفته‌ای"
-              description={COPY.empty.cards}
-            />
-          }
+          empty={<EmptyState title={COPY.cards.emptyTitle} description={COPY.empty.cards} />}
         >
           {(p) => (
             <ul className="stagger divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-sm">

@@ -197,6 +197,51 @@ export const COPY = {
     reportToAdmin: 'گزارش مشکل به ادمین',
   },
 
+  /** §6.2.11 — a package (M3): what it holds, and the one next station. */
+  pkg: {
+    progressLabel: 'پیشرفت بسته',
+    startSectionQuiz: 'شروع آزمون قسمت',
+    continueSection: 'ادامه قسمت فعلی',
+    startSection: 'شروع قسمت',
+    sectionQuiz: 'آزمون این قسمت',
+    emptyTitle: 'این بسته هنوز قسمتی ندارد',
+    emptyDesc: 'به مدیر اطلاع داده شد.',
+    lockedHint: 'ابتدا قسمت قبل را کامل کنید.',
+    audio: 'صوتی',
+    video: 'ویدیو',
+  },
+
+  /** §6.2.12 — notifications and manager messages (M9). */
+  messages: {
+    title: 'اعلان‌ها و پیام‌ها',
+    markAllRead: 'همه خوانده شد',
+    typeLabel: 'نوع',
+    notifications: 'اعلان‌ها',
+    managerMessages: 'پیام مدیر',
+    emptyNotifications: 'اعلانی نداری',
+    goToPath: 'رفتن به مسیر یادگیری',
+    unread: 'خوانده نشده',
+    emptyMessages: 'پیامی از مدیر نداری',
+    messagesNote: 'پیام‌های مدیرت درباره تیم و آموزش‌ها این‌جا می‌رسد.',
+    goHome: 'رفتن به خانه',
+    noteOnTraining: 'یادداشت روی آموزش',
+  },
+
+  /** §6.2.13 — points and badges (M8/M11). A ledger line says what happened, in plain words. */
+  cards: {
+    title: 'امتیاز و نشان‌ها',
+    totalPoints: 'امتیاز کل',
+    badges: 'نشان‌ها',
+    history: 'تاریخچه امتیاز',
+    emptyTitle: 'هنوز امتیازی نگرفته‌ای',
+    reasonOnTime: 'تکمیل به‌موقع',
+    reasonFirstPass: 'قبولی در تلاش اول',
+    reasonPackage: 'تکمیل بسته',
+    reasonBadge: 'نشان جدید',
+    reasonPenalty: 'کسر امتیاز',
+    reasonManual: 'تنظیم مدیر',
+  },
+
   /** Shared action labels — one verb, no decoration. */
   actions: {
     retry: 'تلاش دوباره',
@@ -271,6 +316,11 @@ export const LINES = {
   memberSince: (date: string) => `عضو از ${date}`,
   masteryLabel: (brand: string) => `استادی ${brand}`,
   greeting: (firstName: string) => `سلام ${firstName} 👋`,
+  brandTraining: (brand: string) => `آموزش برند ${brand}`,
+  stationCount: (count: string) => `این بسته ${count} ایستگاه داره.`,
+  deadlineOn: (date: string) => `مهلت: ${date}`,
+  sectionsCount: (count: string) => `قسمت‌ها (${count})`,
+  percentWatched: (percent: string) => ` • ${percent} دیده شده`,
   sectionOf: (index: string, total: string) => `قسمت ${index} از ${total}`,
   /* §6.0 — two sentences, not three: the live percent rides along with a dash. */
   completionRule: (threshold: string, percent: string) =>

@@ -9,6 +9,7 @@ import {
   Skeleton,
   StatusBadge,
 } from '@/components/ui';
+import { COPY, LINES } from '@/lib/copy/fa';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Character } from '@/components/character/Character';
 import { ProductImage } from '@/components/common/ProductImage';
@@ -49,7 +50,7 @@ export function PackagePage() {
                   p.product
                     ? `${p.brand?.name} • ${p.product.name}`
                     : p.brand
-                      ? `آموزش برند ${p.brand.name}`
+                      ? LINES.brandTraining(p.brand.name)
                       : undefined
                 }
               />
@@ -59,7 +60,7 @@ export function PackagePage() {
                   id="raha"
                   expression="idle"
                   size="sm"
-                  speech={`این بسته ${toPersianDigits(live.length)} ایستگاه داره.`}
+                  speech={LINES.stationCount(toPersianDigits(live.length))}
                 />
                 <ProductImage
                   src={p.product?.imageUrl ?? p.brand?.logoUrl}
@@ -75,11 +76,17 @@ export function PackagePage() {
                       p.deadlineAt && <CountdownChip deadline={p.deadlineAt} />
                     )}
                     {p.deadlineAt && (
-                      <span className="text-text-secondary">مهلت: {faDate(p.deadlineAt)}</span>
+                      <span className="text-text-secondary">
+                        {LINES.deadlineOn(faDate(p.deadlineAt))}
+                      </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <ProgressBar value={p.percent} label="پیشرفت بسته" className="flex-1" />
+                    <ProgressBar
+                      value={p.percent}
+                      label={COPY.pkg.progressLabel}
+                      className="flex-1"
+                    />
                     <span className="text-xs font-bold">{faPercent(p.percent)}</span>
                   </div>
                 </div>
@@ -115,22 +122,19 @@ export function PackagePage() {
                   }
                 >
                   {current.state === 'quiz'
-                    ? 'شروع آزمون قسمت'
+                    ? COPY.pkg.startSectionQuiz
                     : current.state === 'in_progress'
-                      ? 'ادامه قسمت فعلی'
-                      : 'شروع قسمت'}
+                      ? COPY.pkg.continueSection
+                      : COPY.pkg.startSection}
                 </Button>
               )}
             </div>
             <section aria-labelledby="sections-title" className="flex flex-col gap-2 lg:w-96">
               <h2 id="sections-title" className="text-base font-bold text-text">
-                قسمت‌ها ({toPersianDigits(live.length)})
+                {LINES.sectionsCount(toPersianDigits(live.length))}
               </h2>
               {live.length === 0 ? (
-                <EmptyState
-                  title="این بسته هنوز قسمتی ندارد"
-                  description="به مدیر اطلاع داده شد."
-                />
+                <EmptyState title={COPY.pkg.emptyTitle} description={COPY.pkg.emptyDesc} />
               ) : (
                 <ol className="stagger flex flex-col gap-2">
                   {live.map((s) => (
@@ -172,13 +176,11 @@ function SectionRow({ s }: { s: SectionView }) {
           {toPersianDigits(s.order)}. {s.title}
         </p>
         <p className="mt-0.5 text-xs text-text-secondary">
-          {s.mediaType === 'audio' ? 'صوتی' : 'ویدیو'} • {faDuration(s.durationSec)}
-          {s.percent > 0 && s.state !== 'completed' && ` • ${faPercent(s.percent)} دیده شده`}
+          {s.mediaType === 'audio' ? COPY.pkg.audio : COPY.pkg.video} • {faDuration(s.durationSec)}
+          {s.percent > 0 && s.state !== 'completed' && LINES.percentWatched(faPercent(s.percent))}
         </p>
         {locked && (
-          <p className="mt-0.5 text-xs text-muted-fg">
-            {s.lockReason ?? 'ابتدا قسمت قبل را کامل کنید.'}
-          </p>
+          <p className="mt-0.5 text-xs text-muted-fg">{s.lockReason ?? COPY.pkg.lockedHint}</p>
         )}
       </div>
       <StatusBadge status={s.state} />
@@ -186,7 +188,7 @@ function SectionRow({ s }: { s: SectionView }) {
   );
   if (locked)
     return (
-      <li title="ابتدا قسمت قبل را کامل کنید">
+      <li title={COPY.pkg.lockedHint}>
         <div aria-disabled="true">{body}</div>
       </li>
     );
@@ -200,7 +202,7 @@ function SectionRow({ s }: { s: SectionView }) {
           to={`/quiz/${s.id}`}
           className="pressable flex min-h-12 items-center justify-center gap-2 rounded-card border border-info/30 bg-info-light text-sm font-bold text-info-fg hover:shadow-sm"
         >
-          <ClipboardCheck className="size-4" aria-hidden /> آزمون این قسمت
+          <ClipboardCheck className="size-4" aria-hidden /> {COPY.pkg.sectionQuiz}
         </Link>
       )}
     </li>
