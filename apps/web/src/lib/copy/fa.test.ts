@@ -7,7 +7,7 @@ import {
   copyViolations,
   MAX_EMOJI_PER_BUBBLE,
   MAX_SENTENCES,
-  QUIZ_LINES,
+  LINES,
 } from './fa';
 
 /**
@@ -25,7 +25,7 @@ describe('PHASE-6 — copy quality (§6.4)', () => {
 
   it('every numbered line is actually covered by the samples', () => {
     const samples = allFormatSamples();
-    expect(samples.length).toBe(Object.keys(QUIZ_LINES).length);
+    expect(samples.length).toBe(Object.keys(LINES).length);
     for (const [, text] of samples) expect(text).toMatch(/[\u0600-\u06FF]/);
   });
 

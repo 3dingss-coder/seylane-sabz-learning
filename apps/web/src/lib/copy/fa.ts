@@ -118,6 +118,48 @@ export const COPY = {
     mentorRetry: 'بذار یه بار دیگه با هم مرور کنیم.',
   },
 
+  /** §6.2.7 — home (M1): one hero, a greeting by first name, and what is due. */
+  home: {
+    nextWork: 'کار بعدی تو',
+    nextWorkLabel: 'کار بعدی',
+    start: 'شروع',
+    resume: 'ادامه',
+    startQuiz: 'شروع آزمون',
+    allDone: 'همه آموزش‌ها را تمام کردی! 🎉',
+    allDoneNext: 'آموزش جدید که فعال شود، اینجا می‌بینی.',
+    noTraining: 'هنوز آموزشی ندارید',
+    goToCards: 'رفتن به کارت‌های من',
+    askSeyla: 'دربارهٔ هر محصول، برند یا اعتراض مشتری سؤال داری؟ از سیلا بپرس.',
+    totalProgress: 'پیشرفت کلی',
+    inProgress: 'در حال انجام',
+    fresh: 'جدید',
+    completed: 'تکمیل',
+    yourPoints: 'امتیاز شما',
+    myTraining: 'آموزش‌های من',
+    allFilter: 'همه',
+  },
+
+  /** §6.2.8 — profile (M11): settings speak plainly, and never blame. */
+  profile: {
+    title: 'پروفایل',
+    saved: 'ذخیره شد.',
+    passwordChanged: 'رمز عوض شد.',
+    fullName: 'نام و نام خانوادگی',
+    saveName: 'ذخیره نام',
+    masteryHeading: 'استادی برندها',
+    masteryNote: 'تاج سیلا با استادی بلندتر می‌شود — از ۰ تا ۳ پَر.',
+    soundHeading: 'صدای لحظه‌ها',
+    soundNote: 'پیش‌فرض خاموش است. فقط برای قبولی، خطا، جشن و پیوستگی — هیچ کلیک معمولی صدا ندارد.',
+    soundLabel: 'صدای لحظه‌ها',
+    passwordHeading: 'تغییر رمز',
+    currentPassword: 'رمز فعلی',
+    newPassword: 'رمز جدید',
+    passwordHint: 'حداقل ۸ نویسه',
+    passwordTooShort: 'رمز جدید باید حداقل ۸ نویسه باشد.',
+    changePassword: 'تغییر رمز',
+    signOut: 'خروج از حساب',
+  },
+
   /** Shared action labels — one verb, no decoration. */
   actions: {
     retry: 'تلاش دوباره',
@@ -173,10 +215,10 @@ export function allCopyStrings(
 }
 
 /**
- * §6.4 — lines that carry a number. The Persian still lives here so a copywriter never has to
- * open a component; `QuizPage` only passes formatted digits in.
+ * §6.4 — lines that carry a number. The Persian still lives here so a copywriter never has to open
+ * a component; the page only passes formatted digits in.
  */
-export const QUIZ_LINES = {
+export const LINES = {
   scoreSummary: (correct: string, total: string, score: string) =>
     `${correct} پاسخ درست از ${total} • نمره ${score}`,
   correctOfTotal: (correct: string, total: string) => `${correct} پاسخ درست از ${total}`,
@@ -189,6 +231,10 @@ export const QUIZ_LINES = {
   remainingLine: (remaining: string, max: string) => `• فرصت باقی‌مانده: ${remaining} از ${max}`,
   lastScoreLine: (score: string) => `• آخرین نمره: ${score}`,
   questionProgress: (index: string, total: string) => `سؤال ${index} از ${total}`,
+  memberSince: (date: string) => `عضو از ${date}`,
+  masteryLabel: (brand: string) => `استادی ${brand}`,
+  greeting: (firstName: string) => `سلام ${firstName} 👋`,
+  overdueWarning: (count: string) => `مهلت ${count} آموزش گذشته است. هر چه زودتر تمامش کن.`,
   answeredHint: (answered: string, total: string) =>
     `به همه سؤال‌ها پاسخ بده (${answered} از ${total}).`,
 } as const;
@@ -207,8 +253,8 @@ export const QUIZ_OPTION_LABEL: Record<string, string> = {
  * from the gate.
  */
 export function allFormatSamples(): Array<[path: string, text: string]> {
-  return Object.entries(QUIZ_LINES).map(([key, fn]) => [
-    `QUIZ_LINES.${key}`,
+  return Object.entries(LINES).map(([key, fn]) => [
+    `LINES.${key}`,
     (fn as (...args: string[]) => string)(...Array.from({ length: fn.length }, (_, i) => `۱${i}`)),
   ]);
 }

@@ -24,7 +24,7 @@ import {
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Character } from '@/components/character/Character';
-import { COPY, QUIZ_LINES, QUIZ_OPTION_LABEL } from '@/lib/copy/fa';
+import { COPY, LINES, QUIZ_OPTION_LABEL } from '@/lib/copy/fa';
 import { CelebrationScreen } from '@/components/learning/CelebrationScreen';
 import { playMoment } from '@/lib/sound';
 import { QueryState } from '@/components/common/QueryState';
@@ -247,7 +247,7 @@ function QuizFlow({
           <CelebrationScreen
             testId="quiz-result"
             title={COPY.quiz.packageDoneTitle}
-            subtitle={QUIZ_LINES.scoreSummary(
+            subtitle={LINES.scoreSummary(
               toPersianDigits(result.correctCount),
               toPersianDigits(result.total),
               faPercent(result.score),
@@ -305,21 +305,21 @@ function QuizFlow({
             {result.passed ? COPY.quiz.passedTitle : COPY.quiz.failedTitle}
           </h2>
           <p className="text-sm text-text-secondary">
-            {QUIZ_LINES.correctOfTotal(
+            {LINES.correctOfTotal(
               toPersianDigits(result.correctCount),
               toPersianDigits(result.total),
             )}{' '}
-            • {QUIZ_LINES.passScoreNote(faPercent(result.passScore))}
+            • {LINES.passScoreNote(faPercent(result.passScore))}
           </p>
           {result.pointsEarned > 0 && (
             <p className="animate-pop inline-flex items-center gap-1 rounded-full bg-accent-light px-3 py-1 text-sm font-bold text-accent-fg">
               <Sparkles className="size-4" aria-hidden />
-              {QUIZ_LINES.points(faNumber(result.pointsEarned))}
+              {LINES.points(faNumber(result.pointsEarned))}
             </p>
           )}
           {!result.passed && result.remainingAttempts > 0 && (
             <p className="text-sm text-text-secondary">
-              {QUIZ_LINES.attemptsLeft(toPersianDigits(result.remainingAttempts))}
+              {LINES.attemptsLeft(toPersianDigits(result.remainingAttempts))}
             </p>
           )}
         </Card>
@@ -376,7 +376,7 @@ function QuizFlow({
           <EmptyState
             title={COPY.quiz.passedBadge}
             description={
-              info.lastAttempt ? QUIZ_LINES.scoreNote(faPercent(info.lastAttempt.score)) : undefined
+              info.lastAttempt ? LINES.scoreNote(faPercent(info.lastAttempt.score)) : undefined
             }
           />
           <Button
@@ -407,13 +407,13 @@ function QuizFlow({
       body = (
         <>
           <Card className="flex flex-col gap-2 text-sm text-text">
-            <p>{QUIZ_LINES.questionCount(toPersianDigits(d.quiz.questionCount))}</p>
-            <p>{QUIZ_LINES.passScoreLine(faPercent(d.quiz.passScore))}</p>
+            <p>{LINES.questionCount(toPersianDigits(d.quiz.questionCount))}</p>
+            <p>{LINES.passScoreLine(faPercent(d.quiz.passScore))}</p>
             <p>
-              {QUIZ_LINES.remainingLine(toPersianDigits(info.remaining), toPersianDigits(info.max))}
+              {LINES.remainingLine(toPersianDigits(info.remaining), toPersianDigits(info.max))}
             </p>
             {info.lastAttempt && (
-              <p>{QUIZ_LINES.lastScoreLine(faPercent(info.lastAttempt.score))}</p>
+              <p>{LINES.lastScoreLine(faPercent(info.lastAttempt.score))}</p>
             )}
           </Card>
           <Button
@@ -448,7 +448,7 @@ function QuizFlow({
           className="flex-1"
         />
         <span className="text-sm font-bold text-text-secondary">
-          {QUIZ_LINES.questionProgress(toPersianDigits(idx + 1), toPersianDigits(questions.length))}
+          {LINES.questionProgress(toPersianDigits(idx + 1), toPersianDigits(questions.length))}
         </span>
       </div>
       <div
@@ -540,7 +540,7 @@ function QuizFlow({
       </div>
       {answered < questions.length && last && (
         <p className="text-center text-sm text-warning-fg">
-          {QUIZ_LINES.answeredHint(toPersianDigits(answered), toPersianDigits(questions.length))}
+          {LINES.answeredHint(toPersianDigits(answered), toPersianDigits(questions.length))}
         </p>
       )}
       <Modal

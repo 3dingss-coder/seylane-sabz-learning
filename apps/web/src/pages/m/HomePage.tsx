@@ -14,7 +14,7 @@ import {
 import { QueryState, StaleBanner } from '@/components/common/QueryState';
 import { Reveal } from '@/components/common/Reveal';
 import { Character } from '@/components/character/Character';
-import { COPY } from '@/lib/copy/fa';
+import { COPY, LINES } from '@/lib/copy/fa';
 import type { Expression } from '@/components/character/types';
 import { ProductImage } from '@/components/common/ProductImage';
 import { PackageCard } from '@/components/learning/PackageCard';
@@ -30,7 +30,11 @@ import { api } from '@/lib/api';
 import { track } from '@/lib/telemetry';
 import type { Nudge } from '@/lib/types';
 
-const ACTION_LABEL = { start: 'شروع', resume: 'ادامه', quiz: 'شروع آزمون' } as const;
+const ACTION_LABEL = {
+  start: COPY.home.start,
+  resume: COPY.home.resume,
+  quiz: COPY.home.startQuiz,
+} as const;
 
 /** M3 — Home («کار بعدی»): the single most important screen. */
 export function HomePage() {
@@ -61,8 +65,10 @@ export function HomePage() {
   return (
     <div className="stagger flex flex-col gap-4">
       <div className="min-w-0">
-        <p className="text-sm font-bold text-text-secondary">سلام {user?.name.split(' ')[0]} 👋</p>
-        <h1 className="display text-3xl text-text">کار بعدی تو</h1>
+        <p className="text-sm font-bold text-text-secondary">
+          {LINES.greeting(user?.name.split(' ')[0] ?? '')}
+        </p>
+        <h1 className="display text-3xl text-text">{COPY.home.nextWork}</h1>
       </div>
       <StaleBanner
         show={home.isError && home.data !== undefined}
@@ -81,9 +87,9 @@ export function HomePage() {
         empty={
           <EmptyState
             character="seyla"
-            title="هنوز آموزشی ندارید"
+            title={COPY.home.noTraining}
             description={COPY.empty.home}
-            actionText="رفتن به کارت‌های من"
+            actionText={COPY.home.goToCards}
             onAction={() => nav('/cards')}
           />
         }
@@ -110,7 +116,7 @@ export function HomePage() {
                 />
                 <p className="relative mb-3 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-bold text-white">
                   <Sparkles className="size-3.5" aria-hidden />
-                  کار بعدی
+                  {COPY.home.nextWorkLabel}
                 </p>
                 <div className="relative flex gap-3">
                   <ProductImage
@@ -160,10 +166,8 @@ export function HomePage() {
               <Card tone="brand" className="flex items-center gap-3">
                 <TrophyIllustration className="h-20 shrink-0" />
                 <div>
-                  <p className="font-bold text-text">همه آموزش‌ها را تمام کردی! 🎉</p>
-                  <p className="text-sm text-text-secondary">
-                    آموزش جدید که فعال شود، اینجا می‌بینی.
-                  </p>
+                  <p className="font-bold text-text">{COPY.home.allDone}</p>
+                  <p className="text-sm text-text-secondary">{COPY.home.allDoneNext}</p>
                 </div>
               </Card>
             )}
@@ -180,32 +184,36 @@ export function HomePage() {
             >
               <Character id="seyla" expression={seylaMood} size="md" />
               <span className="relative min-w-0 flex-1 rounded-card rounded-ss-none bg-surface px-4 py-3 text-sm font-bold leading-7 text-text shadow-xs">
-                {topNudge?.message ??
-                  'دربارهٔ هر محصول، برند یا اعتراض مشتری سؤال داری؟ از سیلا بپرس.'}
+                {topNudge?.message ?? COPY.home.askSeyla}
               </span>
             </Link>
 
             <Reveal>
-            <Card chunky className="flex flex-col gap-3">
-              <div className="flex items-center gap-4">
-                <ProgressRing value={d.totalProgress} size={76} stroke={8} label="پیشرفت کلی" />
-                <div className="grid flex-1 grid-cols-3 gap-2 text-center">
-                  <Stat label="در حال انجام" value={d.counts.inProgress} />
-                  <Stat label="جدید" value={d.counts.new} />
-                  <Stat label="تکمیل" value={d.counts.completed} />
+              <Card chunky className="flex flex-col gap-3">
+                <div className="flex items-center gap-4">
+                  <ProgressRing
+                    value={d.totalProgress}
+                    size={76}
+                    stroke={8}
+                    label={COPY.home.totalProgress}
+                  />
+                  <div className="grid flex-1 grid-cols-3 gap-2 text-center">
+                    <Stat label={COPY.home.inProgress} value={d.counts.inProgress} />
+                    <Stat label={COPY.home.fresh} value={d.counts.new} />
+                    <Stat label={COPY.home.completed} value={d.counts.completed} />
+                  </div>
                 </div>
-              </div>
-              <Link
-                to="/cards"
-                className="pressable flex min-h-12 items-center justify-between rounded-card bg-mint px-3 text-text"
-              >
-                <span className="flex items-center gap-2 text-sm font-bold">
-                  <Trophy className="size-5 text-primary" aria-hidden />
-                  امتیاز شما
-                </span>
-                <CoinChip value={d.pointsBalance} />
-              </Link>
-            </Card>
+                <Link
+                  to="/cards"
+                  className="pressable flex min-h-12 items-center justify-between rounded-card bg-mint px-3 text-text"
+                >
+                  <span className="flex items-center gap-2 text-sm font-bold">
+                    <Trophy className="size-5 text-primary" aria-hidden />
+                    {COPY.home.yourPoints}
+                  </span>
+                  <CoinChip value={d.pointsBalance} />
+                </Link>
+              </Card>
             </Reveal>
 
             {d.counts.overdue > 0 && (
@@ -214,20 +222,25 @@ export function HomePage() {
                 className="flex items-center gap-2 rounded-card border border-danger/30 bg-danger-light p-3 text-sm text-danger-fg"
               >
                 <BellRing className="size-5" aria-hidden />
-                مهلت {toPersianDigits(d.counts.overdue)} آموزش گذشته است. هر چه زودتر تمامش کن.
+                {LINES.overdueWarning(toPersianDigits(d.counts.overdue))}
               </div>
             )}
 
-            <Reveal as="section" aria-labelledby="my-trainings" className="flex flex-col gap-3" delayMs={60}>
+            <Reveal
+              as="section"
+              aria-labelledby="my-trainings"
+              className="flex flex-col gap-3"
+              delayMs={60}
+            >
               <div className="flex items-center justify-between">
                 <h2 id="my-trainings" className="display text-xl text-text">
-                  آموزش‌های من
+                  {COPY.home.myTraining}
                 </h2>
                 <Link
                   to="/learn"
                   className="flex min-h-12 items-center gap-0.5 px-2 text-sm font-bold text-primary"
                 >
-                  همه
+                  {COPY.home.allFilter}
                   <ChevronLeft className="size-4" aria-hidden />
                 </Link>
               </div>
