@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCheck, MessageSquareText } from 'lucide-react';
 import { Button, EmptyState, TableSkeleton } from '@/components/ui';
+import { COPY } from '@/lib/copy/fa';
 import { Tabs } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
@@ -36,7 +37,7 @@ export function MessagesPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title="اعلان‌ها و پیام‌ها"
+        title={COPY.messages.title}
         actions={
           tab === 'notifications' && (n.data?.unread ?? 0) > 0 ? (
             <Button
@@ -45,18 +46,18 @@ export function MessagesPage() {
               onClick={() => readAll.mutate()}
               icon={<CheckCheck className="size-4" aria-hidden />}
             >
-              همه خوانده شد
+              {COPY.messages.markAllRead}
             </Button>
           ) : undefined
         }
       />
       <Tabs
-        label="نوع"
+        label={COPY.messages.typeLabel}
         value={tab}
         onChange={setTab}
         items={[
-          { value: 'notifications', label: 'اعلان‌ها', count: n.data?.unread },
-          { value: 'messages', label: 'پیام مدیر', count: unreadMsgs },
+          { value: 'notifications', label: COPY.messages.notifications, count: n.data?.unread },
+          { value: 'messages', label: COPY.messages.managerMessages, count: unreadMsgs },
         ]}
       />
       {tab === 'notifications' ? (
@@ -64,7 +65,15 @@ export function MessagesPage() {
           query={n}
           loading={<TableSkeleton rows={5} />}
           isEmpty={(d) => d.items.length === 0}
-          empty={<EmptyState title="اعلانی نداری" icon={<Bell className="size-8" />} />}
+          empty={
+            <EmptyState
+              character="seyla"
+              title={COPY.messages.emptyNotifications}
+              description={COPY.empty.messages}
+              actionText={COPY.messages.goToPath}
+              onAction={() => nav('/learn')}
+            />
+          }
         >
           {(d) => (
             <ul className="stagger flex flex-col gap-2">
@@ -97,7 +106,10 @@ export function MessagesPage() {
                       <p className="mt-1 text-xs text-muted-fg">{faRelative(it.createdAt)}</p>
                     </div>
                     {!it.readAt && (
-                      <span className="relative mt-2 flex size-2 shrink-0" aria-label="خوانده نشده">
+                      <span
+                        className="relative mt-2 flex size-2 shrink-0"
+                        aria-label={COPY.messages.unread}
+                      >
                         <span
                           aria-hidden
                           className="animate-pulse-dot absolute inset-0 rounded-full bg-primary"
@@ -118,8 +130,11 @@ export function MessagesPage() {
           isEmpty={(d) => d.length === 0}
           empty={
             <EmptyState
-              title="پیامی از مدیر نداری"
-              icon={<MessageSquareText className="size-8" />}
+              character="seyla"
+              title={COPY.messages.emptyMessages}
+              description={COPY.messages.messagesNote}
+              actionText={COPY.messages.goHome}
+              onAction={() => nav('/')}
             />
           }
         >
@@ -147,7 +162,7 @@ export function MessagesPage() {
                         {it.fromName}
                         {it.type === 'note' && (
                           <span className="ms-2 text-xs font-normal text-text-secondary">
-                            یادداشت روی آموزش
+                            {COPY.messages.noteOnTraining}
                           </span>
                         )}
                       </p>

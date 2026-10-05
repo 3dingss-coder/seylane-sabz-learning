@@ -14,6 +14,10 @@ import { myNudges } from '../services/mentor-rules';
 import * as notify from '../services/notify';
 import * as reports from '../services/reports';
 import * as rewards from '../services/rewards';
+import * as gamification from '../services/gamification';
+import * as coinSvc from '../services/coin';
+import * as spaced from '../services/spaced';
+import * as streakSvc from '../services/streak';
 import * as users from '../services/users';
 
 /** Client-side analytics events that the app may report (server validates name). */
@@ -149,6 +153,62 @@ export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
     '/me/points',
     h(async (req) => rewards.myPoints(d, me(req).id)),
   );
+  // ── PHASE-3 — موتور انگیزش (پیوستگی · مأموریت‌ها · مرور هوشمند · سکه) ──────────────
+  // One call for the whole motivation panel; streak data is only ever served here (G-03).
+  r.get(
+    '/me/gamification',
+    h(async (req) => gamification.myGamification(d, uid(req))),
+  );
+  r.get(
+    '/me/coins',
+    h(async (req) => coinSvc.myCoins(d, uid(req))),
+  );
+  r.post(
+    '/me/coins/redeem',
+    rateLimit(limiter, 'redeem', 10, 60_000, uid),
+    h(async (req) => {
+      const { code } = parse(coinSvc.redeemSchema, req.body);
+      const out = await coinSvc.redeemCoin(d, uid(req), code);
+      if (!out.ok)
+        throw new ApiError(
+          out.reason === 'insufficient_balance' ? 'VALIDATION' : 'NOT_FOUND',
+          out.reason === 'insufficient_balance'
+            ? 'سکه‌ات برای این کالا کافی نیست.'
+            : 'این کالا در فهرست پاداش‌ها نیست.',
+        );
+      return out;
+    }),
+  );
+  r.get(
+    '/me/reviews',
+    h(async (req) => spaced.dueReviews(d, uid(req))),
+  );
+  r.post(
+    '/me/reviews/:id/answer',
+    rateLimit(limiter, 'review', 30, 60_000, uid),
+    h(async (req) => {
+      const { answerKey } = parse(spaced.reviewAnswerSchema, req.body);
+      try {
+        return await spaced.answerReview(d, uid(req), String(req.params.id), answerKey);
+      } catch {
+        throw new ApiError('NOT_FOUND', 'این مرور در فهرست امروز تو نیست.');
+      }
+    }),
+  );
+  r.post(
+    '/me/streak/leave',
+    h(async (req) => {
+      const { days } = parse(streakSvc.leaveSchema, req.body);
+      const out = await streakSvc.requestLeave(d, uid(req), days);
+      if (!out.ok)
+        throw new ApiError(
+          'VALIDATION',
+          out.reason === 'too_long' ? 'مرخصی حداکثر ۷ روز است.' : 'این فصل یک بار مرخصی گرفتی.',
+        );
+      return out;
+    }),
+  );
+
   r.get(
     '/me/badges',
     h(async (req) => rewards.myBadges(d, me(req).id)),

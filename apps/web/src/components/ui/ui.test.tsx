@@ -31,9 +31,12 @@ describe('Button', () => {
     expect(btn).toBeDisabled();
     expect(btn).toHaveAttribute('aria-busy', 'true');
   });
-  it('meets 48px minimum touch height class', () => {
-    render(<Button>ورود</Button>);
-    expect(screen.getByRole('button').className).toContain('min-h-12');
+  it('meets the 48px minimum touch height (md = 52px, lg = 56px)', () => {
+    const { rerender } = render(<Button>ورود</Button>);
+    // min-h-13 = 3.25rem = 52px — above the §16.5 floor of 48px
+    expect(screen.getByRole('button').className).toContain('min-h-13');
+    rerender(<Button size="lg">ورود</Button>);
+    expect(screen.getByRole('button').className).toContain('min-h-14');
   });
 });
 
@@ -66,7 +69,7 @@ describe('Card / Skeleton / States', () => {
     const onRetry = vi.fn();
     render(<ErrorState onRetry={onRetry} />);
     expect(screen.getByRole('alert')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'تلاش مجدد' }));
+    fireEvent.click(screen.getByRole('button', { name: 'تلاش دوباره' }));
     expect(onRetry).toHaveBeenCalled();
   });
 });

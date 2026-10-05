@@ -1,4 +1,20 @@
-import type { HomeData, Me, PackageSummary, QuizData, SectionDetail } from '@/lib/types';
+import type {
+  BadgeView,
+  CoinWallet,
+  Gamification,
+  HomeData,
+  ManagerNote,
+  Me,
+  MessageItem,
+  NotificationItem,
+  PackageDetail,
+  PackageSummary,
+  PointsData,
+  QuizData,
+  SectionDetail,
+  SectionView,
+} from '@/lib/types';
+import type { CatalogManifest } from '@/lib/catalog-manifest';
 
 export const marketer: Me = {
   id: 'u1',
@@ -142,4 +158,237 @@ export const quiz: QuizData = {
     pendingRetake: null,
     lastAttempt: null,
   },
+};
+
+/** PHASE-7 §7.2 — fixtures for the remaining marketer surfaces, so axe can cover all of them. */
+export const sections: SectionView[] = [
+  {
+    id: 'seed-pkg-formi-s1',
+    order: 1,
+    title: 'معرفی کلی محصول فورمی',
+    mediaType: 'audio',
+    durationSec: 418,
+    quizId: 'seed-pkg-formi-s1-quiz',
+    percent: 100,
+    mediaCompleted: true,
+    quizPassed: false,
+    lastPositionSec: 0,
+    state: 'quiz',
+    lockReason: null,
+    archived: false,
+  },
+  {
+    id: 'seed-pkg-formi-s2',
+    order: 2,
+    title: 'مزیت‌ها در برابر رقیب',
+    mediaType: 'video',
+    durationSec: 527,
+    quizId: 'seed-pkg-formi-s2-quiz',
+    percent: 0,
+    mediaCompleted: false,
+    quizPassed: false,
+    lastPositionSec: 0,
+    state: 'locked',
+    lockReason: 'ابتدا قسمت قبل را کامل کنید.',
+    archived: false,
+  },
+];
+
+export const notes: ManagerNote[] = [
+  {
+    id: 'n1',
+    body: 'روی مزیت درمانی تأکید کن.',
+    fromName: 'مدیر تیم',
+    createdAt: '2026-09-20T08:00:00.000Z',
+  },
+];
+
+export const packageDetail: PackageDetail = { package: pkg, sections, notes };
+
+export const points: PointsData = {
+  balance: 240,
+  ledger: [
+    {
+      id: 'p1',
+      amount: 120,
+      reason: 'on_time_completion',
+      refId: 'seed-pkg-formi-s1',
+      createdAt: '2026-09-21T08:00:00.000Z',
+    },
+    {
+      id: 'p2',
+      amount: 120,
+      reason: 'first_pass_quiz',
+      refId: 'seed-pkg-formi-s1-quiz',
+      createdAt: '2026-09-22T08:00:00.000Z',
+    },
+  ],
+};
+
+export const badges: BadgeView[] = [
+  {
+    id: 'b1',
+    code: 'first_package',
+    title: 'اولین بسته',
+    description: 'اولین بستهٔ آموزشی را تمام کردی',
+    icon: 'package',
+    earned: true,
+    earnedAt: '2026-09-22T08:00:00.000Z',
+  },
+  {
+    id: 'b2',
+    code: 'streak_7',
+    title: 'هفت روز پیوسته',
+    description: 'هفت روز پشت‌سرهم مرور کردی',
+    icon: 'flame',
+    earned: false,
+    earnedAt: null,
+  },
+];
+
+export const messages: MessageItem[] = [
+  {
+    id: 'm1',
+    type: 'message',
+    body: 'این هفته روی فورمی تمرکز کنیم.',
+    packageId: pkg.id,
+    fromName: 'مدیر تیم',
+    readAt: null,
+    createdAt: '2026-09-23T08:00:00.000Z',
+  },
+];
+
+export const notifications: NotificationItem[] = [
+  {
+    id: 'nt1',
+    type: 'deadline',
+    title: 'مهلت نزدیک',
+    body: 'مهلت آموزش فورمی نزدیک است.',
+    actionRef: pkg.id,
+    readAt: null,
+    createdAt: '2026-09-23T09:00:00.000Z',
+  },
+];
+
+/**
+ * PHASE-3 motivation payload. Shape taken from a live `GET /v1/me/gamification`, not invented:
+ * an earlier hand-written mock omitted `reviews` entirely, which crashed `ReviewDeck`
+ * (`g.data.reviews.items`) with an unhandled TypeError that vitest reported *after* the run,
+ * so every assertion still passed while the suite exited 1.
+ */
+export const gamification: Gamification = {
+  streak: {
+    current: 4,
+    longest: 6,
+    shields: 1,
+    maxShields: 2,
+    repairUntil: null,
+    onLeaveUntil: null,
+    nextMilestone: 7,
+    daysToMilestone: 3,
+  },
+  quests: {
+    day: '2026-09-23',
+    total: 3,
+    completed: 1,
+    quests: [
+      {
+        kind: 'stations',
+        title: '۲ ایستگاه را تمام کن',
+        progress: 2,
+        target: 2,
+        coinReward: 20,
+        done: true,
+        chest: 'bronze',
+        chestCoins: 10,
+      },
+      {
+        kind: 'perfect_duel',
+        title: 'یک دوئل را بدون غلط ببر',
+        progress: 0,
+        target: 1,
+        coinReward: 30,
+        done: false,
+        chest: null,
+        chestCoins: 0,
+      },
+      {
+        kind: 'reviews',
+        title: '۴ مرور امروزت را انجام بده',
+        progress: 1,
+        target: 4,
+        coinReward: 25,
+        done: false,
+        chest: null,
+        chestCoins: 0,
+      },
+    ],
+  },
+  reviews: {
+    due: 1,
+    cap: 7,
+    items: [
+      {
+        questionId: 'q1',
+        quizId: 'seed-pkg-formi-s1-quiz',
+        sectionId: 'seed-pkg-formi-s1',
+        packageId: pkg.id,
+        halfLifeDays: 3,
+        nextReviewAt: '2026-09-23T08:00:00.000Z',
+        stem: 'مادهٔ مؤثرهٔ فورمی کدام است؟',
+        options: [
+          { key: 'a', text: 'هیالورونیک اسید' },
+          { key: 'b', text: 'ویتامین C' },
+        ],
+      },
+    ],
+  },
+  coins: { balance: 60, lifetime: 120 },
+  mastery: { evaluated: 6, mastered: 1 },
+};
+
+/** `GET /v1/me/coins` — key names taken from the live endpoint (`catalog`, not `catalogue`). */
+export const coinWallet: CoinWallet = {
+  balance: 60,
+  lifetime: 120,
+  catalog: [
+    {
+      code: 'tester_sample',
+      title: 'نمونهٔ تستر اضافه',
+      price: 200,
+      fulfilment: 'physical',
+      note: 'ابزار کار واقعی در ویزیت حضوری.',
+    },
+  ],
+  ledger: [
+    {
+      id: 'l1',
+      amount: 60,
+      reason: 'station_completed',
+      refId: 'seed-pkg-formi-s1',
+      createdAt: '2026-09-22T08:00:00.000Z',
+    },
+  ],
+  redemptions: [],
+};
+
+/** `GET /catalog/manifest.json` — the real brand mirror the gallery renders. */
+export const catalogManifest: CatalogManifest = {
+  brands: [
+    {
+      id: 'brand-formi',
+      name: 'فورمی',
+      nameLatin: 'Formi',
+      sortOrder: 1,
+      logoUrl: '/catalog/brands/formi.svg',
+    },
+  ],
+  products: [
+    {
+      id: 'prod-formi-kit',
+      brandId: 'brand-formi',
+      name: 'کیت درمانی فورمی',
+      imageUrl: '/catalog/products/formi-kit.png',
+    },
+  ],
 };

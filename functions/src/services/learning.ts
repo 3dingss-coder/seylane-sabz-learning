@@ -27,6 +27,7 @@ import {
 import { createNudge } from './mentor-rules';
 import { notifyTemplate } from './notify';
 import { awardPoints, evaluateBadges } from './rewards';
+import { onStationCompleted, onDuelSubmitted } from './gamification';
 
 const LOCKED = 'این قسمت هنوز قفل است. ابتدا قسمت قبل را کامل کنید و در آزمون آن قبول شوید.';
 
@@ -71,7 +72,11 @@ export async function listMyPackages(
   return packages.filter((p) => !status || p.status === status).map(stripSections);
 }
 
-async function packageForUser(d: Deps, user: Doc<User>, packageId: string): Promise<PackageView> {
+export async function packageForUser(
+  d: Deps,
+  user: Doc<User>,
+  packageId: string,
+): Promise<PackageView> {
   const { packages } = await loadUserLearning(d, user);
   const p = packages.find((x) => x.id === packageId);
   if (!p) throw new ApiError('NOT_FOUND', 'این آموزش برای شما فعال نیست.');
@@ -370,6 +375,10 @@ export async function recordProgress(
       sectionId,
       elapsedSec: result.next.playedSeconds,
     });
+    // PHASE-3: a completed station is the only thing that counts a streak day (G-02), feeds the
+    // daily quests, pays coins and re-evaluates mastery. AC-01 is satisfied upstream: this branch
+    // is only reachable through the anti-cheat heartbeat path.
+    await onStationCompleted(d, user, sectionId, pkg.id);
   }
   return {
     percent: result.next.percent,
@@ -705,6 +714,17 @@ export async function submitAttempt(
   let packageCompleted = false;
   let pointsEarned = 0;
   const { section, pkg } = await sectionIndex(d, a.sectionId);
+
+  // PHASE-3 §3.4: every submitted answer feeds the per-question memory model (pass or fail),
+  // and a pass pays the duel reward. Spaced reviews are worth more than a first pass (G-05).
+  await onDuelSubmitted(d, user, {
+    quizId: a.quizId,
+    sectionId: a.sectionId,
+    packageId: pkg.id,
+    perQuestion: g.perQuestion,
+    passed: g.passed,
+    attemptNumber: a.attemptNumber,
+  });
 
   if (g.passed) {
     const view = await packageForUser(d, user, pkg.id);

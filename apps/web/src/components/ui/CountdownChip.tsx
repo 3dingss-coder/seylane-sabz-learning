@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlarmClock, Clock } from 'lucide-react';
+import { COPY } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { getCountdown, type CountdownTone } from '@/lib/countdown';
 
@@ -20,10 +21,10 @@ const STYLES: Record<CountdownTone, string> = {
 };
 
 const PREFIX: Record<CountdownTone, string> = {
-  normal: 'مهلت',
-  warning: 'مهلت نزدیک',
-  danger: 'فوری',
-  overdue: 'مهلت گذشته',
+  normal: COPY.countdown.normal,
+  warning: COPY.countdown.warning,
+  danger: COPY.countdown.danger,
+  overdue: COPY.countdown.overdue,
 };
 
 export function CountdownChip({ deadline, warningHours, className, now }: CountdownChipProps) {
@@ -40,7 +41,7 @@ export function CountdownChip({ deadline, warningHours, className, now }: Countd
   return (
     <span
       role="timer"
-      aria-live="off"
+      aria-live="polite"
       aria-label={state.spoken}
       className={cn(
         'inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-bold',

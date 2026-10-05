@@ -2,6 +2,7 @@
 // (Order/Customer/Product skeletons → generic Skeleton + learning-domain presets).
 // Design refresh: shimmer highlight (transform only) instead of a pulsing fade.
 import type { ReactNode } from 'react';
+import { COPY } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { Card } from './Card';
 
@@ -39,7 +40,7 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
 
 /** Wrapper that exposes a single accessible "loading" status for a skeleton region. */
 export function LoadingRegion({
-  label = 'در حال بارگذاری…',
+  label = COPY.a11y.loading,
   children,
 }: {
   label?: string;

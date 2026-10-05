@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Mic, MicOff, PhoneOff, Volume2 } from 'lucide-react';
 import { Modal, useToast } from '@/components/ui';
 import { api } from '@/lib/api';
+import { COPY, LINES } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { errMsg } from '@/lib/errors';
 import { qk } from '@/lib/queries';
@@ -20,13 +21,13 @@ type CallState =
   'idle' | 'connecting' | 'listening' | 'recording' | 'thinking' | 'speaking' | 'ended';
 
 const STATE_LABEL: Record<CallState, string> = {
-  idle: 'برای شروع تماس، دکمه میکروفن را بزن',
-  connecting: 'در حال وصل شدن به منتور…',
-  listening: 'بگو، گوش می‌دهم…',
-  recording: 'ضبط می‌کنم… برای ارسال، دوباره بزن',
-  thinking: 'منتور در حال فکر کردن است…',
-  speaking: 'منتور جواب می‌دهد…',
-  ended: 'تماس تمام شد',
+  idle: COPY.voice.idle,
+  connecting: COPY.voice.connecting,
+  listening: COPY.voice.listening,
+  recording: COPY.voice.recording,
+  thinking: COPY.voice.thinking,
+  speaking: COPY.voice.speaking,
+  ended: COPY.voice.ended,
 };
 
 /**
@@ -143,7 +144,7 @@ export function VoiceCallSheet({
 
   const onMic = useCallback(async () => {
     if (!recorder) {
-      toast.show({ type: 'error', message: 'مرورگر شما از ضبط صدا پشتیبانی نمی‌کند.' });
+      toast.show({ type: 'error', message: COPY.voice.noRecordingSupport });
       return;
     }
     if (state === 'recording') {
@@ -166,7 +167,7 @@ export function VoiceCallSheet({
     } catch {
       toast.show({
         type: 'error',
-        message: 'دسترسی به میکروفن داده نشد. اجازه بده و دوباره تلاش کن.',
+        message: COPY.voice.micDenied,
       });
       setState('idle');
     }
@@ -205,7 +206,7 @@ export function VoiceCallSheet({
   const active = state !== 'ended';
 
   return (
-    <Modal open onClose={() => void hangUp()} title="تماس صوتی با منتور" size="md">
+    <Modal open onClose={() => void hangUp()} title={COPY.voice.title} size="md">
       <div className="flex flex-col items-center gap-4 py-2">
         <div
           className={cn(
@@ -240,17 +241,21 @@ export function VoiceCallSheet({
                   t.role === 'user' ? 'text-text-secondary' : 'text-text',
                 )}
               >
-                <span className="font-bold">{t.role === 'user' ? 'شما: ' : 'منتور: '}</span>
+                <span className="font-bold">
+                  {t.role === 'user' ? COPY.voice.youPrefix : COPY.voice.mentorPrefix}
+                </span>
                 {t.text}
               </p>
             ))}
             {last?.sources.length ? (
               <p className="text-xs text-text-secondary">
-                منبع: {last.sources.map((s) => s.title).join('، ')}
+                {LINES.sources(
+                  last.sources.map((s) => s.title).join(COPY.punctuation.listSeparator),
+                )}
               </p>
             ) : null}
             {last?.nextAction?.label ? (
-              <p className="text-xs text-primary">پیشنهاد بعدی: {last.nextAction.label}</p>
+              <p className="text-xs text-primary">{LINES.nextSuggestion(last.nextAction.label)}</p>
             ) : null}
           </div>
         )}
@@ -260,7 +265,7 @@ export function VoiceCallSheet({
             type="button"
             onClick={() => void onMic()}
             disabled={!active || !micSupported()}
-            aria-label={state === 'recording' ? 'پایان ضبط و ارسال' : 'شروع ضبط'}
+            aria-label={state === 'recording' ? COPY.voice.stopAndSend : COPY.voice.startRecording}
             className={cn(
               'flex size-16 items-center justify-center rounded-full text-white shadow-sm disabled:opacity-40',
               state === 'recording' ? 'bg-danger' : 'bg-primary',
@@ -271,10 +276,10 @@ export function VoiceCallSheet({
           <button
             type="button"
             onClick={() => void hangUp()}
-            aria-label="پایان تماس"
+            aria-label={COPY.voice.endCall}
             className="flex min-h-12 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm text-danger"
           >
-            <PhoneOff className="size-5" aria-hidden /> پایان تماس
+            <PhoneOff className="size-5" aria-hidden /> {COPY.voice.endCall}
           </button>
         </div>
 
@@ -285,11 +290,9 @@ export function VoiceCallSheet({
             onChange={(e) => setStoreTranscript(e.target.checked)}
             className="size-4"
           />
-          متن این تماس برای مرور بعدی ذخیره شود
+          {COPY.voice.saveTranscript}
         </label>
-        <p className="text-center text-xs text-text-secondary">
-          صدای شما فقط برای تبدیل به متن ارسال می‌شود؛ پاسخ‌ها از محتوای تأییدشده‌ی شرکت است.
-        </p>
+        <p className="text-center text-xs text-text-secondary">{COPY.voice.privacyNote}</p>
       </div>
     </Modal>
   );

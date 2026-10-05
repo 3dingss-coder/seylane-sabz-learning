@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
-import { home, marketer, quiz, sectionDetail } from '@/test/fixtures';
+import { home, marketer, pkg, quiz, sectionDetail } from '@/test/fixtures';
 import { mockApi } from '@/test/mockApi';
 import { renderApp } from '@/test/renderApp';
 
@@ -221,6 +221,15 @@ describe('M7/M8 quiz', () => {
     renderApp('/quiz/seed-pkg-formi-s1');
     fireEvent.click(await screen.findByTestId('quiz-start'));
     expect(await screen.findByText('این قسمت درباره کدام محصول است؟')).toBeInTheDocument();
+    // The <legend> IS the question, so it names the radio group. This broke once: the stem was
+    // moved into Simin's speech bubble and the legend was left as a generic «سؤال آزمون», which
+    // meant a screen-reader user tabbing into the options heard the generic label instead of the
+    // question — and Playwright's `locator('legend', { hasText: stem })` stopped matching. The
+    // bubble look is kept by styling the legend itself; Simin's name rides along in front so the
+    // group announces who is asking.
+    expect(
+      screen.getByRole('group', { name: /این قسمت درباره کدام محصول است؟/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /بعدی/ })).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/کیت درمانی فورمی/));
     fireEvent.click(screen.getByRole('button', { name: /بعدی/ }));
@@ -239,6 +248,51 @@ describe('M7/M8 quiz', () => {
     expect(screen.getByTestId('quiz-result')).toBeInTheDocument();
     const submit = calls.find((c) => c.key === 'POST /v1/me/attempts/at1/submit');
     expect(submit?.body).toEqual({ answers: { q1: 'a', q2: 'a' } });
+  });
+
+  // The peak path (PHASE-4 §4.7 celebration) was not covered by any unit test, and the passing
+  // title was replaced wholesale by the package-complete one: on the last quiz of a package the
+  // screen said «بسته تمام شد!» and never told the marketer they had passed. Playwright caught it.
+  it('still says the quiz was passed when that same submit also completes the package', async () => {
+    mockApi({
+      ...loggedIn(),
+      'GET /v1/me/sections/seed-pkg-formi-s1': () => ({ data: sectionDetail }),
+      'GET /v1/me/quizzes/seed-pkg-formi-s1-quiz': () => ({ data: quiz }),
+      'POST /v1/me/quizzes/seed-pkg-formi-s1-quiz/attempts': () => ({
+        status: 201,
+        data: { attemptId: 'at1', attemptNumber: 1, resumed: false },
+      }),
+      'POST /v1/me/attempts/at1/submit': () => ({
+        data: {
+          attemptId: 'at1',
+          attemptNumber: 1,
+          score: 100,
+          passed: true,
+          passScore: 70,
+          correctCount: 2,
+          total: 2,
+          remainingAttempts: 0,
+          nextAction: 'package_complete',
+          packageCompleted: true,
+          pointsEarned: 100,
+          review: [
+            { questionId: 'q1', correct: true, explanation: '' },
+            { questionId: 'q2', correct: true, explanation: '' },
+          ],
+        },
+      }),
+    });
+    renderApp('/quiz/seed-pkg-formi-s1');
+    fireEvent.click(await screen.findByTestId('quiz-start'));
+    fireEvent.click(await screen.findByLabelText(/کیت درمانی فورمی/));
+    fireEvent.click(screen.getByRole('button', { name: /بعدی/ }));
+    fireEvent.click(await screen.findByLabelText(/فورمی/));
+    fireEvent.click(screen.getByTestId('quiz-submit'));
+    fireEvent.click(await screen.findByTestId('quiz-confirm'));
+    const result = await screen.findByTestId('quiz-result');
+    expect(result).toHaveTextContent('قبول شدی');
+    // …and the package milestone is still announced, not dropped in the other direction.
+    expect(result).toHaveTextContent('بسته هم کامل شد');
   });
 
   it('opens the quiz even before the media is completed', async () => {
@@ -322,5 +376,23 @@ describe('panels live in the same app under /admin', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ورود با حساب ادمین' }));
     expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
     expect(localStorage.getItem('ssl.refresh')).toBeNull();
+  });
+});
+
+describe('M4 — آموزش‌ها keeps the status tabs', () => {
+  // The tabs are what /learn has always shown. The redesign made the learning path the default
+  // view and left the tabs inside the list branch, so on /learn the «جدید» tab simply was not in
+  // the DOM — Playwright's getByRole('tab', { name: /جدید/ }) timed out at journey.spec.ts:164.
+  it('renders the status tabs while the path view is the default, and filters when picked', async () => {
+    mockApi({
+      ...loggedIn(),
+      'GET /v1/me/packages': () => ({ data: [{ ...pkg, status: 'new' }] }),
+      'GET /v1/me/home': () => ({ data: home }),
+    });
+    renderApp('/learn');
+    // The path view is the default, so the tab has to be there anyway.
+    const tab = await screen.findByRole('tab', { name: /جدید/ });
+    fireEvent.click(tab);
+    expect(await screen.findByTestId('package-card')).toBeInTheDocument();
   });
 });

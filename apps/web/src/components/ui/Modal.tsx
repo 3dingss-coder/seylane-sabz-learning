@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { COPY } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { usePresence } from '@/lib/motion';
 
@@ -89,6 +90,9 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
       <div
         aria-hidden
         className={cn(
+          // DESIGN-REFRESH §6 keeps this one blur on purpose: the scrim is transient (only while
+          // the modal is open), so nothing re-blurs while the page scrolls. The §7.3 ban is about
+          // sticky/scrolling surfaces — see scripts/check-perf-budget.mjs.
           'absolute inset-0 bg-scrim backdrop-blur-sm',
           closing ? 'animate-fade-out' : 'animate-fade-in',
         )}
@@ -117,7 +121,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }: M
           <button
             type="button"
             onClick={onClose}
-            aria-label="بستن"
+            aria-label={COPY.a11y.close}
             className="pressable flex size-12 items-center justify-center rounded-input text-muted-fg hover:bg-background hover:text-text"
           >
             <X className="size-5" aria-hidden />

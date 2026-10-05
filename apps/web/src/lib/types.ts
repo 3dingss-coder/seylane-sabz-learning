@@ -335,6 +335,14 @@ export type InterventionRuleId =
   | 'B11'
   | 'B12';
 
+/** GET /me/mentor/behavior — the mentor's read of this marketer's learning state (real endpoint). */
+export interface BehaviorBrief {
+  state: MentorBrief['state'];
+  signals: MentorBrief['signals'];
+  nextAction: { label: string; actionRef: string | null; reason: string } | null;
+  escalateToManager: boolean;
+}
+
 export interface MentorBrief {
   state: {
     momentum: Momentum;
@@ -781,4 +789,98 @@ export interface MentorReport {
   satisfaction: number | null;
   byOutcome: Record<string, number>;
   users: number;
+}
+
+// ── PHASE-3 — motivation engine (§3.2 streak · §3.3 coins · §3.4 reviews · §3.5 mastery · §3.6 quests) ──
+export type ChestQuality = 'bronze' | 'silver' | 'gold';
+
+export interface QuestView {
+  kind: string;
+  title: string;
+  progress: number;
+  target: number;
+  coinReward: number;
+  done: boolean;
+  chest: ChestQuality | null;
+  chestCoins: number;
+}
+
+export interface ReviewItem {
+  questionId: string;
+  quizId: string;
+  sectionId: string;
+  packageId: string;
+  halfLifeDays: number;
+  nextReviewAt: string;
+  stem: string;
+  options: Array<{ key: string; text: string }>;
+}
+
+export interface ReviewAnswerResult {
+  correct: boolean;
+  explanation: string;
+  halfLifeDays: number;
+  nextReviewAt: string;
+  coinsEarned: number;
+  pointsEarned: number;
+  rewarded: boolean;
+  reason?: 'too_fast';
+}
+
+export interface Gamification {
+  streak: {
+    current: number;
+    longest: number;
+    shields: number;
+    maxShields: number;
+    repairUntil: string | null;
+    onLeaveUntil: string | null;
+    nextMilestone: number | null;
+    daysToMilestone: number | null;
+  };
+  quests: { day: string; total: number; completed: number; quests: QuestView[] };
+  reviews: { due: number; cap: number; items: ReviewItem[] };
+  coins: { balance: number; lifetime: number };
+  mastery: { evaluated: number; mastered: number };
+}
+
+export interface CoinCatalogItem {
+  code: string;
+  title: string;
+  price: number;
+  fulfilment: 'physical' | 'process' | 'coaching';
+  note: string;
+}
+
+export interface CoinWallet {
+  balance: number;
+  lifetime: number;
+  catalog: CoinCatalogItem[];
+  ledger: Array<{ id: string; amount: number; reason: string; refId: string; createdAt: string }>;
+  redemptions: Array<{
+    id: string;
+    code: string;
+    title: string;
+    price: number;
+    status: 'pending_fulfilment' | 'fulfilled' | 'cancelled';
+    createdAt: string;
+  }>;
+}
+
+export interface AdminGamification {
+  reviews: {
+    trackedQuestions: number;
+    reviewsDone: number;
+    reviewsOnTime: number;
+    onTimeRate: number | null;
+    overdueNow: number;
+    dueNext7Days: number;
+  };
+  mastery: {
+    evaluated: number;
+    mastered: number;
+    masteryRate: number | null;
+    conditionCoverage: { stations: number; duels: number; reviews: number; roleplay: number };
+  };
+  coins: { redemptions: number; spent: number };
 }

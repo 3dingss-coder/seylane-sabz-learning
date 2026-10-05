@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Bell, BookOpen, Bot, Home, Mail, Trophy, UserRound, WifiOff } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppLogo } from '@/components/brand/AppLogo';
+import { CoinChip, StreakChip } from '@/components/ui';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { CountBadge } from '@/components/ui/CountBadge';
@@ -10,7 +11,8 @@ import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { flushBeats } from '@/lib/offline-queue';
 import { useOnline } from '@/lib/online';
-import { useMessages, useNotifications } from '@/lib/queries';
+import { useAuth } from '@/lib/auth';
+import { useBehavior, useMessages, useNotifications } from '@/lib/queries';
 
 const DESKTOP_NAV = [
   { to: '/', label: 'خانه', icon: Home },
@@ -23,6 +25,10 @@ const DESKTOP_NAV = [
 /** Marketer shell: header (logo, bell, profile) + bottom nav on mobile, top nav on desktop. */
 export function MarketerLayout() {
   const { pathname } = useLocation();
+  const { user } = useAuth();
+  // v4: the header carries the learner's real status (streak + coins) — the way Duolingo's
+  // header carries streak/gems. A decorative mascot avatar here read as a sticker, so it is gone.
+  const streak = useBehavior().data?.state.streakDays ?? 0;
   const notifications = useNotifications();
   const messages = useMessages();
   const qc = useQueryClient();
@@ -67,7 +73,11 @@ export function MarketerLayout() {
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center">
+          <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5 ps-1">
+              {streak > 0 && <StreakChip count={streak} />}
+              <CoinChip value={user?.pointsBalance ?? 0} />
+            </div>
             <Link
               to="/messages"
               aria-label={

@@ -3,6 +3,8 @@
  * Runs against the production build (`vite preview`, /v1 proxied to the seeded local API).
  * `/` is the marketer Home («کار بعدی») — the login script signs in first and storage is kept.
  */
+const path = require('node:path');
+
 module.exports = {
   ci: {
     collect: {
@@ -29,6 +31,10 @@ module.exports = {
         'largest-contentful-paint': ['error', { maxNumericValue: 3000 }],
       },
     },
-    upload: { target: 'filesystem', outputDir: './.lighthouseci' },
+    // Absolute: a relative outputDir resolves against the CWD of whatever runs lhci, so the
+    // reports landed somewhere the workflow's upload step never looked and every run — including
+    // the green ones — warned "No files were found: apps/web/.lighthouseci". That warning hid the
+    // one artifact that says *which* assertion failed and by how much.
+    upload: { target: 'filesystem', outputDir: path.join(__dirname, '.lighthouseci') },
   },
 };

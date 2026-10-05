@@ -19,7 +19,11 @@
     "typecheck": "npm run typecheck -w functions && npm run typecheck -w apps/web",
     "test": "npm run test -w functions && npm run test -w apps/web",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "check:copy": "node scripts/check-hardcoded-copy.mjs",
+    "check:budget": "node scripts/check-perf-budget.mjs",
+    "check:design": "python3 docs/design-system/tools/contrast.py && npm run check:budget && npm run check:copy && npm run check:hex",
+    "check:hex": "node scripts/check-no-hex.mjs"
   },
   "devDependencies": {
     "express": "^4.21.2",

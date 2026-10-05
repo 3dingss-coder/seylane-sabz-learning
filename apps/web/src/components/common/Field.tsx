@@ -95,7 +95,7 @@ export function Tabs<T extends string>({
     <div
       role="tablist"
       aria-label={label}
-      className="flex gap-1 overflow-x-auto rounded-card border border-border bg-surface p-1"
+      className="flex gap-1 overflow-x-auto rounded-card border-2 border-chunk-border bg-surface p-1"
     >
       {items.map((it) => (
         <button
@@ -107,7 +107,7 @@ export function Tabs<T extends string>({
           className={cn(
             'pressable flex min-h-11 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-input px-3 text-sm font-bold',
             value === it.value
-              ? 'bg-primary bg-brand-gradient text-on-primary shadow-sm'
+              ? 'bg-primary text-on-primary [box-shadow:var(--lip-sm)]'
               : 'text-text-secondary hover:bg-surface-2',
           )}
         >

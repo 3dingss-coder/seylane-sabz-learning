@@ -38,7 +38,7 @@ export function BottomNav({ items = MARKETER_NAV }: { items?: BottomNavItem[] })
       aria-label="ناوبری اصلی"
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
     >
-      <div className="glass pointer-events-auto relative mx-auto max-w-md rounded-[22px] border border-border/70 shadow-lg">
+      <div className="glass pointer-events-auto relative mx-auto max-w-md rounded-hero border-2 border-chunk-border shadow-lg">
         {/* sliding marker */}
         <span
           aria-hidden
@@ -62,10 +62,10 @@ export function BottomNav({ items = MARKETER_NAV }: { items?: BottomNavItem[] })
                 end={to === '/'}
                 className={({ isActive }) =>
                   cn(
-                    'pressable relative flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-card text-xs',
+                    'pressable relative mx-1 flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-card px-2 text-xs transition-colors',
                     isActive || i === activeIdx || (match ?? []).some((p) => inPath(pathname, p))
-                      ? 'font-bold text-primary'
-                      : 'font-medium text-text-secondary hover:text-text',
+                      ? 'bg-mint font-extrabold text-primary'
+                      : 'font-bold text-text-secondary hover:text-text',
                   )
                 }
               >

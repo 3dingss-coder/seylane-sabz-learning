@@ -9,13 +9,14 @@ import {
   Star,
   type LucideIcon,
 } from 'lucide-react';
-import { Card, CountUp, EmptyState, Skeleton } from '@/components/ui';
+import { Card, CountUp, EmptyState, Skeleton, StreakChip } from '@/components/ui';
+import { COPY } from '@/lib/copy/fa';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { faDate, faNumber } from '@/lib/format';
-import { qk } from '@/lib/queries';
+import { qk, useBehavior } from '@/lib/queries';
 import type { BadgeView, PointsData } from '@/lib/types';
 
 const ICONS: Record<string, LucideIcon> = {
@@ -26,12 +27,12 @@ const ICONS: Record<string, LucideIcon> = {
   star: Star,
 };
 const REASON: Record<string, string> = {
-  on_time_completion: 'تکمیل به‌موقع',
-  first_pass_quiz: 'قبولی در تلاش اول',
-  package_completion: 'تکمیل بسته',
-  badge: 'نشان جدید',
-  policy_penalty: 'کسر امتیاز',
-  manual: 'تنظیم مدیر',
+  on_time_completion: COPY.cards.reasonOnTime,
+  first_pass_quiz: COPY.cards.reasonFirstPass,
+  package_completion: COPY.cards.reasonPackage,
+  badge: COPY.cards.reasonBadge,
+  policy_penalty: COPY.cards.reasonPenalty,
+  manual: COPY.cards.reasonManual,
 };
 
 /** M10 — امتیاز و نشان‌ها (points awarded server-side only). */
@@ -44,9 +45,13 @@ export function CardsPage() {
     queryKey: qk.badges,
     queryFn: ({ signal }) => api.get<BadgeView[]>('/me/badges', signal),
   });
+  const streak = useBehavior().data?.state.streakDays ?? 0;
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="امتیاز و نشان‌ها" />
+      <PageHeader
+        title={COPY.cards.title}
+        actions={streak > 0 ? <StreakChip count={streak} /> : undefined}
+      />
       <QueryState query={points} loading={<Skeleton className="h-24 w-full" />}>
         {(p) => (
           <Card tone="hero" className="relative flex items-center gap-4 overflow-hidden p-5">
@@ -54,11 +59,11 @@ export function CardsPage() {
               aria-hidden
               className="bg-dots pointer-events-none absolute inset-0 text-white/10 [mask-image:radial-gradient(70%_80%_at_100%_0%,#000,transparent)]"
             />
-            <span className="animate-pop relative flex size-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg shadow-md [box-shadow:0_0_0_6px_rgb(255_255_255/0.12)]">
+            <span className="animate-pop relative flex size-16 shrink-0 items-center justify-center rounded-full bg-reward text-reward-fg shadow-md [box-shadow:0_0_0_6px_rgb(255_255_255/0.12)]">
               <Award className="size-9" aria-hidden />
             </span>
             <div className="relative">
-              <p className="text-sm text-white/85">امتیاز کل</p>
+              <p className="text-sm text-white/85">{COPY.cards.totalPoints}</p>
               <p className="text-4xl font-extrabold text-white" data-testid="points-balance">
                 <CountUp value={p.balance} format={faNumber} />
               </p>
@@ -68,7 +73,7 @@ export function CardsPage() {
       </QueryState>
       <section aria-labelledby="badges-title">
         <h2 id="badges-title" className="mb-2 text-base font-bold">
-          نشان‌ها
+          {COPY.cards.badges}
         </h2>
         <QueryState query={badges} loading={<Skeleton className="h-32 w-full" />}>
           {(list) => (
@@ -112,18 +117,13 @@ export function CardsPage() {
       </section>
       <section aria-labelledby="ledger-title">
         <h2 id="ledger-title" className="mb-2 text-base font-bold">
-          تاریخچه امتیاز
+          {COPY.cards.history}
         </h2>
         <QueryState
           query={points}
           loading={<Skeleton className="h-20 w-full" />}
           isEmpty={(p) => p.ledger.length === 0}
-          empty={
-            <EmptyState
-              title="هنوز امتیازی نگرفته‌ای"
-              description="با تکمیل به‌موقع آموزش‌ها و قبولی در آزمون امتیاز بگیر."
-            />
-          }
+          empty={<EmptyState title={COPY.cards.emptyTitle} description={COPY.empty.cards} />}
         >
           {(p) => (
             <ul className="stagger divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-sm">

@@ -1,0 +1,89 @@
+/* ============================================================================
+   SEYLANE × DUOLINGO — لایهٔ توکن افزودنی — v3
+   ----------------------------------------------------------------------------
+   جهت (سند اجماع PHASE-0.5، D-101..D-107):
+     • خانه و اقدام = سبز برند + سفید + سبز روشن (حرفه‌ای، پویا، مناسب یادگیری)
+     • بنفش = فقط مسکات رسمی و هالهٔ او (جشن/استادی) — هرگز CTA یا سطح بزرگ
+   توکن‌های موجود apps/web/src/styles/index.css دست‌نخورده‌اند؛ این لایه افزودنی است.
+   همهٔ اعداد کنتراست خروجی tools/contrast.py است (v3: 18 جفت، ۰ خطا).
+   ========================================================================== */
+
+@theme {
+  /* ---- لایهٔ پویا: سبز روشن (fill / آیکن / درخشش) — تزئینی، متن نه ---- */
+  --color-leaf: #21a55f; /* سبز روشن پویا */
+  --color-leaf-glow: #4fc77f; /* درخشش/هاور */
+  --color-mint: #e7f5ee; /* مغ سبز — سطح نرم/پل هماهنگی */
+  --color-green-lip: #115e3d; /* لبهٔ ۳بعدی دکمهٔ سبز */
+
+  /* ---- بنفش = فقط مسکات و هالهٔ او ---- */
+  --color-mascot: #7048a3; /* بدنهٔ مسکات؛ تیتر جشن سفید رویش 6.68:1 */
+  --color-mascot-deep: #472475; /* متن بنفش روی روشن 11.82:1 */
+  --color-mascot-100: #efe7f9; /* هاله/حباب مسکات */
+  --color-mascot-950: #2a1447; /* hero بنفش نادر (جشن بزرگ) */
+  --color-mastery: #6d28d9; /* لحظهٔ استادی (نادر) 7.10:1 */
+
+  /* ---- تاج قرمز = پیوستگی/جشن (فقط fill/آیکن) ---- */
+  --color-streak: #c55d41;
+  --color-streak-100: #fbeae4;
+  --color-streak-deep: #8a3423; /* متن چیپ streak 6.93:1 */
+
+  /* ---- گرم + پاداش ---- */
+  --color-beak: #ddb8ab;
+  --color-beak-ink: #3c1e59; /* متن روی کرم 7.57:1 */
+  --color-reward: #ffc800;
+  --color-reward-fg: #4a3600; /* متن روی زرد 7.43:1 */
+
+  /* ---- خنثی / شعاع / لبه ---- */
+  --color-chunk-border: #cbd5e1;
+  --color-track: #e2e8f0;
+  --radius-pill: 9999px;
+  --radius-station: 24px;
+  --lip-sm: 0 2px 0 var(--color-green-lip);
+  --lip-md: 0 4px 0 var(--color-green-lip);
+  --lip-lg: 0 6px 0 var(--color-green-lip);
+
+  --font-display: 'Vazirmatn RD Variable', 'Vazirmatn Variable', Vazirmatn, Tahoma, sans-serif;
+  --text-display: 3rem;
+  --text-hero: 2.25rem;
+}
+
+/* دکمهٔ cta = سبز برند با لبهٔ سبز (D-102: بنفش هرگز CTA نیست) */
+.btn-cta {
+  background: var(--color-primary, #177a50);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-card, 12px);
+  box-shadow: var(--lip-md);
+  font-weight: 800;
+  min-height: 56px;
+  transition:
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.btn-cta:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: none;
+}
+.btn-cta:disabled {
+  background: var(--color-track);
+  color: #94a3b8;
+  box-shadow: none;
+}
+
+/* هالهٔ مسکات: مسکات بنفش روی مغ سبز = پل هماهنگی (D-103.2) */
+.mascot-halo {
+  background: var(--color-mint);
+  border-radius: var(--radius-station);
+}
+
+.card-chunky {
+  border: 2px solid var(--color-chunk-border);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-green-lip: #07291c;
+    --color-chunk-border: #334155;
+    --color-track: #1e293b;
+  }
+}

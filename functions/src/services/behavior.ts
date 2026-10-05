@@ -4,6 +4,7 @@ import { DAY, HOUR } from '../lib/time';
 import { getPolicy, track, type Deps } from './context';
 import { loadUserLearning, type PackageView } from './learning-state';
 import { createNudge } from './mentor-rules';
+import { effectiveCurrent, getStreak, todayKey } from './streak';
 
 /**
  * Behaviour-management engine (موتور مدیریت رفتار).
@@ -500,6 +501,13 @@ export async function evaluateBehavior(d: Deps, user: Doc<User>): Promise<Behavi
     ...(inactiveDays !== null ? { inactiveDays } : {}),
   });
   signals = annotateActivity(signals, packages, now);
+  /* G-02: the product has exactly one streak definition — the PHASE-3 one, counted by completed
+     stations, never by opening the app. annotateActivity keeps its own activity counters, but the
+     number every rule and every screen shows comes from the streak record. */
+  signals = {
+    ...signals,
+    streakDays: effectiveCurrent(await getStreak(d, user.id), todayKey(now)),
+  };
   const state = computeState(signals);
   signals.momentumHint = state.momentum;
   const interventions = planInterventions(signals, packages, now, {

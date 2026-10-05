@@ -4,6 +4,22 @@
 @import '@fontsource-variable/vazirmatn';
 @import 'tailwindcss';
 
+/* ── PHASE-1 §1.8 DoD — self-hosted Vazirmatn RD, SIL OFL 1.1 (public/fonts/OFL.txt) ───────
+   One *variable* Non-Latin file: 49,068 B covers every weight the app uses (400/500/600/700/
+   800 — 192 × font-bold, 32 × font-extrabold, 19 × font-medium) instead of five ~51 KB
+   statics or the 112 KB full variable. `unicode-range` is the Arabic/Persian block only, so
+   Latin keeps resolving to the fontsource layer below it — that is also why this file is
+   49 KB and not 112 KB. `font-display: swap` → text is never invisible (§7.2 rule 4).
+   Not a CDN: the file ships from public/fonts, per §22.4 (Iran network constraints). */
+@font-face {
+  font-family: 'Vazirmatn RD';
+  src: url('/fonts/vazirmatn-rd-var.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+200C-200F, U+FB50-FDFF, U+FE70-FEFF;
+}
+
 @theme {
   /* §16.2 Color System */
   /* D40: #1B8A5A → #177A50 so white-on-primary meets WCAG AA (4.35 → 5.34:1). */
@@ -18,7 +34,8 @@
   --color-text-secondary: #475569;
   --color-muted: #94a3b8;
   --color-border: #e2e8f0;
-  --color-background: #f8fafc;
+  /* v4: mint canvas — white cards read as objects on a light-green field (60/30/10). */
+  --color-background: #f1f9f4;
   --color-surface: #ffffff;
   /* tinted backgrounds for status surfaces (derived, same hues) */
   --color-success-light: #dcfce7;
@@ -55,34 +72,68 @@
   --color-scrim: rgb(15 23 42 / 0.5);
   /* second surface level: inset wells, table headers, hovered rows */
   --color-surface-2: #f1f5f9;
+  --color-chunk-border: #cbd5e1; /* v3 "chunky" card border (physical edge) */
 
-  /* §16.3 Typography — Vazirmatn self-hosted; system fallback if font fails to load */
+  /* ---- Design system v3 (PHASE-1) — additive only; existing tokens untouched.
+     Green/white house + light-green dynamic layer; purple reserved for the
+     official mascot & its aura (docs/design-system/PHASE-0.5, D-101..D-107).
+     Contrast verified by docs/design-system/tools/contrast.py (v3: 18 pairs, 0 fail). */
+  --color-leaf: #21a55f; /* bright green — fills/icons/glow (decorative) */
+  --color-leaf-glow: #4fc77f; /* hover/glow */
+  --color-mint: #e7f5ee; /* soft mint surface / harmony bridge */
+  --color-green-lip: #115e3d; /* 3D lip for green CTA */
+  --color-mascot: #7048a3; /* mascot body ONLY (white text 6.68:1) */
+  --color-mascot-deep: #472475; /* purple text on light (11.82:1) */
+  --color-mascot-100: #efe7f9; /* mascot halo/bubble */
+  --color-mascot-950: #2a1447; /* rare deep-purple hero (big celebration) */
+  --color-mastery: #6d28d9; /* rare mastery moment (7.10:1) */
+  --color-streak: #c55d41; /* crest red — streak/celebration fill/icon only */
+  --color-streak-100: #fbeae4; /* streak chip bg */
+  --color-streak-deep: #8a3423; /* streak chip text (6.93:1) */
+  --color-beak: #ddb8ab; /* warm cream surface */
+  --color-beak-ink: #3c1e59; /* text on cream (7.57:1) */
+  --color-reward: #ffc800; /* XP/points */
+  --color-reward-fg: #4a3600; /* text on yellow (7.43:1) */
+  --radius-pill: 9999px; /* chips, flame, progress */
+  --radius-station: 24px; /* path station tiles */
+  --lip-sm: 0 2px 0 var(--color-green-lip);
+  --lip-md: 0 4px 0 var(--color-green-lip);
+  --lip-lg: 0 6px 0 var(--color-green-lip);
+  /* §8.4.2 rule 1: the danger key needs its own lip token — no raw hex in the component. */
+  --color-danger-lip: #8f1d1d;
+  --lip-danger: 0 4px 0 var(--color-danger-lip);
+
+  /* §16.3 Typography — Vazirmatn **RD** (Round-Dots) is the display face for Persian text;
+     'Vazirmatn Variable' (fontsource) stays as the fallback layer and covers Latin. */
   --font-sans:
-    'Vazirmatn Variable', Vazirmatn, Tahoma, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Noto Sans Arabic', sans-serif;
+    'Vazirmatn RD', 'Vazirmatn Variable', Vazirmatn, Tahoma, -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, 'Noto Sans Arabic', sans-serif;
   --font-latin: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* 12/14/16/18/20/24/30 */
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;
   --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
-  --text-4xl: 2.25rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.125rem;
+  --text-4xl: 2.5rem;
 
   /* §16.4 Radius: 8 input / 12 card / 16 modal */
-  --radius-input: 8px;
-  --radius-card: 12px;
-  --radius-modal: 16px;
-  --radius-hero: 20px;
+  --radius-input: 14px;
+  --radius-card: 20px;
+  --radius-modal: 24px;
+  --radius-hero: 28px;
+  --radius-btn: 16px;
 
   /* §16.4 Shadow: sm / md / lg (soft) — layered so elevation reads as depth, not as a dark halo */
-  --shadow-xs: 0 1px 1px rgb(15 23 42 / 0.04);
-  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.05), 0 1px 1px rgb(15 23 42 / 0.03);
-  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
-  --shadow-lg: 0 12px 32px -8px rgb(15 23 42 / 0.16), 0 4px 8px -4px rgb(15 23 42 / 0.06);
-  --shadow-brand: 0 8px 20px -6px rgb(23 122 80 / 0.45);
+  /* v4: elevation = a hard bottom lip, not a gray blur. Every card/button/input gets
+     physical depth; press removes the lip and translates 2px (Duolingo's "push"). */
+  --shadow-xs: 0 1px 0 var(--color-chunk-border);
+  --shadow-sm: 0 2px 0 var(--color-chunk-border);
+  --shadow-md: 0 4px 0 var(--color-chunk-border);
+  --shadow-lg: 0 6px 0 var(--color-chunk-border), 0 16px 32px -12px rgb(15 23 42 / 0.22);
+  --shadow-brand: 0 4px 0 var(--color-green-lip);
   --shadow-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.18);
 
   /* ---- Motion tokens: 120–300ms for interaction, ≤ 600ms for page entry; only transform/opacity ---- */
@@ -109,10 +160,19 @@
   --animate-shake: shake 360ms var(--ease-soft) both;
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-float: float 4s ease-in-out infinite;
+  /* finite idle bob — the DoD forbids infinite motion on the main screens */
+  --animate-bob: float 3.2s var(--ease-soft) 1;
   --animate-pulse-dot: pulse-dot 1.6s var(--ease-soft) 1;
   --animate-blink: blink 1.2s ease-in-out infinite;
   --animate-check: check-draw 420ms var(--ease-soft) 120ms both;
   --animate-confetti: confetti-fall 1.8s var(--ease-soft) both;
+  /* ---- PHASE-5 §5.2 moments ---- */
+  --animate-slide-up: slide-up var(--duration-slow) var(--ease-soft) both;
+  --animate-fade-down: fade-down var(--duration-slow) var(--ease-soft) both;
+  --animate-wiggle: wiggle 2.6s var(--ease-soft) 1;
+  --animate-grow-y: grow-y 0.5s var(--ease-spring) both;
+  --animate-spot: spot 1.8s var(--ease-soft) 1;
+  --animate-settle: settle 0.3s var(--ease-soft) both;
 
   @keyframes fade-in {
     from {
@@ -248,6 +308,54 @@
       stroke-dashoffset: 0;
     }
   }
+  /* PHASE-5 moments: every one of these is transform/opacity only (M-01) and finite (DoD:
+     no infinite animation on the main screens). */
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+  }
+  @keyframes fade-down {
+    from {
+      opacity: 0;
+      transform: translateY(-18px);
+    }
+  }
+  @keyframes wiggle {
+    0%,
+    100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-4deg);
+    }
+    60% {
+      transform: rotate(3deg);
+    }
+  }
+  @keyframes grow-y {
+    from {
+      transform: scaleY(0.4);
+    }
+  }
+  @keyframes settle {
+    from {
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+  /* M-04: the ONE shining point of a page — a single soft ring pulse, once. */
+  @keyframes spot {
+    0%,
+    100% {
+      box-shadow: var(--lip-md);
+    }
+    50% {
+      box-shadow:
+        var(--lip-md),
+        0 0 0 8px color-mix(in srgb, var(--color-leaf) 32%, transparent);
+    }
+  }
   @keyframes confetti-fall {
     0% {
       opacity: 1;
@@ -302,11 +410,11 @@
     --color-accent-light: #33250a;
     --color-accent-fg: #fcd34d;
     --color-scrim: rgb(2 8 5 / 0.62);
-    --shadow-xs: 0 1px 1px rgb(0 0 0 / 0.3);
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
-    --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.5);
-    --shadow-lg: 0 16px 36px -8px rgb(0 0 0 / 0.65);
-    --shadow-brand: 0 8px 20px -6px rgb(62 207 142 / 0.35);
+    --shadow-xs: 0 1px 0 rgb(0 0 0 / 0.5);
+    --shadow-sm: 0 2px 0 rgb(0 0 0 / 0.55);
+    --shadow-md: 0 4px 0 rgb(0 0 0 / 0.6);
+    --shadow-lg: 0 6px 0 rgb(0 0 0 / 0.6), 0 16px 32px -12px rgb(0 0 0 / 0.7);
+    --shadow-brand: 0 4px 0 rgb(4 36 26 / 0.9);
     --shadow-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
 }
@@ -348,6 +456,11 @@
     outline: 2px solid var(--color-info);
     outline-offset: 2px;
   }
+  /* A-06 (PHASE-7): a ring the same colour as its background is invisible — filled keys (green
+     CTA, red danger) get a white ring instead, same 2px and same offset. */
+  .focus-on-fill:focus-visible {
+    outline-color: #ffffff;
+  }
   button,
   input,
   select,
@@ -364,6 +477,66 @@
   /* §16.9: directional icons (arrows/chevrons that mean "forward/back") mirror in RTL */
   [dir='rtl'] .rtl-mirror {
     transform: scaleX(-1);
+  }
+  /* ---- PHASE-5: micro-interactions ----
+     .lift  = hover raises the object and deepens its lip (cards, tiles, chips)
+     .tap   = press pushes it down and removes the lip (M-01: transform only)
+     .spot  = the single attention pulse allowed per screen (M-04)
+     .reveal/.reveal-in = scroll-in, suppressed on cold load and for reduced motion */
+  .lift {
+    transition:
+      transform var(--duration-fast) var(--ease-soft),
+      box-shadow var(--duration-base) var(--ease-soft);
+  }
+  @media (hover: hover) {
+    .lift:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-md);
+    }
+  }
+  .tap:active {
+    transform: translateY(2px);
+    box-shadow: none;
+  }
+  .spot {
+    animation: var(--animate-spot);
+  }
+  /* Switch knob: transform-only travel, mirrored in RTL */
+  .switch-knob {
+    transition: transform var(--duration-base) var(--ease-spring);
+  }
+  [dir='rtl'] [aria-checked='true'] .switch-knob {
+    transform: translateX(-24px);
+  }
+  [dir='ltr'] [aria-checked='true'] .switch-knob {
+    transform: translateX(24px);
+  }
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  .reveal-in {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 0.42s var(--ease-soft),
+      transform 0.42s var(--ease-soft);
+  }
+  html:not([data-motion]) .reveal {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  /* v4 display type: the heaviest Vazirmatn weight for screen titles and big numbers.
+     No negative tracking — it breaks Persian letter joining (see @layer base). */
+  .display {
+    font-weight: 900;
+    line-height: 1.35;
   }
   /* Latin digits for countdowns/percentages (§16.3) */
   .num-latin {
@@ -397,16 +570,10 @@
      scrolls/animates beneath it and cost us >1s of main-thread time on throttled phones
      (Lighthouse perf 97 -> 70). The real blur is enabled from the desktop breakpoint up. */
   .glass {
-    background-color: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    /* v4: solid header. Frosted glass read as "enterprise dashboard", not a learning app. */
+    background-color: var(--color-surface);
+    box-shadow: 0 2px 0 var(--color-border);
   }
-  @media (min-width: 1024px) and (hover: hover) {
-    .glass {
-      background-color: color-mix(in srgb, var(--color-surface) 78%, transparent);
-      -webkit-backdrop-filter: blur(12px);
-      backdrop-filter: blur(12px);
-    }
-  }
-  /* brand hero: deep green gradient + faint light bloom (text on it is white ≥ 7:1) */
   .bg-hero {
     background-color: var(--color-primary-800);
     background-image:
@@ -530,7 +697,13 @@ html:not([data-motion])
     .animate-slide-in-end,
     .animate-pop,
     .animate-pulse-dot,
-    .animate-float
+    .animate-float,
+    .animate-bob,
+    .animate-wiggle,
+    .animate-settle,
+    .animate-slide-up,
+    .animate-grow-y,
+    .animate-spot
   ) {
   animation: none;
 }

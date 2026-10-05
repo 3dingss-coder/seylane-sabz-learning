@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Home, RotateCw } from 'lucide-react';
+import { COPY } from '@/lib/copy/fa';
 import { Button } from './Button';
 import { ErrorIllustration } from './illustrations';
 
@@ -35,17 +36,15 @@ export class ErrorBoundary extends Component<Props, { failed: boolean }> {
         className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-3 px-6 text-center"
       >
         <ErrorIllustration className="animate-fade-up h-36" />
-        <h1 className="text-xl font-bold text-text">یک مشکل پیش آمد</h1>
-        <p className="text-sm text-text-secondary">
-          اشکالی از طرف ما بود، نه شما. دوباره تلاش کن؛ اگر درست نشد به صفحه اصلی برگرد.
-        </p>
+        <h1 className="text-xl font-bold text-text">{COPY.crash.title}</h1>
+        <p className="text-sm text-text-secondary">{COPY.crash.body}</p>
         <div className="mt-2 flex w-full flex-col gap-2">
           <Button
             block
             icon={<RotateCw className="size-4" aria-hidden />}
             onClick={() => this.setState({ failed: false })}
           >
-            تلاش مجدد
+            {COPY.crash.retry}
           </Button>
           <Button
             block
@@ -53,7 +52,7 @@ export class ErrorBoundary extends Component<Props, { failed: boolean }> {
             icon={<Home className="size-4" aria-hidden />}
             onClick={() => window.location.assign('/')}
           >
-            بازگشت به صفحه اصلی
+            {COPY.crash.goHome}
           </Button>
         </div>
       </main>

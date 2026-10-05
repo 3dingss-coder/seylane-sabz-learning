@@ -171,8 +171,16 @@ describe('quiz & sequential lock (PROMPT 010)', () => {
     expect(a.body.data.pointsEarned + b.body.data.pointsEarned).toBe(20);
     const pkg = await ctx.api(m.token).get(`/v1/me/packages/${fx.packageId}`);
     expect(pkg.body.data.sections[1].state).not.toBe('locked');
-    const pts = await ctx.api(m.token).get('/v1/me/points');
-    expect(pts.body.data.balance).toBe(20);
+    const pts = (await ctx.api(m.token).get('/v1/me/points')).body.data;
+    // PHASE-3 added station (20) and duel-pass (50) capability points, so the total is no longer a
+    // single literal — assert the idempotency that this test exists for: every reason paid once.
+    const reasons = (pts.ledger as Array<{ reason: string }>).map((l) => l.reason);
+    expect(reasons.filter((r) => r === 'first_pass_quiz')).toHaveLength(1);
+    expect(reasons.filter((r) => r === 'duel_pass')).toHaveLength(1);
+    expect(reasons.filter((r) => r === 'station_completed')).toHaveLength(1);
+    expect(pts.balance).toBe(
+      (pts.ledger as Array<{ amount: number }>).reduce((sum, l) => sum + l.amount, 0),
+    );
   });
 
   it('28.2 #3 attempt limit → 409; manager approval grants one more', async () => {
@@ -261,8 +269,18 @@ describe('quiz & sequential lock (PROMPT 010)', () => {
       ctx.limiter.reset();
       await passQuiz(ctx, m.token, s.quizId, s.answers);
     }
-    const pts1 = (await ctx.api(m.token).get('/v1/me/points')).body.data.balance;
-    expect(pts1).toBe(20 * 2 + 30 + 50);
+    const ledger1 = (await ctx.api(m.token).get('/v1/me/points')).body.data;
+    const pts1 = ledger1.balance as number;
+    // two sections completed → two first-pass + two station + two duel-pass awards, and the
+    // package-level rewards exactly once (PHASE-3 widened the table, not the idempotency rule)
+    const times = (r: string) =>
+      (ledger1.ledger as Array<{ reason: string }>).filter((l) => l.reason === r).length;
+    expect(times('first_pass_quiz')).toBe(2);
+    expect(times('station_completed')).toBe(2);
+    expect(times('duel_pass')).toBe(2);
+    expect(times('package_completion')).toBe(1);
+    expect(times('on_time_completion')).toBe(1);
+    expect(pts1).toBe(20 * 2 + 30 + 50 + 20 * 2 + 50 * 2);
     // replay everything
     for (const s of fx.sections) {
       await watchSection(ctx, m.token, s.id, 120);
