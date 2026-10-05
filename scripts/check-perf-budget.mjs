@@ -73,6 +73,13 @@ function measureCast() {
         '--external:react',
         '--external:react-dom',
         '--external:react/jsx-runtime',
+        /* The copy module is shared infrastructure: it is bundled once into the entry chunk and
+           already paid for by the entry-JS budget below. Counting it here too made the "cast"
+           number jump from 15.7 KB to 49 KB the day Character.tsx took its aria-labels from COPY
+           — a measurement artefact (the module alone minifies to 35 KB), not new artwork.
+           The pattern must be the *aliased* path: esbuild applies --alias before matching
+           --external, so '@/lib/copy/fa' silently matches nothing. 49,016 -> 15,410 B. */
+        '--external:./src/lib/copy/fa',
         '--alias:@=./src',
         `--outfile=${out}`,
       ],
