@@ -31,7 +31,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
     'bg-white text-primary-800 [box-shadow:0_4px_0_rgb(17_86_56/0.35)] hover:bg-primary-50 active:translate-y-1 active:[box-shadow:none]',
   ghost: 'bg-transparent text-text-secondary hover:bg-surface-2 active:bg-border',
   danger:
-    'bg-danger text-on-danger [box-shadow:0_4px_0_#8f1d1d] hover:brightness-[1.06] active:translate-y-1 active:[box-shadow:none]',
+    'bg-danger text-on-danger [box-shadow:var(--lip-danger)] hover:brightness-[1.06] active:translate-y-1 active:[box-shadow:none]',
 };
 
 const SIZES: Record<ButtonSize, string> = {

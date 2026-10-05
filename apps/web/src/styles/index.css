@@ -83,6 +83,9 @@
   --lip-sm: 0 2px 0 var(--color-green-lip);
   --lip-md: 0 4px 0 var(--color-green-lip);
   --lip-lg: 0 6px 0 var(--color-green-lip);
+  /* §8.4.2 rule 1: the danger key needs its own lip token — no raw hex in the component. */
+  --color-danger-lip: #8f1d1d;
+  --lip-danger: 0 4px 0 var(--color-danger-lip);
 
   /* §16.3 Typography — Vazirmatn self-hosted; system fallback if font fails to load */
   --font-sans:
