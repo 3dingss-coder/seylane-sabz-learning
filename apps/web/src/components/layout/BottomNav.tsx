@@ -64,7 +64,7 @@ export function BottomNav({ items = MARKETER_NAV }: { items?: BottomNavItem[] })
                   cn(
                     'pressable relative flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-card text-xs',
                     isActive || i === activeIdx || (match ?? []).some((p) => inPath(pathname, p))
-                      ? 'font-bold text-primary'
+                      ? 'bg-mint font-bold text-primary'
                       : 'font-medium text-text-secondary hover:text-text',
                   )
                 }

@@ -3,6 +3,7 @@ import { BellRing, ChevronLeft, Headphones, PlayCircle, Sparkles, Trophy } from 
 import {
   Button,
   Card,
+  CoinChip,
   CountdownChip,
   EmptyState,
   PackageCardSkeleton,
@@ -11,12 +12,13 @@ import {
   TrophyIllustration,
 } from '@/components/ui';
 import { QueryState, StaleBanner } from '@/components/common/QueryState';
+import { MascotAvatar } from '@/components/brand/MascotAvatar';
 import { ProductImage } from '@/components/common/ProductImage';
 import { PackageCard } from '@/components/learning/PackageCard';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
-import { faDuration, faNumber } from '@/lib/format';
+import { faDuration } from '@/lib/format';
 import { qk, useHome } from '@/lib/queries';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -40,9 +42,12 @@ export function HomePage() {
 
   return (
     <div className="stagger flex flex-col gap-4">
-      <div>
-        <p className="text-sm text-text-secondary">سلام {user?.name.split(' ')[0]} 👋</p>
-        <h1 className="text-2xl font-extrabold text-text">کار بعدی تو</h1>
+      <div className="flex items-center gap-3">
+        <MascotAvatar size={52} />
+        <div>
+          <p className="text-sm text-text-secondary">سلام {user?.name.split(' ')[0]} 👋</p>
+          <h1 className="text-2xl font-extrabold text-text">کار بعدی تو</h1>
+        </div>
       </div>
       <StaleBanner
         show={home.isError && home.data !== undefined}
@@ -155,7 +160,7 @@ export function HomePage() {
               </Link>
             )}
 
-            <Card className="flex flex-col gap-3">
+            <Card chunky className="flex flex-col gap-3">
               <div className="flex items-center gap-4">
                 <ProgressRing value={d.totalProgress} size={76} stroke={8} label="پیشرفت کلی" />
                 <div className="grid flex-1 grid-cols-3 gap-2 text-center">
@@ -166,13 +171,13 @@ export function HomePage() {
               </div>
               <Link
                 to="/cards"
-                className="pressable flex min-h-12 items-center justify-between rounded-card bg-accent-light px-3 text-accent-fg"
+                className="pressable flex min-h-12 items-center justify-between rounded-card bg-mint px-3 text-text"
               >
                 <span className="flex items-center gap-2 text-sm font-bold">
-                  <Trophy className="size-5" aria-hidden />
+                  <Trophy className="size-5 text-primary" aria-hidden />
                   امتیاز شما
                 </span>
-                <span className="text-base font-extrabold">{faNumber(d.pointsBalance)}</span>
+                <CoinChip value={d.pointsBalance} />
               </Link>
             </Card>
 

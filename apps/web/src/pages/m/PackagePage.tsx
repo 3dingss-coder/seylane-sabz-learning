@@ -98,6 +98,7 @@ export function PackagePage() {
                 <Button
                   size="lg"
                   block
+                  variant="cta"
                   icon={<PlayCircle className="size-5" aria-hidden />}
                   onClick={() =>
                     nav(

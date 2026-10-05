@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Bell, BookOpen, Bot, Home, Mail, Trophy, UserRound, WifiOff } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppLogo } from '@/components/brand/AppLogo';
+import { MascotAvatar } from '@/components/brand/MascotAvatar';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { CountBadge } from '@/components/ui/CountBadge';
@@ -44,9 +45,15 @@ export function MarketerLayout() {
     <div className="min-h-dvh bg-background pb-28 lg:pb-8">
       <header className="sticky top-0 z-30 glass border-b border-border">
         <div className="mx-auto flex h-16 max-w-[960px] items-center justify-between gap-2 px-4">
-          <Link to="/" aria-label="خانه">
-            <AppLogo />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/" aria-label="خانه">
+              <AppLogo />
+            </Link>
+            {/* v3: the mascot is the mentor's face — one tap to reach it. */}
+            <Link to="/mentor" aria-label="منتور (سیلا)" className="pressable">
+              <MascotAvatar size={40} />
+            </Link>
+          </div>
           <nav aria-label="ناوبری اصلی" className="hidden items-center gap-1 lg:flex">
             {DESKTOP_NAV.map(({ to, label, icon: Icon, match }) => (
               <NavLink
