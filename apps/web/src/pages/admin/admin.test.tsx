@@ -1,7 +1,14 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
-import type { AdminPackageDetail, AdminSection, AdminTeam, ContentTree, Me } from '@/lib/types';
+import type {
+  AdminPackageDetail,
+  AdminSection,
+  AdminTeam,
+  AuditEntry,
+  ContentTree,
+  Me,
+} from '@/lib/types';
 import { marketer } from '@/test/fixtures';
 import { mockApi } from '@/test/mockApi';
 import { renderApp } from '@/test/renderApp';
@@ -28,6 +35,7 @@ const asAdmin = () => {
     'GET /v1/admin/products?brandId=b1': () => ({ data: [] }),
     'GET /v1/admin/teams': () => ({ data: [team()] }),
     'GET /v1/admin/users': () => ({ data: [] }),
+    'GET /v1/admin/audit-logs': () => ({ data: [] }),
     'GET /v1/admin/paths': () => ({ data: [] }),
   };
 };
@@ -145,6 +153,69 @@ const libItem = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('admin: everything understandable at a glance', () => {
+  /** Typed on purpose: an untyped literal here would let a column go unexercised. */
+  const audit = (over: Partial<AuditEntry> = {}): AuditEntry => ({
+    id: 'log1',
+    actorId: 'a1',
+    actorRole: 'admin',
+    action: 'package.published',
+    entity: 'package',
+    entityId: 'p1',
+    before: { status: 'draft' },
+    after: { status: 'published' },
+    createdAt: '2026-09-21T08:00:00.000Z',
+    ...over,
+  });
+
+  it('audit log resolves the actor to a name, and «سیستم» for the system actor', async () => {
+    mockApi({
+      ...asAdmin(),
+      // the page resolves actorId -> name from the users list; without this the cell
+      // would fall back to the raw id and the mapping would go untested
+      'GET /v1/admin/users': () => ({
+        data: [{ ...marketer, id: 'a1', name: 'ادمین', role: 'admin', teamId: null }],
+      }),
+      'GET /v1/admin/audit-logs': () => ({
+        data: [audit(), audit({ id: 'log2', actorId: 'system', action: 'streak.recomputed' })],
+      }),
+    });
+    renderApp('/admin/audit');
+    const table = await screen.findByRole('table');
+    await within(table).findByText('ادمین');
+    await within(table).findByText('سیستم');
+    await within(table).findByText('package.published');
+    expect(within(table).queryByText('a1')).not.toBeInTheDocument();
+  });
+
+  it('audit log filter narrows to the matching action and falls back to an empty state', async () => {
+    mockApi({
+      ...asAdmin(),
+      'GET /v1/admin/audit-logs': () => ({
+        data: [
+          audit(),
+          audit({ id: 'log2', action: 'user.deactivated', entity: 'user', entityId: 'u9' }),
+        ],
+      }),
+    });
+    renderApp('/admin/audit');
+    const table = await screen.findByRole('table');
+    await within(table).findByText('user.deactivated');
+
+    const box = screen.getByLabelText('فیلتر عملیات یا موجودیت');
+
+    // narrowing keeps the matching row and drops the other one
+    fireEvent.change(box, { target: { value: 'user.deactivated' } });
+    await waitFor(() =>
+      expect(within(screen.getByRole('table')).queryByText('package.published')).toBeNull(),
+    );
+    expect(within(screen.getByRole('table')).getByText('user.deactivated')).toBeInTheDocument();
+
+    // a filter nothing matches empties the table entirely
+    fireEvent.change(box, { target: { value: 'nothing-matches-this' } });
+    await waitFor(() => expect(screen.queryByRole('table')).toBeNull());
+    expect(await screen.findByText('موردی نیست')).toBeInTheDocument();
+  });
+
   it('dashboard shows the 4-step publish guide and the «انتشار آموزش جدید» shortcut', async () => {
     mockApi({
       ...asAdmin(),
