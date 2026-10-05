@@ -38,7 +38,7 @@
 | `PHASE-8-roadmap-measurement.md` | نقشهٔ راه ۱۲هفته، A/B، KPI، حاکمیت توکن |
 | `tokens/` | `seylane.tokens.json` (DTCG) + `seylane-theme.css` (لایهٔ افزودنی) |
 | `tools/contrast.py` | **گیت کنتراست** — هر عدد کنتراست در اسناد از اینجا می‌آید |
-| `tools/CONTRAST-REPORT.txt` | خروجی تأییدشدهٔ گیت (۳۰ جفت، ۰ خطا) |
+| `tools/CONTRAST-REPORT.txt` | خروجی تأییدشدهٔ گیت (۲۵ جفت گیت‌شده، ۰ خطا) |
 | `assets/` | کانسپت بصری: سیلا، lineup کاراکترها، هیولاهای اعتراض |
 | `preview/` | پیش‌نمایش زندهٔ تعاملی سیستم (فایل استاتیک) |
 

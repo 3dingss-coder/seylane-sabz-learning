@@ -100,7 +100,7 @@ npx lighthouse http://localhost:3000/quiz/seed-pkg-bubble-s1 --only-categories=p
 ساختگیِ Lighthouse از نبودِ عدد بدتر است.
 
 - [x] `contrast.py` در CI گیت شود — **به‌شرط یک step که تو باید اضافه کنی**
-  - اسکریپت‌ها آماده و تست‌شده‌اند: `npm run check:design` هر سه گیت را locally اجرا می‌کند (contrast: ۱۸ جفت، ۰ شکست · budget · copy ratchet).
+  - اسکریپت‌ها آماده و تست‌شده‌اند: `npm run check:design` هر سه گیت را locally اجرا می‌کند (contrast: ۲۵ جفت، ۰ شکست · budget ۸ عدد · copy ratchet).
   - ولی `.github/workflows/ci.yml` را نتوانستم تغییر دهم: اتصال GitHub در این محیط اجازهٔ `workflows` ندارد و push با خطای `refusing to allow a GitHub App to create or update workflow` رد شد. پس این سه step را در job `quality` (بعد از `npm run build`) paste کن:
 
 ```yaml

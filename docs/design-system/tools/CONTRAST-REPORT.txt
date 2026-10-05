@@ -17,6 +17,13 @@ GATED
   reward-fg روی reward (چیپ امتیاز)                7.43:1  4.5  ok
   accent-fg روی accent-light                       6.37:1  4.5  ok
   danger-fg روی danger-light                       5.30:1  4.5  ok
+  متن اصلی روی بوم سبز روشن (canvas)              16.66:1  4.5  ok
+  متن فرعی روی بوم سبز روشن                        7.07:1  4.5  ok
+  متن حباب گفتار روی mint (Character.tsx)         15.89:1  4.5  ok
+  نام گوینده روی mint (۱۱px extrabold)             6.75:1  4.5  ok
+  سفید روی p-mastery (لحظهٔ نادر استادی)           7.10:1  4.5  ok
+  نقره: متن فرعی روی border (swan)                 6.15:1  4.5  ok
+  برنز: accent-fg روی warning/25 (QuestList)       5.41:1  4.5  ok
 INFORMATIONAL
   g-leaf روی swan (چرا پرِ نوار نیست — تزئینی)     2.58:1
   سفید روی crest (فقط fill/آیکن)                   4.19:1
@@ -24,4 +31,4 @@ INFORMATIONAL
 REFERENCE (Duolingo)
   سفید روی Feather Green دولینگو                   2.09:1
 
-18 gated pairs — 0 failure(s)
+25 gated pairs — 0 failure(s)
