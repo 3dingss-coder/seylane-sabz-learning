@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/check-hardcoded-copy.mjs",
   "total": 1141,
-  "marketer": 87,
+  "marketer": 37,
   "perFile": {
     "apps/web/src/components/admin/ConfirmDialog.tsx": 2,
     "apps/web/src/components/admin/LearningQualityCard.tsx": 20,

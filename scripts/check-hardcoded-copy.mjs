@@ -18,8 +18,16 @@ const ROOT = new URL('..', import.meta.url).pathname;
 const SRC = join(ROOT, 'apps/web/src');
 const BASELINE = join(ROOT, 'scripts/copy-baseline.json');
 const PERSIAN = /[\u0600-\u06FF]/;
-/** Marketer-facing surfaces are the ones §6.2 specifies reference copy for. */
+/**
+ * Marketer-facing surfaces are the ones §6.2 specifies reference copy for.
+ *
+ * Matched as whole path segments (`pages/m/…`), never as bare prefixes: `pages/m` used to swallow
+ * `pages/manager/…` too, which silently counted 50 lines of manager-panel copy as marketer-facing
+ * and made the reported number a lie. Same trap would catch a future `components/ui-kit`.
+ */
 const MARKETER_DIRS = ['pages/m', 'components/learning', 'components/ui', 'components/character'];
+const isMarketer = (rel) =>
+  MARKETER_DIRS.some((d) => rel.startsWith(`apps/web/src/${d}/`) || rel === `apps/web/src/${d}`);
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -40,7 +48,7 @@ for (const file of walk(SRC)) {
   if (!lines) continue;
   perFile[rel] = lines;
   total += lines;
-  if (MARKETER_DIRS.some((d) => rel.startsWith(`apps/web/src/${d}`))) marketer += lines;
+  if (isMarketer(rel)) marketer += lines;
 }
 
 const update = process.argv.includes('--update');
