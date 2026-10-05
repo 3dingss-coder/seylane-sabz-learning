@@ -7,6 +7,8 @@ import { errMsg } from '@/lib/errors';
 import { qk } from '@/lib/queries';
 import { useQueryClient } from '@tanstack/react-query';
 import { track } from '@/lib/telemetry';
+import { readPageContext } from '@/lib/pageContext';
+import { listenFa, speechSupported, type ListenHandle } from '@/lib/speech';
 import {
   createRecorder,
   micSupported,
@@ -14,7 +16,7 @@ import {
   speakWithBrowser,
   stopAudio,
 } from '@/lib/voice';
-import type { VoiceSessionOffer, VoiceTurnReply } from '@/lib/types';
+import type { ChatReply, VoiceSessionOffer, VoiceTurnReply } from '@/lib/types';
 
 type CallState =
   'idle' | 'connecting' | 'listening' | 'recording' | 'thinking' | 'speaking' | 'ended';
@@ -23,7 +25,7 @@ const STATE_LABEL: Record<CallState, string> = {
   idle: 'برای شروع تماس، دکمه میکروفن را بزن',
   connecting: 'در حال وصل شدن به منتور…',
   listening: 'بگو، گوش می‌دهم…',
-  recording: 'ضبط می‌کنم… برای ارسال، دوباره بزن',
+  recording: 'گوش می‌دهم… بعد از چند ثانیه سکوت ارسال می‌شود',
   thinking: 'منتور در حال فکر کردن است…',
   speaking: 'منتور جواب می‌دهد…',
   ended: 'تماس تمام شد',
@@ -55,6 +57,8 @@ export function VoiceCallSheet({
   const [elapsed, setElapsed] = useState(0);
 
   const recorder = useMemo(() => (micSupported() ? createRecorder() : null), []);
+  const listenRef = useRef<ListenHandle | null>(null);
+  const canListen = speechSupported() || micSupported();
   const stopPlayback = useRef<(() => void) | null>(null);
   const turnsRef = useRef(turns);
   turnsRef.current = turns;
@@ -69,6 +73,7 @@ export function VoiceCallSheet({
         const offer = await api.post<VoiceSessionOffer>('/me/mentor/voice/session', {
           packageId,
           transport: 'turn',
+          page: readPageContext() ?? undefined,
         });
         if (cancelled) return;
         setSession(offer);
@@ -76,8 +81,9 @@ export function VoiceCallSheet({
         track('mentor_voice_opened', { transport: offer.transport });
       } catch (e) {
         if (cancelled) return;
-        toast.show({ type: 'error', message: errMsg(e) });
-        setState('ended');
+        // Session can fail (voice policy or provider) and the call still works via text ask.
+        setSession(null);
+        setState('idle');
       }
     })();
     return () => {
@@ -85,6 +91,7 @@ export function VoiceCallSheet({
       stopPlayback.current?.();
       stopAudio();
       recorder?.cancel();
+      listenRef.current?.stop();
     };
   }, [packageId, recorder, toast]);
 
@@ -118,20 +125,52 @@ export function VoiceCallSheet({
     else setState('idle');
   }, []);
 
-  const sendTurn = useCallback(
-    async (audio: { base64: string; mime: string; durationSec: number }) => {
-      setState('thinking');
-      try {
-        const r = await api.post<VoiceTurnReply>('/me/mentor/voice/turn', {
-          audio: audio.base64,
-          mime: audio.mime,
-          durationSec: audio.durationSec,
-          packageId,
+  const sendSpoken = useCallback(
+    async (input: { transcript?: string; audio?: { base64: string; mime: string; durationSec: number } }) => {
+      if (input.audio && input.audio.base64.length > 700_000) {
+        toast.show({
+          type: 'error',
+          message: 'صدا طولانی شد و از حد ارسال گذشت. کوتاه‌تر حرف بزن و دوباره بفرست.',
         });
-        append('user', r.transcript);
-        append('assistant', r.reply);
-        setLast(r);
-        speak(r);
+        setState('idle');
+        return;
+      }
+      setState('thinking');
+      const page = readPageContext();
+      try {
+        let reply: VoiceTurnReply;
+        try {
+          reply = await api.post<VoiceTurnReply>('/me/mentor/voice/turn', {
+            audio: input.audio?.base64,
+            mime: input.audio?.mime,
+            durationSec: input.audio?.durationSec,
+            transcript: input.transcript,
+            packageId: packageId ?? page?.packageId ?? null,
+            page: page ?? undefined,
+          });
+        } catch (e) {
+          if (!input.transcript?.trim()) throw e;
+          const asked = await api.post<ChatReply>('/me/mentor/ask', {
+            text: input.transcript,
+            packageId: packageId ?? page?.packageId ?? null,
+            spoken: true,
+            page: page ?? undefined,
+          });
+          reply = {
+            transcript: input.transcript,
+            reply: asked.reply,
+            audio: null,
+            sources: asked.sources,
+            outcome: asked.outcome,
+            nextAction: asked.nextAction ?? null,
+            provider: asked.provider ?? 'ask',
+            latency: { sttMs: 0, answerMs: asked.latencyMs ?? 0, ttsMs: 0, totalMs: asked.latencyMs ?? 0 },
+          };
+        }
+        append('user', reply.transcript);
+        append('assistant', reply.reply);
+        setLast(reply);
+        speak(reply);
       } catch (e) {
         stopAudio();
         toast.show({ type: 'error', message: errMsg(e) });
@@ -142,6 +181,29 @@ export function VoiceCallSheet({
   );
 
   const onMic = useCallback(async () => {
+    if (state === 'speaking' || state === 'thinking' || state === 'connecting') return;
+    stopPlayback.current?.();
+    stopAudio();
+    if (speechSupported()) {
+      if (state === 'recording') {
+        listenRef.current?.stop();
+        return;
+      }
+      setState('recording');
+      listenRef.current = listenFa({
+        onPartial: () => undefined,
+        onSilence: (said) => {
+          listenRef.current = null;
+          void sendSpoken({ transcript: said });
+        },
+        onError: (message) => {
+          listenRef.current = null;
+          toast.show({ type: 'error', message });
+          setState('idle');
+        },
+      });
+      return;
+    }
     if (!recorder) {
       toast.show({ type: 'error', message: 'مرورگر شما از ضبط صدا پشتیبانی نمی‌کند.' });
       return;
@@ -150,16 +212,13 @@ export function VoiceCallSheet({
       setState('thinking');
       try {
         const rec = await recorder.stop();
-        await sendTurn(rec);
+        await sendSpoken({ audio: rec });
       } catch (e) {
         toast.show({ type: 'error', message: errMsg(e) });
         setState('idle');
       }
       return;
     }
-    if (state === 'speaking' || state === 'thinking' || state === 'connecting') return;
-    stopPlayback.current?.();
-    stopAudio();
     try {
       await recorder.start();
       setState('recording');
@@ -170,7 +229,7 @@ export function VoiceCallSheet({
       });
       setState('idle');
     }
-  }, [recorder, sendTurn, state, toast]);
+  }, [recorder, sendSpoken, state, toast]);
 
   const hangUp = useCallback(async () => {
     if (closingRef.current) return;
@@ -179,6 +238,7 @@ export function VoiceCallSheet({
     stopAudio();
     try {
       recorder?.cancel();
+      listenRef.current?.stop();
     } catch {
       /* ignore */
     }
@@ -218,7 +278,7 @@ export function VoiceCallSheet({
             <Loader2 className="size-10 animate-spin" />
           ) : state === 'speaking' ? (
             <Volume2 className="size-10" />
-          ) : micSupported() ? (
+          ) : canListen ? (
             <Mic className="size-10" />
           ) : (
             <MicOff className="size-10" />

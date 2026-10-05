@@ -9,12 +9,32 @@ export async function allBrands(d: Deps): Promise<Doc<Brand>[]> {
   const now = d.clock().getTime();
   if (c && now - c.at < 60_000) return c.brands;
   const brands = await d.store.query<Brand>({ collection: 'brands' });
-  brands.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'fa'));
+  brands.sort(
+    (a, b) =>
+      (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+      (a.name ?? '').localeCompare(b.name ?? '', 'fa'),
+  );
   brandCache.set(d, { at: now, brands });
   return brands;
 }
 export function invalidateBrands(d: Deps) {
   brandCache.delete(d);
+}
+
+const productCache = new WeakMap<Deps, { at: number; products: Doc<Product>[] }>();
+
+/** One products scan per minute per isolate. Mentor name-matching used to scan this table on every question. */
+export async function allProducts(d: Deps): Promise<Doc<Product>[]> {
+  const c = productCache.get(d);
+  const now = d.clock().getTime();
+  if (c && now - c.at < 60_000) return c.products;
+  const products = await d.store.query<Product>({ collection: 'products' });
+  productCache.set(d, { at: now, products });
+  return products;
+}
+
+export function invalidateProducts(d: Deps) {
+  productCache.delete(d);
 }
 
 export async function productsById(d: Deps, idsList: string[]): Promise<Map<string, Doc<Product>>> {

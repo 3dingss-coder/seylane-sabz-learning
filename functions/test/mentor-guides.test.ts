@@ -8,6 +8,7 @@ import {
   getGuide,
   guideContext,
   guideDocId,
+  guideSchema,
   guideFacts,
   listGuides,
   matchByName,
@@ -317,6 +318,43 @@ describe('mentor behaviour boxes (جعبه‌ی رفتار منتور)', () => {
     expect(m.brandId).toBe(fx.brandId);
     const none = await matchByName(ctx.deps, 'هیچی');
     expect(none.productId).toBeNull();
+  });
+
+  it('accepts a long product document and null legacy fields', () => {
+    const long = 'مزیت اصلی این محصول آبرسانی عمیق است. '.repeat(200);
+    expect(long.length).toBeGreaterThan(4000);
+    const parsed = guideSchema.parse({
+      ...BOX,
+      summary: null,
+      document: long,
+      tone: null,
+      personaNote: null,
+    });
+    expect(parsed.document.length).toBeGreaterThan(4000);
+    expect(parsed.summary).toBe('');
+    expect(parsed.tone).toBe('friendly');
+  });
+
+  it('uses the open page when the question only says «این محصول»', async () => {
+    const { ctx, fx } = await setup();
+    await upsertGuide(ctx.deps, SYSTEM, 'product', fx.productId, {
+      ...BOX,
+      document: 'سند دانش: مزیت اصلی ماندگاری بالا برای پوست خشک است.',
+    });
+    const sel = await selectGuides(ctx.deps, {
+      question: 'مزیت این محصول چیه',
+      productId: fx.productId,
+      brandId: fx.brandId,
+    });
+    expect(sel.productId).toBe(fx.productId);
+    expect(sel.productGuide?.document).toContain('ماندگاری بالا');
+    const guide = await guideContext(ctx.deps, {
+      question: 'مزیت این محصول چیه',
+      productId: fx.productId,
+      brandId: fx.brandId,
+    });
+    expect(guide.facts[0]?.text).toContain('سند دانش');
+    expect(guide.block).toContain('سند دانش تأییدشده');
   });
 
   it('buildGuideItems skips boxes whose target has since disappeared', async () => {

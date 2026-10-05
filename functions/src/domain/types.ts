@@ -431,6 +431,12 @@ export interface MentorGuide {
   personaNote: string;
   /** Positioning summary — the mentor must know this by heart. */
   summary: string;
+  /**
+   * Full approved knowledge document (the markdown the admin pastes or uploads).
+   * This is the source of truth for how the mentor talks about the brand/product.
+   * Older boxes simply omit it.
+   */
+  document?: string;
   /** Product/brand facts the mentor should always be able to state. */
   keyPoints: string[];
   /** Benefits for the customer (sales ammunition). */

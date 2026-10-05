@@ -78,9 +78,14 @@ function parseRow<T>(id: string, raw: string): Doc<T> {
  * Cloudflare D1 (SQLite at the edge) implementation of DocStore.
  * Automatically creates tables and seeds initial catalog/demo data on first request.
  */
+const MAX_ROW_JSON = 1_800_000;
+const GET_MANY_CHUNK = 90;
+
 export class D1Store implements DocStore {
   private initPromise: Promise<void> | null = null;
   private queue: Promise<unknown> = Promise.resolve();
+  /** D1 allows 6 connections per invocation and runs one query at a time. Serialize SQL. */
+  private io: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly db: D1Database,
@@ -130,11 +135,23 @@ export class D1Store implements DocStore {
     }
   }
 
+  /** Run one D1 call at a time so a Promise.all of reads cannot open a 7th connection. */
+  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.io.then(fn, fn);
+    this.io = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   private async readRaw(col: string, id: string): Promise<Data | null> {
-    const row = await this.db
-      .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
-      .bind(col, id)
-      .first<{ data: string }>();
+    const row = await this.enqueue(() =>
+      this.db
+        .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
+        .bind(col, id)
+        .first<{ data: string }>(),
+    );
     if (!row) return null;
     const parsed = JSON.parse(row.data) as Data;
     if (typeof parsed.expireAt === 'string') parsed.expireAt = new Date(parsed.expireAt);
@@ -143,10 +160,12 @@ export class D1Store implements DocStore {
 
   private async read<T>(p: string): Promise<Doc<T> | null> {
     const { col, id } = splitPath(p);
-    const row = await this.db
-      .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
-      .bind(col, id)
-      .first<{ data: string }>();
+    const row = await this.enqueue(() =>
+      this.db
+        .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
+        .bind(col, id)
+        .first<{ data: string }>(),
+    );
     return row ? parseRow<T>(id, row.data) : null;
   }
 
@@ -161,12 +180,15 @@ export class D1Store implements DocStore {
     const clean = toPlainData(data);
 
     if (mode === 'create') {
-      const res = await this.db
-        .prepare(
-          'INSERT OR IGNORE INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)',
-        )
-        .bind(col, id, grp, JSON.stringify(clean), now)
-        .run();
+      const json = this.rowJson(p, clean);
+      const res = await this.enqueue(() =>
+        this.db
+          .prepare(
+            'INSERT OR IGNORE INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)',
+          )
+          .bind(col, id, grp, json, now)
+          .run(),
+      );
       if (!res.meta?.changes) throw new StoreConflictError(p);
       return;
     }
@@ -175,10 +197,13 @@ export class D1Store implements DocStore {
       const existing = await this.readRaw(col, id);
       if (!existing) throw new StoreNotFoundError(p);
       const next = toPlainData(applyUpdate(existing, clean));
-      await this.db
-        .prepare('UPDATE docs SET data = ?3, updated_at = ?4 WHERE col = ?1 AND id = ?2')
-        .bind(col, id, JSON.stringify(next), now)
-        .run();
+      const json = this.rowJson(p, next);
+      await this.enqueue(() =>
+        this.db
+          .prepare('UPDATE docs SET data = ?3, updated_at = ?4 WHERE col = ?1 AND id = ?2')
+          .bind(col, id, json, now)
+          .run(),
+      );
       return;
     }
 
@@ -188,22 +213,46 @@ export class D1Store implements DocStore {
       if (existing) next = toPlainData(deepMerge(existing, clean));
     }
 
-    await this.db
-      .prepare(
-        `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+    const json = this.rowJson(p, next);
+    await this.enqueue(() =>
+      this.db
+        .prepare(
+          `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
          ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-      )
-      .bind(col, id, grp, JSON.stringify(next), now)
-      .run();
+        )
+        .bind(col, id, grp, json, now)
+        .run(),
+    );
+  }
+
+  /** Stay under D1's 2 MB row limit. Bound JSON is what the Worker actually stores. */
+  private rowJson(path: string, data: Data): string {
+    const json = JSON.stringify(data);
+    if (json.length > MAX_ROW_JSON) {
+      throw new Error(`Document ${path} is too large for Cloudflare D1`);
+    }
+    return json;
   }
 
   private async runQuery<T>(q: QuerySpec): Promise<Doc<T>[]> {
-    const stmt = q.group
-      ? this.db
-          .prepare("SELECT id, data FROM docs WHERE grp = ?1 AND col LIKE '%/%'")
-          .bind(q.collection)
-      : this.db.prepare('SELECT id, data FROM docs WHERE col = ?1').bind(q.collection);
-    const res = await stmt.all<{ id: string; data: string }>();
+    const binds: unknown[] = [q.collection];
+    const extra: string[] = [];
+    for (const [field, op, value] of q.where ?? []) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)) continue;
+      if (op === '==' && typeof value === 'string') {
+        binds.push(value);
+        extra.push(`json_extract(data, '$.${field}') = ?${binds.length}`);
+      } else if (op === '==' && value === null) {
+        extra.push(`(json_extract(data, '$.${field}') IS NULL)`);
+      }
+    }
+    const tail = extra.length ? ` AND ${extra.join(' AND ')}` : '';
+    const sql = q.group
+      ? `SELECT id, data FROM docs WHERE grp = ?1 AND col LIKE '%/%'${tail}`
+      : `SELECT id, data FROM docs WHERE col = ?1${tail}`;
+    const res = await this.enqueue(() =>
+      this.db.prepare(sql).bind(...binds).all<{ id: string; data: string }>(),
+    );
     let rows: Array<Data & { id: string }> = (res.results ?? []).map((r) =>
       parseRow<Data>(r.id, r.data),
     );
@@ -229,7 +278,30 @@ export class D1Store implements DocStore {
 
   async getMany<T>(paths: string[]): Promise<Array<Doc<T> | null>> {
     await this.ensureReady();
-    return Promise.all(paths.map((p) => this.read<T>(p)));
+    if (!paths.length) return [];
+    const groups = new Map<string, string[]>();
+    for (const p of paths) {
+      const { col, id } = splitPath(p);
+      const ids = groups.get(col) ?? [];
+      ids.push(id);
+      groups.set(col, ids);
+    }
+    const found = new Map<string, Doc<T>>();
+    for (const [col, ids] of groups) {
+      const uniq = [...new Set(ids)];
+      for (let i = 0; i < uniq.length; i += GET_MANY_CHUNK) {
+        const chunk = uniq.slice(i, i + GET_MANY_CHUNK);
+        const marks = chunk.map((_, n) => `?${n + 2}`).join(', ');
+        const res = await this.enqueue(() =>
+          this.db
+            .prepare(`SELECT id, data FROM docs WHERE col = ?1 AND id IN (${marks})`)
+            .bind(col, ...chunk)
+            .all<{ id: string; data: string }>(),
+        );
+        for (const row of res.results ?? []) found.set(`${col}/${row.id}`, parseRow<T>(row.id, row.data));
+      }
+    }
+    return paths.map((p) => found.get(p) ?? null);
   }
 
   async query<T>(q: QuerySpec): Promise<Doc<T>[]> {
@@ -255,7 +327,9 @@ export class D1Store implements DocStore {
   async delete(p: string): Promise<void> {
     await this.ensureReady();
     const { col, id } = splitPath(p);
-    await this.db.prepare('DELETE FROM docs WHERE col = ?1 AND id = ?2').bind(col, id).run();
+    await this.enqueue(() =>
+      this.db.prepare('DELETE FROM docs WHERE col = ?1 AND id = ?2').bind(col, id).run(),
+    );
   }
 
   async increment(p: string, field: string, by: number): Promise<void> {
@@ -286,13 +360,14 @@ export class D1Store implements DocStore {
               `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
                ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
             )
-            .bind(col, id, grp, JSON.stringify(clean), now),
+            .bind(col, id, grp, this.rowJson(it.path, clean), now),
         );
       }
     }
     const CHUNK = 80;
     for (let i = 0; i < nonMerge.length; i += CHUNK) {
-      await this.db.batch(nonMerge.slice(i, i + CHUNK));
+      const slice = nonMerge.slice(i, i + CHUNK);
+      await this.enqueue(() => this.db.batch(slice));
     }
   }
 

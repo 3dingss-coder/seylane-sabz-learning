@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Button, Card, Input, Modal, Skeleton, StatusBadge, useToast } from '@/components/ui';
@@ -167,6 +167,8 @@ function previewBlock(g: MentorGuide, name: string): string {
   lines.push(`- لحن گفتار: ${toneLabel(g.tone)}`);
   if (g.personaNote.trim()) lines.push(`- نقش منتور: ${g.personaNote.trim()}`);
   if (g.summary.trim()) lines.push(`- آنچه منتور باید بداند: ${g.summary.trim()}`);
+  if ((g.document ?? '').trim())
+    lines.push(`- سند دانش: ${(g.document ?? '').trim().slice(0, 500)}`);
   if (g.dos.length) lines.push(`- حتماً بگو: ${g.dos.join(' | ')}`);
   if (g.donts.length) lines.push(`- هرگز نگو: ${g.donts.join(' | ')}`);
   if (g.sellingPoints.length) lines.push(`- مزیت‌های اصلی: ${g.sellingPoints.join(' | ')}`);
@@ -195,9 +197,24 @@ function GuideForm({
 }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [g, setG] = useState<MentorGuide>(initial);
-  const [keywords, setKeywords] = useState(initial.keywords.join('، '));
+  const [g, setG] = useState<MentorGuide>({
+    ...initial,
+    document: initial.document ?? '',
+    keyPoints: initial.keyPoints ?? [],
+    sellingPoints: initial.sellingPoints ?? [],
+    objections: initial.objections ?? [],
+    faq: initial.faq ?? [],
+    dos: initial.dos ?? [],
+    donts: initial.donts ?? [],
+    keywords: initial.keywords ?? [],
+    summary: initial.summary ?? '',
+    personaNote: initial.personaNote ?? '',
+    title: initial.title ?? '',
+  });
+  const [keywords, setKeywords] = useState((initial.keywords ?? []).join('، '));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -219,23 +236,56 @@ function GuideForm({
       faq: g.faq
         .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() }))
         .filter((f) => f.question || f.answer),
+      document: (g.document ?? '').trim(),
     }),
     [g, keywords],
   );
+  const payload = useMemo(
+    () => ({
+      title: body.title,
+      enabled: body.enabled,
+      tone: body.tone,
+      personaNote: body.personaNote,
+      summary: body.summary,
+      document: body.document ?? '',
+      keyPoints: body.keyPoints,
+      sellingPoints: body.sellingPoints,
+      objections: body.objections,
+      faq: body.faq,
+      dos: body.dos,
+      donts: body.donts,
+      keywords: body.keywords,
+      priority: body.priority,
+      quizAnswers: body.quizAnswers,
+    }),
+    [body],
+  );
 
-  const url = `/admin/mentor/guides/${kind}${targetId ? `/${targetId}` : ''}`;
+  const url = `/admin/mentor/guides/${kind}${targetId ? `/${encodeURIComponent(targetId)}` : ''}`;
   const save = useMutation({
-    mutationFn: () => api.put<MentorGuideDetail>(url, body),
+    mutationFn: () => {
+      if ((payload.summary ?? '').length > 20_000)
+        throw new ApiError('VALIDATION', 'متن «آنچه منتور باید بداند» طولانی است. فایل دانش را در «سند دانش» بگذارید.', 400);
+      if ((payload.document ?? '').length > 40_000)
+        throw new ApiError('VALIDATION', 'سند دانش طولانی‌تر از حد مجاز است. آن را کمی کوتاه کنید.', 400);
+      return api.put<MentorGuideDetail>(url, payload);
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ak.guides });
       void qc.invalidateQueries({ queryKey: ak.guide(guideKey(kind, targetId)) });
       toast.show({ type: 'success', message: 'جعبه‌ی رفتار منتور ذخیره شد.' });
       onClose();
     },
-    onError: (e) =>
-      e instanceof ApiError && Object.keys(e.fields).length
-        ? setErrors(e.fields)
-        : toast.show({ type: 'error', message: errMsg(e) }),
+    onError: (e) => {
+      if (e instanceof ApiError && Object.keys(e.fields).length) {
+        setErrors(e.fields);
+        setFormError(Object.values(e.fields)[0] ?? errMsg(e));
+        return;
+      }
+      const message = errMsg(e);
+      setFormError(message);
+      toast.show({ type: 'error', message });
+    },
   });
   const remove = useMutation({
     mutationFn: () => api.del(url),
@@ -255,7 +305,8 @@ function GuideForm({
     g.faq.length +
     cleanList(g.dos).length +
     cleanList(g.donts).length +
-    (g.summary.trim() ? 2 : 0);
+    (g.summary.trim() ? 2 : 0) +
+    ((g.document ?? '').trim() ? 2 : 0);
 
   return (
     <Modal
@@ -294,6 +345,11 @@ function GuideForm({
       }
     >
       <div className="flex flex-col gap-5">
+        {formError && (
+          <p role="alert" className="rounded-card border border-danger/40 bg-danger-light p-3 text-sm leading-7 text-danger-fg">
+            {formError}
+          </p>
+        )}
         <p className="rounded-card border border-info/30 bg-info-light p-3 text-sm leading-7 text-text">
           هرچه اینجا می‌نویسی دو جا می‌رود: <b>دانش منتور</b> (مثل بقیه محتوای تأییدشده، قابل
           جست‌وجو و ارجاع) و <b>دستور رفتار</b> (لحن، بایدها و نبایدها). منتور درباره‌ی این{' '}
@@ -365,9 +421,47 @@ function GuideForm({
             value={g.summary}
             onChange={(e) => patch({ summary: e.target.value })}
             error={errors.summary}
-            hint="جایگاه برند/محصول، مخاطب، ترکیبات و نکته‌های اصلی — منتور این را از حفظ است."
+            hint="جایگاه برند/محصول، مخاطب و نکته‌های اصلی. متن خیلی بلند را در سند دانش بگذار."
             rows={5}
           />
+          <Textarea
+            label="سند دانش محصول (متن کامل)"
+            value={g.document ?? ''}
+            onChange={(e) => patch({ document: e.target.value })}
+            error={errors.document}
+            hint="فایل دانش تأییدشده را اینجا بگذار یا بارگذاری کن. منتور عین همین متن را ملاک قرار می‌دهد."
+            rows={8}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".md,.txt,.markdown,text/plain,text/markdown"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                if (file.size > 80_000) {
+                  setFormError('فایل بزرگ‌تر از حد مجاز است. یک فایل متنی کوتاه‌تر انتخاب کن.');
+                  return;
+                }
+                void file.text().then((text) => {
+                  const clipped = text.slice(0, 40_000);
+                  patch({ document: clipped, title: g.title || file.name.replace(/\.[^.]+$/, '') });
+                  setFormError(
+                    text.length > 40_000 ? 'انتهای فایل به‌خاطر سقف طول حذف شد، ولی بقیه ذخیره می‌شود.' : '',
+                  );
+                });
+              }}
+            />
+            <Button type="button" variant="secondary" onClick={() => fileRef.current?.click()}>
+              بارگذاری فایل دانش (md/txt)
+            </Button>
+            <span className="text-xs text-text-secondary">
+              {toPersianDigits((g.document ?? '').length)} نویسه
+            </span>
+          </div>
         </Card>
 
         <Card className="flex flex-col gap-5">

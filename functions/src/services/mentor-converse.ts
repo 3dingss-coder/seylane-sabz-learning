@@ -169,5 +169,8 @@ export function cleanConversational(raw: string, scrub: (s: string) => string): 
   const letters = text.replace(/[^A-Za-z\u0600-\u06FF]/g, '');
   const fa = (letters.match(/[\u0600-\u06FF]/g) ?? []).length;
   if (letters.length > 0 && fa / letters.length < 0.5) return '';
-  return text.length > 700 ? `${text.slice(0, 700).replace(/\s+\S*$/, '')}…` : text;
+  if (text.length <= 4_000) return text;
+  const cut = text.slice(0, 4_000);
+  const stop = Math.max(cut.lastIndexOf('.'), cut.lastIndexOf('؟'), cut.lastIndexOf('!'), cut.lastIndexOf('\n'));
+  return (stop > 80 ? cut.slice(0, stop + 1) : cut.replace(/\s+\S*$/, '')).trim();
 }

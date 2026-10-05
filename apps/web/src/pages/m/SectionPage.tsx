@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { ProductImage } from '@/components/common/ProductImage';
 import { QueryState } from '@/components/common/QueryState';
 import { MentorLauncher } from '@/components/learning/MentorSheet';
+import { RememberPage } from '@/lib/pageContext';
 import { api, fileUrl } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
@@ -70,6 +71,19 @@ function Player({ d }: { d: SectionDetail }) {
   const quizReady = !s.quizPassed;
   return (
     <div className="flex flex-col gap-4">
+      <RememberPage
+        kind="section"
+        brandId={p.brand?.id ?? null}
+        brandName={p.brand?.name ?? null}
+        productId={p.product?.id ?? null}
+        productName={p.product?.name ?? null}
+        packageId={p.id}
+        packageTitle={p.title}
+        sectionId={s.id}
+        sectionTitle={s.title}
+        progressPercent={progress.percent}
+        activityLine={`قسمت «${s.title}» را باز کرد`}
+      />
       <PageHeader
         title={s.title}
         back={`/packages/${p.id}`}

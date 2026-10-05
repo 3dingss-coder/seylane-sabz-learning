@@ -234,8 +234,10 @@ export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
       const input = parse(mentorAi.askSchema, req.body);
       return mentorAi.answerQuestion(d, user, {
         question: input.text,
-        packageId: input.packageId ?? null,
+        packageId: input.packageId ?? input.page?.packageId ?? null,
         spoken: input.spoken ?? false,
+        page: input.page,
+        attachments: input.attachments,
       });
     }),
   );

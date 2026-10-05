@@ -7,6 +7,7 @@ import { getPolicy, track, type Deps } from './context';
 import { checkInput, normalizeFa } from './mentor';
 import { guideContext } from './mentor-guides';
 import { answerQuestion, consumeVoiceQuota, recentTurns, type AnswerResult } from './mentor-ai';
+import { pageContextSchema, renderPageBlock } from './mentor-page';
 import { dayPart, firstName } from './mentor-converse';
 import { evaluateBehavior } from './behavior';
 import type { ChatMessage, User } from '../domain/types';
@@ -31,21 +32,27 @@ import { DAY } from '../lib/time';
  * Both paths share the guardrails, the quota accounting and the transcript log.
  */
 
-export const voiceTurnSchema = z.object({
-  /** Base64 audio of one utterance (webm/opus from MediaRecorder, or m4a/wav). */
-  audio: z.string().min(16).max(6_000_000),
-  mime: z.string().max(80).default('audio/webm'),
-  packageId: z.string().max(80).nullable().optional(),
-  /** Seconds of audio sent, used for the voice-minute quota. */
-  durationSec: z.number().min(0).max(300).optional(),
-  /** Set when the caller already transcribed the turn locally (browser speech recognition). */
-  transcript: z.string().max(600).optional(),
-});
+export const voiceTurnSchema = z
+  .object({
+    /** Base64 audio of one utterance (webm/opus from MediaRecorder, or m4a/wav). */
+    audio: z.string().max(6_000_000).optional(),
+    mime: z.string().max(80).default('audio/webm'),
+    packageId: z.string().max(80).nullable().optional(),
+    /** Seconds of audio sent, used for the voice-minute quota. */
+    durationSec: z.number().min(0).max(300).optional(),
+    /** Set when the caller already transcribed the turn locally (browser speech recognition). */
+    transcript: z.string().max(2000).optional(),
+    page: pageContextSchema.optional(),
+  })
+  .refine((v) => (v.audio?.length ?? 0) >= 16 || (v.transcript?.trim().length ?? 0) > 0, {
+    message: 'صدا یا متن گفتار را بفرستید.',
+  });
 
 export const voiceSessionSchema = z.object({
   packageId: z.string().max(80).nullable().optional(),
   /** 'turn' forces the request/response pipeline even when Live is configured. */
   transport: z.enum(['auto', 'turn', 'live']).default('auto'),
+  page: pageContextSchema.optional(),
 });
 
 export const voiceTranscriptSchema = z.object({
@@ -226,6 +233,8 @@ export async function voiceTurn(
   let sttProvider = 'client';
   let sttMs = 0;
   if (!transcript) {
+    if (!input.audio || input.audio.length < 16)
+      throw new ApiError('VALIDATION', 'صدا یا متن گفتار را بفرستید.');
     const stt = await transcribeTurn(d, { base64: input.audio, mime: input.mime });
     transcript = stt.text;
     sttProvider = stt.provider;
@@ -257,11 +266,12 @@ export async function voiceTurn(
   const answerStarted = Date.now();
   const answer = await answerQuestion(d, user, {
     question: verdict.text,
-    packageId: input.packageId ?? null,
+    packageId: input.packageId ?? input.page?.packageId ?? null,
     spoken: true,
     mode: 'voice',
     history,
     behavior,
+    page: input.page,
   });
   const answerMs = Date.now() - answerStarted;
 
@@ -321,10 +331,17 @@ export async function createVoiceSession(
   const sessionId = `${user.id}-${d.clock().getTime().toString(36)}`;
   // The global behaviour box (if the admin defined one) shapes every Live session; a per-turn
   // box for the brand/product being discussed arrives through the `ground` tool instead.
-  const box = await guideContext(d, { question: '' });
+  const box = await guideContext(d, {
+    question: input.page?.productName || input.page?.brandName || '',
+    packageId: input.packageId ?? input.page?.packageId ?? null,
+    brandId: input.page?.brandId ?? null,
+    productId: input.page?.productId ?? null,
+    brandPage: input.page?.kind === 'brand' && !input.page?.productId,
+  });
   const systemInstruction = `${prompts.voiceSystem({
     allowQuizAnswers: box.quizAnswers,
     guide: box.block,
+    page: renderPageBlock(input.page),
   })}
 
 اسم کاربر: ${firstName(user) || 'نامشخص'} — الان ${dayPart(d.clock())} است (وقت تهران). اولین جمله‌ات را مثل یک سلام و احوال‌پرسی کوتاه و طبیعی بگو، نه یک معرفی رسمی.

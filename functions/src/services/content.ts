@@ -17,7 +17,7 @@ import type {
   SectionSummary,
 } from '../domain/types';
 import { audit, nowIso, track, type Actor, type Deps } from './context';
-import { allBrands, invalidateBrands } from './catalog-cache';
+import { allBrands, invalidateBrands, invalidateProducts } from './catalog-cache';
 
 const notFound = (what: string) => new ApiError('NOT_FOUND', `${what} پیدا نشد.`);
 
@@ -163,6 +163,7 @@ export async function createProduct(d: Deps, actor: Actor, input: z.infer<typeof
     updatedAt: now,
   };
   await d.store.set(`products/${id}`, product as unknown as Record<string, unknown>);
+  invalidateProducts(d);
   await audit(d, actor, 'product.created', 'products', id, null, product);
   return { id, ...product };
 }
@@ -190,6 +191,7 @@ export async function updateProduct(
     patch.imageIsFallback = false;
   }
   await d.store.update(`products/${id}`, patch as Record<string, unknown>);
+  invalidateProducts(d);
   await audit(
     d,
     actor,

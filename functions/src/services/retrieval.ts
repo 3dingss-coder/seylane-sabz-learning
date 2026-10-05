@@ -5,8 +5,6 @@ import { cosine } from '../ai/local';
 import { tokenize } from './mentor';
 import {
   KNOWLEDGE_COLLECTION,
-  KNOWLEDGE_DIRTY,
-  KNOWLEDGE_META,
   rebuildKnowledgeIndex,
   type KnowledgeItem,
   type KnowledgeKind,
@@ -206,33 +204,13 @@ async function bootstrapIndex(d: Deps): Promise<void> {
   return state.running;
 }
 
-/** Re-index when an admin edit happened after the last build. Single-flight, 20 s cooldown. */
-const refreshState = new WeakMap<Deps, { at: number; running: Promise<void> | null }>();
-const REFRESH_COOLDOWN_MS = 20_000;
-
-async function refreshIfDirty(d: Deps): Promise<void> {
-  const state = refreshState.get(d) ?? { at: 0, running: null };
-  refreshState.set(d, state);
-  if (state.running) return state.running;
-  const now = d.clock().getTime();
-  if (now - state.at < REFRESH_COOLDOWN_MS) return;
-  const [dirty, meta] = await Promise.all([
-    d.store.get<{ at: string }>(KNOWLEDGE_DIRTY),
-    d.store.get<{ builtAt?: string }>(KNOWLEDGE_META),
-  ]);
-  if (!dirty?.at || (meta?.builtAt && meta.builtAt >= dirty.at)) return;
-  state.at = now;
-  state.running = rebuildKnowledgeIndex(d)
-    .then(() => {
-      indexCache.delete(d);
-    })
-    .catch((e: unknown) => {
-      console.warn('[retrieval] dirty re-index failed', (e as Error).message);
-    })
-    .finally(() => {
-      state.running = null;
-    });
-  return state.running;
+async function refreshIfDirty(_d: Deps): Promise<void> {
+  // Do not rebuild the knowledge index inside a user request. A full rebuild reads and writes
+  // every knowledge row; on Cloudflare's free plan that exceeds the 50-subrequest cap and the
+  // same invocation then fails the marketer's question. The `knowledge-reindex` cron owns the
+  // rebuild. Brand/product answers do not wait for it — selectGuides loads the behaviour box
+  // directly from D1.
+  return;
 }
 
 export async function loadIndex(d: Deps, maxAgeMs = 60_000): Promise<KnowledgeItem[]> {

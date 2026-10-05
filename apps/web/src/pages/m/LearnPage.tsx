@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, PackageCardSkeleton } from '@/components/ui';
 import { Tabs } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -6,6 +6,7 @@ import { QueryState, StaleBanner } from '@/components/common/QueryState';
 import { BrandLogo } from '@/components/brand/BrandLogo';
 import { PackageCard } from '@/components/learning/PackageCard';
 import { cn } from '@/lib/cn';
+import { rememberSubject } from '@/lib/pageContext';
 import { usePackages } from '@/lib/queries';
 import type { PackageUserStatus } from '@/lib/types';
 
@@ -30,6 +31,23 @@ export function LearnPage() {
     for (const p of q.data ?? []) if (p.brand) m.set(p.brand.id, p.brand);
     return [...m.values()];
   }, [q.data]);
+  useEffect(() => {
+    if (!brand) return;
+    const b = brands.find((x) => x.id === brand);
+    if (!b) return;
+    rememberSubject({
+      kind: 'brand',
+      brandId: b.id,
+      brandName: b.name,
+      productId: null,
+      productName: null,
+      packageId: null,
+      packageTitle: null,
+      sectionId: null,
+      sectionTitle: null,
+      activityLine: `صفحه برند «${b.name}» را باز کرد`,
+    });
+  }, [brand, brands]);
 
   return (
     <div className="flex flex-col gap-4">

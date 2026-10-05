@@ -23,6 +23,7 @@ import {
   useToast,
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
+import { RememberPage } from '@/lib/pageContext';
 import { QueryState } from '@/components/common/QueryState';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -64,6 +65,21 @@ export function QuizPage() {
   return (
     <QueryState query={quiz} loading={loading}>
       {(d) => (
+        <>
+        {section.data && (
+          <RememberPage
+            kind="quiz"
+            brandId={section.data.package.brand?.id ?? null}
+            brandName={section.data.package.brand?.name ?? null}
+            productId={section.data.package.product?.id ?? null}
+            productName={section.data.package.product?.name ?? null}
+            packageId={section.data.package.id}
+            packageTitle={section.data.package.title}
+            sectionId={sectionId}
+            sectionTitle={section.data.section.title}
+            activityLine={`آزمون «${section.data.section.title}» را باز کرد`}
+          />
+        )}
         <QuizFlow
           // Keyed by quiz only: the post-submit refetch bumps attemptInfo.used and must not
           // remount the flow (that would drop the result screen).
@@ -72,6 +88,7 @@ export function QuizPage() {
           sectionId={sectionId}
           nextSectionId={section.data?.nextSectionId ?? null}
         />
+        </>
       )}
     </QueryState>
   );
