@@ -245,13 +245,155 @@ export type PointsReason =
   | 'package_completion'
   | 'badge'
   | 'policy_penalty'
-  | 'manual';
+  | 'manual'
+  // PHASE-3 §3.3.3 — capability points for the new mechanics
+  | 'station_completed'
+  | 'duel_pass'
+  | 'review_on_time'
+  | 'quest'
+  | 'mastery';
 export interface PointsEntry {
   userId: string;
   amount: number;
   reason: PointsReason;
   refId: string;
   createdAt: string;
+}
+
+// ── PHASE-3 — motivation engine (§3.2 streak · §3.4 spaced · §3.5 mastery · §3.6 quests · §3.3 coins) ──
+
+/**
+ * پیوستگی (§3.2). Counted in Asia/Tehran days and only by a *learning* action (a completed
+ * station), never by opening the app (G-02). Rule G-03: this record is never part of any
+ * manager or admin payload.
+ */
+export interface Streak {
+  current: number;
+  longest: number;
+  /** current high-water mark — re-based after a break, so repeated breaks keep ramping down */
+  peak: number;
+  /** what the repair window can win back (§3.2.2 بازگردانی); 0 when no window is open */
+  pendingPeak: number;
+  /** YYYY-MM-DD of the last counted day */
+  lastDay: string | null;
+  shields: number;
+  /** completed stations since the last shield charge (5 → +1 shield, max 2) */
+  stationsSinceShield: number;
+  /** a broken streak can be repaired while this day has not passed (3 days) */
+  repairUntil: string | null;
+  onLeaveUntil: string | null;
+  leaveTakenAt: string | null;
+  updatedAt: string;
+}
+
+export type StreakEvent =
+  | 'started'
+  | 'extended'
+  | 'unchanged'
+  | 'shield_used'
+  | 'broken'
+  | 'repaired'
+  | 'on_leave';
+
+/** Per-question memory for spaced repetition (§3.4, Half-Life Regression, simplified). */
+export interface QuestionMemory {
+  userId: string;
+  questionId: string;
+  quizId: string;
+  sectionId: string;
+  packageId: string;
+  correctStreak: number;
+  halfLifeDays: number;
+  seenCount: number;
+  lastSeenAt: string | null;
+  nextReviewAt: string;
+  /** set once a successful review happens at ≥30 / ≥90 days of age (§3.5 condition 3) */
+  milestone30: boolean;
+  milestone90: boolean;
+  reviewsTotal: number;
+  reviewsOnTime: number;
+  updatedAt: string;
+}
+
+export type QuestKind = 'stations' | 'perfect_duel' | 'reviews' | 'help' | 'roleplay';
+export type ChestQuality = 'bronze' | 'silver' | 'gold';
+
+export interface Quest {
+  userId: string;
+  day: string;
+  kind: QuestKind;
+  title: string;
+  progress: number;
+  target: number;
+  coinReward: number;
+  doneAt: string | null;
+  /** chest quality, fixed when the quest is completed (variable reward, known range) */
+  chest: ChestQuality | null;
+  chestCoins: number;
+  updatedAt: string;
+}
+
+export type CoinReason =
+  | 'station_completed'
+  | 'duel_first_pass'
+  | 'duel_retry_pass'
+  | 'review_on_time'
+  | 'package_completed'
+  | 'mastery'
+  | 'helped_teammate'
+  | 'quest'
+  | 'chest'
+  | 'redeem';
+
+export interface CoinEntry {
+  userId: string;
+  amount: number;
+  reason: CoinReason;
+  refId: string;
+  createdAt: string;
+}
+
+/** G-04: coins buy real fulfilment only — never a score, never a hidden deadline move. */
+export type CoinFulfilment = 'physical' | 'process' | 'coaching';
+
+export interface CoinCatalogItem {
+  code: string;
+  title: string;
+  price: number;
+  fulfilment: CoinFulfilment;
+  note: string;
+}
+
+export interface CoinBalance {
+  userId: string;
+  balance: number;
+  lifetime: number;
+  updatedAt: string;
+}
+
+export interface CoinRedemption {
+  userId: string;
+  code: string;
+  title: string;
+  price: number;
+  /** always visible to the user and to ops; a redemption is never silent (G-04) */
+  status: 'pending_fulfilment' | 'fulfilled' | 'cancelled';
+  createdAt: string;
+}
+
+/** استادی محصول (§3.5) — a defensible competence definition, not a decorative label (G-07). */
+export interface MasteryRecord {
+  userId: string;
+  packageId: string;
+  stationDone: boolean;
+  /** passes ≥80% on two independent attempts at least 7 days apart */
+  duel80Count: number;
+  duel80LastAt: string | null;
+  reviews30: boolean;
+  reviews90: boolean;
+  roleplayOk: boolean;
+  masteredAt: string | null;
+  updatedAt: string;
 }
 
 export interface Badge {

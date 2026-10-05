@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, KpiCard, Skeleton } from '@/components/ui';
 import { PublishGuide } from '@/components/admin/PublishGuide';
+import { LearningQualityCard } from '@/components/admin/LearningQualityCard';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
@@ -121,6 +122,9 @@ export function AdminDashboard() {
           </>
         )}
       </QueryState>
+
+      {/* PHASE-3 DoD — «درصد مرورِ به‌موقع» و «نرخ استادی»; streak data is never shown here (G-03) */}
+      <LearningQualityCard />
     </div>
   );
 }

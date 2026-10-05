@@ -17,6 +17,8 @@ import { Character } from '@/components/character/Character';
 import type { Expression } from '@/components/character/types';
 import { ProductImage } from '@/components/common/ProductImage';
 import { PackageCard } from '@/components/learning/PackageCard';
+import { ReviewDeck } from '@/components/learning/ReviewDeck';
+import { QuestList } from '@/components/learning/QuestList';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
@@ -164,6 +166,11 @@ export function HomePage() {
                 </div>
               </Card>
             )}
+
+            {/* PHASE-3: the motivation engine is visible where the work happens — today's review
+                queue (spaced repetition) and today's quests, both driven by real server data. */}
+            <ReviewDeck />
+            <QuestList />
 
             {/* v4: the mascot's real job — a coach that speaks, not a logo in the header. */}
             <Link

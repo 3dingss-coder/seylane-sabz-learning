@@ -289,7 +289,18 @@ CREATE TABLE quests (
 ---
 
 ## ۳.۱۲ DoD فاز ۳
-- [ ] `migrations/0002_gamification.sql` + سرویس‌های `streak`, `spaced`, `quest`, `coin` با تست واحد
-- [ ] قوانین §۳٫۹ در کد به‌صورت assertion/تست نوشته شوند (نه فقط در مستند)
-- [ ] داشبورد ادمین: «درصد مرورِ به‌موقع» و «نرخ استادی» قابل دیدن باشد
-- [ ] هیچ مکانیکی بدون رویداد تحلیلی ship نشود (قاعدهٔ ۱۲ فاز ۰)
+- [x] `migrations/0002_gamification.sql` + سرویس‌های `streak`, `spaced`, `quest`, `coin` با تست واحد
+  - `functions/src/services/{streak,spaced,quest,coin,mastery,gamification}.ts`؛ ۳۰ تست در `functions/test/gamification.test.ts`.
+  - نکتهٔ معماری: store واقعی این مخزن document-based است (`src/store/*`)، نه جداول رابطه‌ای؛ فایل SQL «آینهٔ رابطه‌ای» همان کالکشن‌هاست (مسیر هر document در هدرش نوشته شده) و هیچ کد运行时 آن را نمی‌خواند.
+- [x] قوانین §۳٫۹ در کد به‌صورت assertion/تست نوشته شوند (نه فقط در مستند)
+  - `assertStreakNotExposed()` (G-03) روی payload ادمین اجرا می‌شود و در تست هم assert شده؛ `assertCatalogIsFair()` (G-04) قبل از هر خرید اجرا می‌شود و فروش «نمره» را با throw رد می‌کند؛ AC-03 (ضدتقلب مرور سریع) در `answerReview`؛ G-02 (پیوستگی فقط با تکمیل ایستگاه) با یکسان‌سازی `behavior.streakDays` روی همان رکورد.
+- [x] داشبورد ادمین: «درصد مرورِ به‌موقع» و «نرخ استادی» قابل دیدن باشد
+  - `GET /v1/admin/metrics/gamification` + کارت «کیفیت یادگیری» در داشبورد ادمین (`LearningQualityCard.tsx`) با پوشش هر چهار شرط استادی و توضیح صریح اینکه پیوستگی عمداً نمایش داده نمی‌شود.
+- [x] هیچ مکانیکی بدون رویداد تحلیلی ship نشود (قاعدهٔ ۱۲ فاز ۰)
+  - رویدادها: `streak_extended` / `streak_broken` / `streak_repaired` / `shield_used` / `streak_frozen_on_leave` / `streak_leave_requested` / `review_scheduled` / `review_done` / `duel_attempt` / `quest_completed` / `chest_opened` / `coin_earned` / `coin_redeemed` / `mastery_unlocked` / `roleplay_approved` / `roleplay_attempt`. تست، وجود شش رویداد کلیدی را روی یک سناریوی واقعی assert می‌کند.
+
+### ساخته‌نشده (صادقانه)
+- **لیگ تیمی (§۳٫۰)** پیاده نشد: opt-in + هم‌سطح‌سازی + پنهان‌سازی از مدیر، هر سه لازمه‌اند و هیچ‌کدام بدون مدل تیمی جدید ممکن نیست.
+- **یادآوری با bandit (N-02)** و **زنجیرهٔ هم‌تیمی** پیاده نشدند؛ صف مرور فعلاً در خود اپ دیده می‌شود، نه با push (قالب نوتیفیکیشن جدید نیاز به تغییر `NotificationType` دارد).
+- کوئست اجتماعی («به سؤال یک هم‌تیمی جواب بده») از استخر **حذف** شد، چون هیچ تریگر واقعی ندارد — کوئستِ انجام‌نشدنی از کوئستِ نبودن بدتر است.
+- شرط ۴ استادی (نقش‌آفرینی) به تأیید انسانی نیاز دارد؛ مسیر ثبت آن (`roleplay_approvals`) ساخته شده ولی UI تأیید مدیر هنوز نیست.

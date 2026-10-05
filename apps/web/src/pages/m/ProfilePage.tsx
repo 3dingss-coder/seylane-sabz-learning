@@ -13,6 +13,7 @@ import {
 } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Character } from '@/components/character/Character';
+import { CoinWallet } from '@/components/learning/CoinWallet';
 import { PushOptIn } from '@/components/common/PushOptIn';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -102,6 +103,9 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
           </div>
         </div>
       </Card>
+      {/* PHASE-3 §3.3 — spendable coins buy real fulfilment, never icons and never a score (G-04) */}
+      <CoinWallet />
+
       {mastery.length > 0 && (
         <Card chunky className="flex flex-col gap-3">
           <div className="flex items-center gap-3">

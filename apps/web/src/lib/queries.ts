@@ -2,7 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import { lastKnown } from './lastKnown';
 import type {
+  AdminGamification,
   BehaviorBrief,
+  CoinWallet,
+  Gamification,
   HomeData,
   MessageItem,
   NotificationItem,
@@ -24,7 +27,37 @@ export const qk = {
   nudges: ['me', 'nudges'] as const,
   chat: (pkg: string | null) => ['me', 'chat', pkg ?? 'all'] as const,
   behavior: ['me', 'behavior'] as const,
+  gamification: ['me', 'gamification'] as const,
+  coins: ['me', 'coins'] as const,
+  adminGamification: ['admin', 'gamification'] as const,
 };
+
+/**
+ * PHASE-3 — the whole motivation panel in one call: streak (counted by completed stations, G-02),
+ * today's quests, the review queue, spendable coins and mastery.
+ */
+export const useGamification = () =>
+  useQuery({
+    queryKey: qk.gamification,
+    queryFn: ({ signal }) => api.get<Gamification>('/me/gamification', signal),
+    staleTime: 30_000,
+  });
+
+/** سکهٔ توانمندی — spendable balance plus the real-goods catalogue (G-04). */
+export const useCoins = () =>
+  useQuery({
+    queryKey: qk.coins,
+    queryFn: ({ signal }) => api.get<CoinWallet>('/me/coins', signal),
+    staleTime: 30_000,
+  });
+
+/** Admin: «درصد مرورِ به‌موقع» و «نرخ استادی» — never any streak data (G-03). */
+export const useAdminGamification = () =>
+  useQuery({
+    queryKey: qk.adminGamification,
+    queryFn: ({ signal }) => api.get<AdminGamification>('/admin/metrics/gamification', signal),
+    staleTime: 60_000,
+  });
 
 /** Home («کار بعدی») with a per-user last-known copy so errors/offline still show state (F9). */
 export const useHome = (uid: string | undefined) => {

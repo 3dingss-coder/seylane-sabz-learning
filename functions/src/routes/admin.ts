@@ -10,6 +10,7 @@ import { isJobName, JOB_NAMES, runJob } from '../services/cron';
 import { invalidateIndexCache as invalidateKnowledgeCache } from '../services/retrieval';
 import { ApiError } from '../http/errors';
 import * as mentor from '../services/mentor';
+import * as gamification from '../services/gamification';
 import * as guides from '../services/mentor-guides';
 import * as aiQuality from '../services/mentor-quality';
 import * as knowledge from '../services/knowledge';
@@ -40,6 +41,12 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     '/admin/dashboard',
     h(async () => reports.adminDashboard(d)),
   );
+  /** PHASE-3 DoD: «درصد مرورِ به‌موقع» و «نرخ استادی» — and never any streak data (G-03). */
+  r.get(
+    '/admin/metrics/gamification',
+    h(async () => gamification.adminGamification(d)),
+  );
+
   r.get(
     '/admin/content/tree',
     h(async () => content.contentTree(d)),
