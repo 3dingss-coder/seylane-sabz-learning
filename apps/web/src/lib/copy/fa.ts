@@ -242,6 +242,46 @@ export const COPY = {
     reasonManual: 'تنظیم مدیر',
   },
 
+  /**
+   * §6.2.14 — the mentor voice call (M10). Every state says what the machine is doing *right now*,
+   * so the marketer is never left wondering whether the mic is live.
+   */
+  voice: {
+    title: 'تماس صوتی با منتور',
+    idle: 'برای شروع تماس، دکمه میکروفن را بزن',
+    connecting: 'در حال وصل شدن به منتور…',
+    listening: 'بگو، گوش می‌دهم…',
+    recording: 'ضبط می‌کنم… برای ارسال، دوباره بزن',
+    thinking: 'منتور در حال فکر کردن است…',
+    speaking: 'منتور جواب می‌دهد…',
+    ended: 'تماس تمام شد',
+    noRecordingSupport: 'مرورگر شما از ضبط صدا پشتیبانی نمی‌کند.',
+    micDenied: 'دسترسی به میکروفن داده نشد. اجازه بده و دوباره تلاش کن.',
+    youPrefix: 'شما: ',
+    mentorPrefix: 'منتور: ',
+    startRecording: 'شروع ضبط',
+    stopAndSend: 'پایان ضبط و ارسال',
+    endCall: 'پایان تماس',
+    saveTranscript: 'متن این تماس برای مرور بعدی ذخیره شود',
+    privacyNote:
+      'صدای شما فقط برای تبدیل به متن ارسال می‌شود؛ پاسخ‌ها از محتوای تأییدشده‌ی شرکت است.',
+  },
+
+  /** §6.2.15 — Seyla the mentor (M10): she answers from approved content and says so. */
+  mentor: {
+    name: 'سیلا',
+    intro: 'سؤالت درباره محصولات و آموزش‌ها را بپرس. فقط از محتوای تأییدشده جواب می‌دهم.',
+    thinking: 'در حال فکر کردن…',
+    voiceCall: 'تماس صوتی',
+    helpful: 'مفید بود',
+    notHelpful: 'مفید نبود',
+    yourQuestion: 'سؤال شما',
+    placeholder: 'سؤالت را بنویس…',
+    suggestion1: 'مزیت اصلی این محصول چیست؟',
+    suggestion2: 'به مشتری مردد چه بگویم؟',
+    suggestion3: 'نکات مهم این آموزش را خلاصه کن',
+  },
+
   /** Shared action labels — one verb, no decoration. */
   actions: {
     retry: 'تلاش دوباره',
@@ -251,6 +291,7 @@ export const COPY = {
     next: 'سؤال بعدی',
     close: 'بستن',
     spend: 'خرج کردن',
+    send: 'ارسال',
   },
 } as const;
 
@@ -316,6 +357,8 @@ export const LINES = {
   memberSince: (date: string) => `عضو از ${date}`,
   masteryLabel: (brand: string) => `استادی ${brand}`,
   greeting: (firstName: string) => `سلام ${firstName} 👋`,
+  sources: (titles: string) => `منبع: ${titles}`,
+  nextSuggestion: (label: string) => `پیشنهاد بعدی: ${label}`,
   brandTraining: (brand: string) => `آموزش برند ${brand}`,
   stationCount: (count: string) => `این بسته ${count} ایستگاه داره.`,
   deadlineOn: (date: string) => `مهلت: ${date}`,
