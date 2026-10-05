@@ -160,14 +160,18 @@ chunky && 'border-2 border-chunk'   // ۲px = عمق فیزیکی، ارزان�
 
 ## ۴.۸ کامپوننت‌های کوچک جدید (اسپک یک‌خطی)
 
-| نام | اسپک | فایل پیشنهادی |
-|---|---|---|
-| `StreakChip` | شعله `text-streak-deep` + عدد لاتین + `--radius-pill` | `ui/StreakChip.tsx` |
-| `CoinChip` | سکه `bg-reward` + متن `text-reward-fg` | `ui/CoinChip.tsx` |
-| `TrustBar` | §۴٫۶ | `learning/TrustBar.tsx` |
-| `QuestCard` | عنوان + نوار پیشرفت + صندوق | `learning/QuestCard.tsx` |
-| `ObjectionCard` | هیولا + اعتراض + «نیاز واقعی» (فاز ۲ §۲٫۳) | `learning/ObjectionCard.tsx` |
-| `StationTile` | کاشی ایستگاه (§۴٫۵) | `learning/StationTile.tsx` |
+| نام | اسپک | فایل پیشنهادی | وضعیت واقعی (بررسی ۲۰۲۶‑۱۰‑۰۵) |
+|---|---|---|---|
+| `StreakChip` | شعله `text-streak-deep` + عدد لاتین + `--radius-pill` | `ui/StreakChip.tsx` | ✅ ساخته شد، همان مسیر |
+| `CoinChip` | سکه `bg-reward` + متن `text-reward-fg` | `ui/CoinChip.tsx` | ✅ ساخته شد، همان مسیر |
+| `TrustBar` | §۴٫۶ | `learning/TrustBar.tsx` | ❌ **ساخته نشد.** نوار اعتمادِ *حین* دوئل به درستیِ هر سؤال نیاز دارد و تصحیح فقط موقع submit سمت سرور انجام می‌شود؛ ساختنش با دادهٔ موجود یعنی یک عدد نمایشی. جایگزینی هم ندارد. |
+| `QuestCard` | عنوان + نوار پیشرفت + صندوق | `learning/QuestCard.tsx` | ✅ هر سه جزء در `learning/QuestList.tsx` پیاده شد (عنوان، `ProgressBar`، صندوق با سه سطح) — فقط نام فایل فرق کرد |
+| `ObjectionCard` | هیولا + اعتراض + «نیاز واقعی» (فاز ۲ §۲٫۳) | `learning/ObjectionCard.tsx` | ✅ در `character/ObjectionCreature.tsx` + `character/data.ts` (فیلد `need`، با تست در `character.test.tsx`) — نام فایل فرق کرد |
+| `StationTile` | کاشی ایستگاه (§۴٫۵) | `learning/StationTile.tsx` | ✅ ساخته شد، همان مسیر |
+
+> جدول بالا تا امروز فقط «فایل پیشنهادی» داشت، که خواننده را به این نتیجه می‌رساند هر شش تا
+> ساخته شده‌اند. بررسی واقعی: **۴ از ۶** با همان اسپک ساخته شدند (دو تا زیر نام دیگر)، و
+> `TrustBar` ساخته نشد. پیش‌تر گالری هم برای M7 «نوار اعتماد» را تبلیغ می‌کرد که اصلاح شد.
 
 ---
 
