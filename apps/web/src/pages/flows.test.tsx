@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
-import { home, marketer, quiz, sectionDetail } from '@/test/fixtures';
+import { home, marketer, pkg, quiz, sectionDetail } from '@/test/fixtures';
 import { mockApi } from '@/test/mockApi';
 import { renderApp } from '@/test/renderApp';
 
@@ -376,5 +376,23 @@ describe('panels live in the same app under /admin', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ورود با حساب ادمین' }));
     expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
     expect(localStorage.getItem('ssl.refresh')).toBeNull();
+  });
+});
+
+describe('M4 — آموزش‌ها keeps the status tabs', () => {
+  // The tabs are what /learn has always shown. The redesign made the learning path the default
+  // view and left the tabs inside the list branch, so on /learn the «جدید» tab simply was not in
+  // the DOM — Playwright's getByRole('tab', { name: /جدید/ }) timed out at journey.spec.ts:164.
+  it('renders the status tabs while the path view is the default, and filters when picked', async () => {
+    mockApi({
+      ...loggedIn(),
+      'GET /v1/me/packages': () => ({ data: [{ ...pkg, status: 'new' }] }),
+      'GET /v1/me/home': () => ({ data: home }),
+    });
+    renderApp('/learn');
+    // The path view is the default, so the tab has to be there anyway.
+    const tab = await screen.findByRole('tab', { name: /جدید/ });
+    fireEvent.click(tab);
+    expect(await screen.findByTestId('package-card')).toBeInTheDocument();
   });
 });

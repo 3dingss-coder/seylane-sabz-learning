@@ -93,6 +93,22 @@ export function LearnPage() {
       />
       <StaleBanner show={q.isError && q.data !== undefined} onRetry={() => void q.refetch()} />
 
+      {/* The status tabs are what /learn has always shown, so they stay up in both views.
+          Choosing one while the path is on screen switches to the list it filters. */}
+      <Tabs
+        label={COPY.learn.statusLabel}
+        value={tab}
+        onChange={(v) => {
+          setTab(v);
+          setView('list');
+        }}
+        items={[
+          { value: 'in_progress', label: COPY.learn.inProgress, count: counts.in_progress },
+          { value: 'new', label: COPY.learn.fresh, count: counts.new },
+          { value: 'completed', label: COPY.learn.done, count: counts.completed },
+        ]}
+      />
+
       {view === 'path' ? (
         <QueryState query={q} loading={loading}>
           {() =>
@@ -118,16 +134,6 @@ export function LearnPage() {
         </QueryState>
       ) : (
         <>
-          <Tabs
-            label={COPY.learn.statusLabel}
-            value={tab}
-            onChange={setTab}
-            items={[
-              { value: 'in_progress', label: COPY.learn.inProgress, count: counts.in_progress },
-              { value: 'new', label: COPY.learn.fresh, count: counts.new },
-              { value: 'completed', label: COPY.learn.done, count: counts.completed },
-            ]}
-          />
           {brands.length > 1 && (
             <div
               className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
