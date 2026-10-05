@@ -1,4 +1,5 @@
 import { Award, Gift } from 'lucide-react';
+import { COPY, LINES } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { useGamification } from '@/lib/queries';
@@ -13,9 +14,9 @@ import { Card, ProgressBar } from '@/components/ui';
  * declared, only the quality is a surprise.
  */
 const CHEST_FA: Record<ChestQuality, string> = {
-  bronze: 'صندوق برنزی',
-  silver: 'صندوق نقره‌ای',
-  gold: 'صندوق طلایی',
+  bronze: COPY.quests.bronze,
+  silver: COPY.quests.silver,
+  gold: COPY.quests.gold,
 };
 
 /* §8.4.2 rule 1: semantic tokens only — the chest tiers reuse gated colour pairs
@@ -37,10 +38,10 @@ export function QuestList() {
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-base font-bold text-text">
           <Award className="size-4 text-reward-fg" aria-hidden />
-          مأموریت امروز
+          {COPY.quests.today}
         </h2>
         <span className="text-xs font-extrabold text-text-secondary">
-          {toPersianDigits(done)} از {toPersianDigits(quests.length)}
+          {LINES.doneOfTotal(toPersianDigits(done), toPersianDigits(quests.length))}
         </span>
       </div>
 
@@ -69,7 +70,7 @@ export function QuestList() {
               ) : (
                 <span className="shrink-0 text-[11px] font-extrabold text-text-secondary">
                   {toPersianDigits(q.progress)}/{toPersianDigits(q.target)} ·{' '}
-                  {toPersianDigits(q.coinReward)} سکه
+                  {LINES.coinPrice(toPersianDigits(q.coinReward))}
                 </span>
               )}
             </div>

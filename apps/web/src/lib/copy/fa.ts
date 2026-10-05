@@ -282,6 +282,55 @@ export const COPY = {
     suggestion3: 'نکات مهم این آموزش را خلاصه کن',
   },
 
+  /**
+   * §6.2.16 — the capability coin (PHASE-3 §3.5). The copy states the rule out loud: a coin buys
+   * something real, and every request is recorded. No virtual trinkets, no shame.
+   */
+  coins: {
+    title: 'سکهٔ توانمندی',
+    unit: 'سکه',
+    note: 'سکه فقط چیز واقعی می‌خرد — نه آیکن، نه نمره. هر درخواست اینجا ثبت می‌شود و قابل پیگیری است.',
+    notEnough: 'سکه‌ات برای این کالا کافی نیست.',
+    requests: 'درخواست‌های ثبت‌شده',
+    pending: 'در انتظار انجام',
+    fulfilled: 'انجام شد',
+    cancelled: 'لغو شد',
+    lifetimePrefix: 'مجموع سکه‌هایی که تا امروز گرفته‌ای:',
+  },
+
+  /** §6.2.17 — status badges. One word, no adjectives. */
+  status: {
+    locked: 'قفل',
+    open: 'باز',
+    inProgress: 'در حال انجام',
+    quizReady: 'آماده آزمون',
+    completed: 'تکمیل',
+    draft: 'پیش‌نویس',
+    published: 'منتشرشده',
+    archived: 'بایگانی',
+    active: 'فعال',
+    inactive: 'غیرفعال',
+  },
+
+  /** §6.2.18 — spaced-repetition reviews (PHASE-3 §3.3): say what happened to the memory. */
+  reviews: {
+    doneTitle: 'مرور امروز انجام شد',
+    today: 'مرور امروز',
+    progressLabel: 'پیشرفت مرور امروز',
+    remembered: 'یادت ماند — نیمه‌عمر بلندتر شد',
+    forgotten: 'دوباره مرور می‌شود، زودتر',
+    tooFast: '(خیلی سریع بود — امتیازی ثبت نشد)',
+    allDone: 'مرورهای امروز تمام شد. آفرین.',
+  },
+
+  /** §6.2.19 — the three daily quests (PHASE-3 §3.4). */
+  quests: {
+    today: 'مأموریت امروز',
+    bronze: 'صندوق برنزی',
+    silver: 'صندوق نقره‌ای',
+    gold: 'صندوق طلایی',
+  },
+
   /** Shared action labels — one verb, no decoration. */
   actions: {
     retry: 'تلاش دوباره',
@@ -357,6 +406,11 @@ export const LINES = {
   memberSince: (date: string) => `عضو از ${date}`,
   masteryLabel: (brand: string) => `استادی ${brand}`,
   greeting: (firstName: string) => `سلام ${firstName} 👋`,
+  redeemRecorded: (title: string, price: string) => `${title} ثبت شد (${price} سکه)`,
+  coinPrice: (price: string) => `${price} سکه`,
+  dueAndCap: (due: string, cap: string) => `${due} مورد · سقف ${cap}`,
+  coinsEarned: (coins: string) => `+${coins} سکه`,
+  doneOfTotal: (done: string, total: string) => `${done} از ${total}`,
   sources: (titles: string) => `منبع: ${titles}`,
   nextSuggestion: (label: string) => `پیشنهاد بعدی: ${label}`,
   brandTraining: (brand: string) => `آموزش برند ${brand}`,

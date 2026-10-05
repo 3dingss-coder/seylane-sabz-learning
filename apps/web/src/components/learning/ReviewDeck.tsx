@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Brain, Check, X } from 'lucide-react';
 import { api } from '@/lib/api';
-import { COPY } from '@/lib/copy/fa';
+import { COPY, LINES } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { qk, useGamification } from '@/lib/queries';
@@ -55,7 +55,7 @@ export function ReviewDeck() {
           <Brain className="size-5" aria-hidden />
         </span>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-text">مرور امروز انجام شد</p>
+          <p className="text-sm font-bold text-text">{COPY.reviews.doneTitle}</p>
           <p className="text-xs leading-6 text-text-secondary">{COPY.empty.reviews}</p>
         </div>
       </Card>
@@ -66,10 +66,10 @@ export function ReviewDeck() {
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-base font-bold text-text">
           <Brain className="size-4 text-leaf" aria-hidden />
-          مرور امروز
+          {COPY.reviews.today}
         </h2>
         <span className="rounded-pill bg-soft-brand px-2.5 py-0.5 text-xs font-extrabold text-leaf">
-          {toPersianDigits(due)} مورد · سقف {toPersianDigits(cap)}
+          {LINES.dueAndCap(toPersianDigits(due), toPersianDigits(cap))}
         </span>
       </div>
 
@@ -77,7 +77,7 @@ export function ReviewDeck() {
         <>
           <ProgressBar
             value={Math.round((index / items.length) * 100)}
-            label="پیشرفت مرور امروز"
+            label={COPY.reviews.progressLabel}
           />
           <p className="text-sm font-bold leading-7 text-text">{item.stem}</p>
           <div className="flex flex-col gap-2">
@@ -109,7 +109,9 @@ export function ReviewDeck() {
               role="status"
               className={cn(
                 'flex flex-col gap-2 rounded-input border-2 p-3',
-                result.correct ? 'border-leaf/40 bg-soft-brand' : 'border-danger/40 bg-danger-light',
+                result.correct
+                  ? 'border-leaf/40 bg-soft-brand'
+                  : 'border-danger/40 bg-danger-light',
               )}
             >
               <p className="flex items-center gap-2 text-sm font-extrabold text-text">
@@ -118,15 +120,15 @@ export function ReviewDeck() {
                 ) : (
                   <X className="size-4 text-danger" aria-hidden />
                 )}
-                {result.correct ? 'یادت ماند — نیمه‌عمر بلندتر شد' : 'دوباره مرور می‌شود، زودتر'}
+                {result.correct ? COPY.reviews.remembered : COPY.reviews.forgotten}
                 {result.coinsEarned > 0 && (
                   <span className="rounded-pill bg-reward px-2 py-0.5 text-xs text-reward-fg">
-                    +{toPersianDigits(result.coinsEarned)} سکه
+                    {LINES.coinsEarned(toPersianDigits(result.coinsEarned))}
                   </span>
                 )}
                 {result.rewarded === false && result.reason === 'too_fast' && (
                   <span className="text-xs font-bold text-text-secondary">
-                    (خیلی سریع بود — امتیازی ثبت نشد)
+                    {COPY.reviews.tooFast}
                   </span>
                 )}
               </p>
@@ -144,7 +146,7 @@ export function ReviewDeck() {
           )}
         </>
       ) : (
-        <p className="text-sm text-text-secondary">مرورهای امروز تمام شد. آفرین.</p>
+        <p className="text-sm text-text-secondary">{COPY.reviews.allDone}</p>
       )}
     </Card>
   );

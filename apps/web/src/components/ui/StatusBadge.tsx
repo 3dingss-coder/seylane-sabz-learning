@@ -14,6 +14,7 @@ import {
   UserX,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { COPY } from '@/lib/copy/fa';
 import { cn } from '@/lib/cn';
 
 export type SectionStatus = 'locked' | 'open' | 'in_progress' | 'quiz' | 'completed';
@@ -22,40 +23,56 @@ export type UserStatus = 'active' | 'inactive';
 export type BadgeStatus = SectionStatus | PublishStatus | UserStatus;
 
 const MAP: Record<BadgeStatus, { label: string; icon: LucideIcon; cls: string }> = {
-  locked: { label: 'قفل', icon: Lock, cls: 'bg-background text-muted-fg border-border' },
-  open: { label: 'باز', icon: CircleDot, cls: 'bg-info-light text-info-fg border-info/30' },
+  locked: {
+    label: COPY.status.locked,
+    icon: Lock,
+    cls: 'bg-background text-muted-fg border-border',
+  },
+  open: {
+    label: COPY.status.open,
+    icon: CircleDot,
+    cls: 'bg-info-light text-info-fg border-info/30',
+  },
   in_progress: {
-    label: 'در حال انجام',
+    label: COPY.status.inProgress,
     icon: PlayCircle,
     cls: 'bg-warning-light text-warning-fg border-warning/30',
   },
   quiz: {
-    label: 'آماده آزمون',
+    label: COPY.status.quizReady,
     icon: ClipboardCheck,
     cls: 'bg-info-light text-info-fg border-info/30',
   },
   completed: {
-    label: 'تکمیل',
+    label: COPY.status.completed,
     icon: CheckCircle2,
     cls: 'bg-success-light text-success-fg border-success/30',
   },
   draft: {
-    label: 'پیش‌نویس',
+    label: COPY.status.draft,
     icon: FileEdit,
     cls: 'bg-background text-text-secondary border-border',
   },
   published: {
-    label: 'منتشرشده',
+    label: COPY.status.published,
     icon: Send,
     cls: 'bg-primary-light text-primary border-primary/30',
   },
-  archived: { label: 'بایگانی', icon: Archive, cls: 'bg-background text-muted-fg border-border' },
+  archived: {
+    label: COPY.status.archived,
+    icon: Archive,
+    cls: 'bg-background text-muted-fg border-border',
+  },
   active: {
-    label: 'فعال',
+    label: COPY.status.active,
     icon: UserCheck,
     cls: 'bg-success-light text-success-fg border-success/30',
   },
-  inactive: { label: 'غیرفعال', icon: UserX, cls: 'bg-background text-muted-fg border-border' },
+  inactive: {
+    label: COPY.status.inactive,
+    icon: UserX,
+    cls: 'bg-background text-muted-fg border-border',
+  },
 };
 
 /** Anything the API may send that the map does not know yet — never let a badge crash the page. */
