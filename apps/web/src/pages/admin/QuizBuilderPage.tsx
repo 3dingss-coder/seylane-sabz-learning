@@ -18,6 +18,14 @@ const KEYS = ['a', 'b', 'c', 'd'] as const;
 const LABEL = { a: 'الف', b: 'ب', c: 'ج', d: 'د' } as const;
 
 /** A4 — سازنده آزمون: 4-option MCQ, answer key (server-only), explanation, versioning on edit. */
+/** The policy default is the server's, never ours. These hints used to read
+ *  `policy.data?.passScore ?? 70`, which told the admin the pass mark was 70% whenever
+ *  the policy query was still in flight — the real default is 80 (domain/policy.ts).
+ *  So there is no fallback constant at all: no number until the server says so. */
+const INHERIT_HINT = 'خالی = پیش‌فرض سیاست';
+const inheritHint = (v: number | undefined, suffix = '') =>
+  v === undefined ? INHERIT_HINT : `${INHERIT_HINT} (${toPersianDigits(v)}${suffix})`;
+
 export function QuizBuilderPage() {
   const { id = '' } = useParams();
   const q = useQuery({
@@ -202,7 +210,7 @@ function Builder({ d }: { d: AdminQuiz }) {
               max={100}
               value={passScore}
               onChange={(e) => setPassScore(e.target.value)}
-              hint={`خالی = پیش‌فرض سیاست (${toPersianDigits(policy.data?.passScore ?? 70)}٪)`}
+              hint={inheritHint(policy.data?.passScore, '٪')}
             />
             <Input
               label="حداکثر تلاش"
@@ -212,7 +220,7 @@ function Builder({ d }: { d: AdminQuiz }) {
               max={10}
               value={maxAttempts}
               onChange={(e) => setMaxAttempts(e.target.value)}
-              hint={`خالی = پیش‌فرض سیاست (${toPersianDigits(policy.data?.maxAttempts ?? 3)})`}
+              hint={inheritHint(policy.data?.maxAttempts)}
             />
             <Button
               variant="secondary"
