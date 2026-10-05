@@ -257,6 +257,8 @@ export async function buildFixture(
 }
 
 /** Sends heartbeats until the section is completed (70s deltas). */
+const watchRuns = new Map<string, number>();
+
 export async function watchSection(
   ctx: TestCtx,
   token: string,
@@ -264,6 +266,8 @@ export async function watchSection(
   durationSec: number,
 ) {
   let pos = 0;
+  const run = (watchRuns.get(sectionId) ?? 0) + 1;
+  watchRuns.set(sectionId, run);
   for (let i = 0; pos < durationSec; i++) {
     const delta = Math.min(60, durationSec - pos);
     pos += delta;
@@ -272,7 +276,7 @@ export async function watchSection(
     const res = await ctx
       .api(token)
       .post(`/v1/me/sections/${sectionId}/progress`, { positionSec: pos, playedDeltaSec: delta })
-      .set('Idempotency-Key', `w-${sectionId}-${i}`);
+      .set('Idempotency-Key', `w-${sectionId}-${run}-${i}`);
     if (res.status !== 200)
       throw new Error(`heartbeat failed ${res.status} ${JSON.stringify(res.body)}`);
   }

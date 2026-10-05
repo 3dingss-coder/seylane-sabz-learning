@@ -85,9 +85,19 @@ test('marketer: home → section → (played) → quiz pass → next section unl
   await expect(page).toHaveURL(new RegExp(`/sections/${sectionId}$`));
   await expect(page.getByText('پیشرفت این قسمت')).toBeVisible();
 
+  // One quiz per package: it lives on the podcast section, so play THAT section (the next
+  // item can be a quiz-less video section, e.g. when a package lists its video first).
+  const pkgDetail = (await (
+    await request.get(`${API}/me/packages/${packageId}`, { headers: auth })
+  ).json()) as { data: { sections: Array<{ id: string; quizRequired?: boolean }> } };
+  const quizSectionId =
+    pkgDetail.data.sections.find((x) => x.quizRequired !== false)?.id ?? sectionId;
+  await page.goto(`/sections/${quizSectionId}`);
+  await expect(page.getByText('پیشرفت این قسمت')).toBeVisible();
+
   // Simulate continuous playback with playedDeltaSec heartbeats (+ idempotency keys).
   const sec = (await (
-    await request.get(`${API}/me/sections/${sectionId}`, { headers: auth })
+    await request.get(`${API}/me/sections/${quizSectionId}`, { headers: auth })
   ).json()) as {
     data: { section: { durationSec: number; quizId: string } };
   };
@@ -96,8 +106,8 @@ test('marketer: home → section → (played) → quiz pass → next section unl
   let completed = false;
   for (let i = 0; i < 19 && !completed; i++) {
     pos = Math.min(dur, pos + 60);
-    const r = await request.post(`${API}/me/sections/${sectionId}/progress`, {
-      headers: { ...auth, 'Idempotency-Key': `e2e-${sectionId}-${i}` },
+    const r = await request.post(`${API}/me/sections/${quizSectionId}/progress`, {
+      headers: { ...auth, 'Idempotency-Key': `e2e-${quizSectionId}-${i}` },
       data: { positionSec: pos, playedDeltaSec: 60, ts: new Date().toISOString() },
     });
     expect(r.ok(), `heartbeat ${i}: ${r.status()} ${await r.text()}`).toBeTruthy();
@@ -121,7 +131,6 @@ test('marketer: home → section → (played) → quiz pass → next section unl
     };
   };
 
-  await page.reload();
   await page.getByTestId('start-quiz').click();
   await page.getByTestId('quiz-start').click();
   for (const q of quiz.data.questions) {
@@ -165,12 +174,15 @@ test('fresh marketer can open later sections without finishing earlier ones', as
       headers: { Authorization: `Bearer ${t}` },
     })
   ).json()) as {
-    data: { sections: Array<{ quizId: string; state: string }> };
+    data: { sections: Array<{ quizId: string; state: string; quizRequired?: boolean }> };
   };
   expect(pk.data.sections.some((s) => s.state === 'locked')).toBe(false);
-  // Quizzes are open too: a later section's quiz can be started right away.
-  const later = pk.data.sections[1];
-  const r = await request.post(`${API}/me/quizzes/${later?.quizId}/attempts`, {
+  // One quiz per package: it sits on the podcast section, the video section has none.
+  expect(pk.data.sections[0]?.quizRequired).not.toBe(false);
+  expect(pk.data.sections[1]?.quizRequired).toBe(false);
+  // The package quiz is open right away, without finishing any media first.
+  const host = pk.data.sections[0];
+  const r = await request.post(`${API}/me/quizzes/${host?.quizId}/attempts`, {
     headers: { Authorization: `Bearer ${t}` },
   });
   expect([200, 201]).toContain(r.status());

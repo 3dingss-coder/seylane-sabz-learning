@@ -154,7 +154,13 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
     sp: SupplementPackage,
     i: number,
   ): SeedReport['training'][number]['quizSource'] =>
-    quizAssign.has(`${sp.id}|${i}`) ? 'client-quiz-bank' : sp.brandId ? 'sample' : 'none';
+    i !== quizHostIndex(sp)
+      ? 'none'
+      : quizAssign.has(`${sp.id}|${i}`)
+        ? 'client-quiz-bank'
+        : sp.brandId
+          ? 'sample'
+          : 'none';
   const now = d.clock();
   const iso = now.toISOString();
   const report: SeedReport = {
@@ -415,6 +421,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
       await d.store.set(`media/${mediaId}`, asset as unknown as Record<string, unknown>);
       const sectionId = `${sp.id}-s${i + 1}`;
       const quizId = `${sectionId}-quiz`;
+      const isQuizHost = i === quizHostIndex(sp);
       const section: Section = {
         packageId: sp.id,
         order: i + 1,
@@ -434,6 +441,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
         mediaSizeBytes: buf.length,
         durationSec,
         quizId,
+        quizRequired: isQuizHost,
         archived: false,
         createdAt: iso,
         updatedAt: iso,
@@ -444,8 +452,9 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
       );
       await d.store.set(`section_index/${sectionId}`, { packageId: sp.id });
       const bankQs = quizAssign.get(`${sp.id}|${i}`);
-      const questions =
-        bankQs && bankQs.length
+      const questions = !isQuizHost
+        ? []
+        : bankQs && bankQs.length
           ? bankQs
           : sp.brandId
             ? sampleQuestions(sp, s, brand?.name ?? '', product, productInputs, brandInputs)
@@ -459,7 +468,7 @@ export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
         version: 1,
         active: true,
         questionCount: questions.length,
-        needsReview: quizSource !== 'client-quiz-bank',
+        needsReview: isQuizHost && quizSource !== 'client-quiz-bank',
         createdAt: iso,
         updatedAt: iso,
       };
@@ -581,11 +590,15 @@ function bankToQInput(q: BankQuestion): QInput {
 }
 
 /**
- * Split each quiz-bank product's question set across every section of the packages tagged with
- * that quizKey (supplement order, contiguous chunks). A product's full bank therefore appears
- * exactly once on the site — e.g. «WITH US» 10 questions split 5/5 between the ویت آس audio and
- * video packages; single-section packages (زِن) get the whole 10.
+ * One quiz per package: the product's full question bank goes on the package's quiz section
+ * (its podcast (audio) section, or the first section when it has no audio). Every other section of the package
+ * has no quiz (`quizRequired: false`) and counts as done once its media is completed.
  */
+function quizHostIndex(sp: SupplementPackage): number {
+  const audio = sp.sections.findIndex((s) => s.mediaType === 'audio');
+  return audio >= 0 ? audio : 0;
+}
+
 function distributeBankQuestions(
   packages: SupplementPackage[],
   bank: QuizBank,
@@ -593,18 +606,10 @@ function distributeBankQuestions(
   const out = new Map<string, QInput[]>();
   for (const p of bank.products) {
     const questions = p.questions.map(bankToQInput);
-    const targets: string[] = [];
+    if (!questions.length) continue;
     for (const sp of packages)
-      if (sp.quizKey === p.key) sp.sections.forEach((_, i) => targets.push(`${sp.id}|${i}`));
-    if (!targets.length || !questions.length) continue;
-    const base = Math.floor(questions.length / targets.length);
-    let extra = questions.length % targets.length;
-    let idx = 0;
-    for (const t of targets) {
-      const n = base + (extra-- > 0 ? 1 : 0);
-      out.set(t, questions.slice(idx, idx + n));
-      idx += n;
-    }
+      if (sp.quizKey === p.key && sp.sections.length)
+        out.set(`${sp.id}|${quizHostIndex(sp)}`, questions);
   }
   return out;
 }

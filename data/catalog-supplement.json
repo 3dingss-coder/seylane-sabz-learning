@@ -39,11 +39,26 @@
     }
   ],
   "reactivatedProducts": [
-    { "id": "sb-310350101", "brandId": "brand-sb-formi" },
-    { "id": "sb-220306101", "brandId": "brand-sb-atl" },
-    { "id": "sb-370276101", "brandId": "brand-sb-icebubble" },
-    { "id": "sb-340122101", "brandId": "brand-sb-vitas" },
-    { "id": "sb-290252101", "brandId": "brand-sb-zen" }
+    {
+      "id": "sb-310350101",
+      "brandId": "brand-sb-formi"
+    },
+    {
+      "id": "sb-220306101",
+      "brandId": "brand-sb-atl"
+    },
+    {
+      "id": "sb-370276101",
+      "brandId": "brand-sb-icebubble"
+    },
+    {
+      "id": "sb-340122101",
+      "brandId": "brand-sb-vitas"
+    },
+    {
+      "id": "sb-290252101",
+      "brandId": "brand-sb-zen"
+    }
   ],
   "newProducts": [
     {
@@ -63,7 +78,7 @@
       "title": "آموزش کیت درمانی فورمی",
       "brandId": "brand-sb-formi",
       "productId": "sb-310350101",
-      "deadlineDays": 10,
+      "deadlineDays": null,
       "publish": true,
       "quizKey": "4ME HYDRATION THERAPY",
       "sections": [
@@ -84,11 +99,15 @@
       "title": "آموزش فوم شستشوی صورت آیس بابل",
       "brandId": "brand-sb-icebubble",
       "productId": "sb-370276101",
-      "deadlineDays": 14,
+      "deadlineDays": null,
       "publish": true,
       "quizKey": "ICE BUBBLE",
       "sections": [
-        { "file": "معرفی کلی بابل.m4a", "title": "معرفی کلی بابل", "mediaType": "audio" },
+        {
+          "file": "معرفی کلی بابل.m4a",
+          "title": "معرفی کلی بابل",
+          "mediaType": "audio"
+        },
         {
           "file": "کتابچه_جامع_فروش_BUBBLE.mp4",
           "title": "کتابچه جامع فروش بابل",
@@ -101,7 +120,7 @@
       "title": "آموزش کرم گرم کننده و ضد درد کتف و گردن آتل",
       "brandId": "brand-sb-atl",
       "productId": "sb-220306101",
-      "deadlineDays": 2,
+      "deadlineDays": null,
       "publish": true,
       "quizKey": "ATL QUICK FIX",
       "sections": [
@@ -110,7 +129,11 @@
           "title": "آتل؛ پادزهر دردهای دیجیتال",
           "mediaType": "audio"
         },
-        { "file": "آموزش_ویدیویی_ATL.mp4", "title": "آموزش ویدیویی آتل", "mediaType": "video" }
+        {
+          "file": "آموزش_ویدیویی_ATL.mp4",
+          "title": "آموزش ویدیویی آتل",
+          "mediaType": "video"
+        }
       ]
     },
     {
@@ -118,11 +141,15 @@
       "title": "آموزش کرم ترک پا ویت آس",
       "brandId": "brand-sb-vitas",
       "productId": "sb-340122101",
-      "deadlineDays": 12,
+      "deadlineDays": null,
       "publish": true,
       "quizKey": "WITH US",
       "sections": [
-        { "file": "معرفی کلی ویت آس.m4a", "title": "معرفی کلی ویت آس", "mediaType": "audio" }
+        {
+          "file": "معرفی کلی ویت آس.m4a",
+          "title": "معرفی کلی ویت آس",
+          "mediaType": "audio"
+        }
       ]
     },
     {
@@ -130,7 +157,7 @@
       "title": "آموزش کرم ترک پا ویت آس (WITH US)",
       "brandId": "brand-sb-vitas",
       "productId": "sb-340122101",
-      "deadlineDays": 16,
+      "deadlineDays": null,
       "publish": true,
       "quizKey": "WITH US",
       "sections": [
@@ -146,7 +173,7 @@
       "title": "آموزش ضدآفتاب استیکی پیکسل",
       "brandId": "brand-sb-5",
       "productId": "sb-pixel-stick-sunscreen",
-      "deadlineDays": 20,
+      "deadlineDays": null,
       "publish": true,
       "quizKey": null,
       "sections": [
@@ -167,12 +194,20 @@
       "title": "آموزش فروش برند آیس بال",
       "brandId": "brand-sb-10",
       "productId": null,
-      "deadlineDays": 25,
+      "deadlineDays": null,
       "publish": true,
       "quizKey": "ICE BALL",
       "sections": [
-        { "file": "معرفی کلی آیس بال.m4a", "title": "معرفی کلی آیس بال", "mediaType": "audio" },
-        { "file": "آموزش_فروش_آیس_بال.mp4", "title": "آموزش فروش آیس بال", "mediaType": "video" }
+        {
+          "file": "معرفی کلی آیس بال.m4a",
+          "title": "معرفی کلی آیس بال",
+          "mediaType": "audio"
+        },
+        {
+          "file": "آموزش_فروش_آیس_بال.mp4",
+          "title": "آموزش فروش آیس بال",
+          "mediaType": "video"
+        }
       ]
     },
     {
@@ -180,7 +215,7 @@
       "title": "آموزش روغن بدن زِن (Zen)",
       "brandId": "brand-sb-zen",
       "productId": "sb-290252101",
-      "deadlineDays": 12,
+      "deadlineDays": null,
       "publish": true,
       "quizKey": "ZEN BODY OIL",
       "sections": [
@@ -198,9 +233,13 @@
       "productId": null,
       "deadlineDays": null,
       "publish": false,
-      "quizKey": null,
+      "quizKey": "DART FILLER SHOT",
       "sections": [
-        { "file": "معرفی کلی‌ دارت.m4a", "title": "معرفی کلی دارت", "mediaType": "audio" }
+        {
+          "file": "معرفی کلی‌ دارت.m4a",
+          "title": "معرفی کلی دارت",
+          "mediaType": "audio"
+        }
       ]
     }
   ]
