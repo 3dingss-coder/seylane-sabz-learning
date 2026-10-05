@@ -66,6 +66,39 @@
 ---
 
 ## ۷.۴ DoD فاز ۷
+
+### ۷.۳.۲ چرا axe/Lighthouse/Playwright در این محیط اجرا نشدند — و دقیقاً چه چیزی لازم است
+
+این «نشد» مبهم نیست؛ مسیرش تا ته رفته و گلوگاه **سه کتابخانهٔ سیستمی** است:
+
+| مسیر | نتیجه |
+|---|---|
+| `npx playwright install chromium` | `Download failure, code=1` |
+| `storage.googleapis.com` / `cdn.playwright.dev` / `playwright.azureedge.net` | همه `000` (مسدود) |
+| `deb.debian.org` / `security.debian.org` / `mirrors.kernel.org` | همه `000` (مسدود) |
+| `apt-get install` | `Permission denied` (بدون root) |
+| npm registry / `github.com` / `codeload` / `pypi.org` | **باز** (`200`) |
+
+چون registry باز است، `@sparticuz/chromium` نصب شد و **یک باینری واقعی ۲۰۹ مگابایتی** از
+`/tmp/chromium` بیرون آمد. تنها مانع:
+
+```
+/tmp/chromium: error while loading shared libraries: libnspr4.so: cannot open shared object file
+ldd /tmp/chromium | grep -c "not found"   →  3   (libnspr4, libnss3, libnssutil3)
+```
+
+**باز کردن قفل (یک دستور، روی ماشین با root):**
+
+```bash
+apt-get install -y libnss3 libnspr4   # سپس: npx playwright install chromium
+npm run test:e2e                      # axe مرورگری + سناریوها
+npx lighthouse http://localhost:3000/quiz/seed-pkg-bubble-s1 --only-categories=performance,a11y
+```
+
+**چرا به کتابخانهٔ قلابی (stub) رو نیاوردیم:** NSS فقط برای لینک شدن لازم نیست؛ کروم در
+زمان اجرا واقعاً صدایش می‌زند. با stub یا کرش می‌کرد یا عددِ ساختگی تولید می‌کرد — و عددِ
+ساختگیِ Lighthouse از نبودِ عدد بدتر است.
+
 - [x] `contrast.py` در CI گیت شود — **به‌شرط یک step که تو باید اضافه کنی**
   - اسکریپت‌ها آماده و تست‌شده‌اند: `npm run check:design` هر سه گیت را locally اجرا می‌کند (contrast: ۱۸ جفت، ۰ شکست · budget · copy ratchet).
   - ولی `.github/workflows/ci.yml` را نتوانستم تغییر دهم: اتصال GitHub در این محیط اجازهٔ `workflows` ندارد و push با خطای `refusing to allow a GitHub App to create or update workflow` رد شد. پس این سه step را در job `quality` (بعد از `npm run build`) paste کن:
