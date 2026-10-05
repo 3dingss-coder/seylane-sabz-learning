@@ -1,0 +1,18 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index c3f5fb2..e050de2 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -27,6 +27,13 @@ jobs:
+       - run: npm run build
+       - run: npm run typecheck
+       - run: npm test
++      # Design-system gates. Each one has been proven to fail on an injected fault, so a
++      # green run here means measured-green: WCAG contrast pairs (contrast.py), real
++      # bundle sizes read out of apps/web/dist, the Persian-copy ratchet, and no raw hex
++      # outside the token source. Needs python3 (present on ubuntu-latest) and the
++      # apps/web build above for the budget check.
++      - name: Design-system gates (contrast · perf budget · copy ratchet · no raw hex)
++        run: npm run check:design
+       - name: Composite index coverage (query shapes vs firestore.indexes.json)
+         run: npm run check:indexes -w functions
+       - name: Verify Cloudflare Worker + Assets bundle
