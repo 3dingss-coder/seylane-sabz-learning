@@ -78,7 +78,7 @@
       - name: Copy ratchet (PHASE-6 §6.4 — no new hardcoded Persian in JSX)
         run: npm run check:copy
 ```
-- [ ] axe + Lighthouse روی PathScreen/DuelScreen/Celebration در light/dark
+- [ ] axe + Lighthouse روی PathScreen/DuelScreen/Celebration در light/dark — **پوشش ساختاری کامل شد؛ بخش رنگی همچنان باز.** `src/pages/a11y.test.tsx` حالا **۱۱ سطح بازاریاب** را با axe-core (قاعده‌های WCAG 2.1 A/AA) می‌سنجد: login، خانه، پروفایل، فهرست آموزش، بسته، ایستگاه، آزمون، پیام‌ها، امتیاز/نشان‌ها، منتور و گالری — **۰ violation**. صحت خودِ گیت تأیید شد: تزریق یک `<button>` بدون نام، `button-name` را بلافاصله FAIL کرد (و تزریق اولِ من — `<img alt="">` — تخلف نبود، چون alt خالی برای تصویر تزئینی مجاز است). **باز می‌ماند:** اجرا در تم dark و قاعدهٔ `color-contrast`؛ هر دو به موتور چیدمان واقعی نیاز دارند و در jsdom سیگنال نمی‌دهند. کنتراست رنگ را `tools/contrast.py` با ۲۵ جفت گیت‌شده پوشش می‌دهد و اجرای مرورگری axe در `e2e/a11y.spec.ts` آماده است (مرورگر در سندباکس نصب نمی‌شود).
   - زیرساختش در CI هست (job های `e2e` با axe-core و `lighthouse`) و `e2e/a11y.spec.ts` را با ۳ تست جدید گسترش دادم: پروفایل (کیف پول سکه)، گالری کست (≥۴۰ کاراکتر با `aria-label` فارسی = A-03)، و داشبورد ادمین (کارت کیفیت یادگیری + assert قاعدهٔ G-03 در مرورگر).
   - **در این سندباکس اجرا نشد**: باینری مرورگر نصب نمی‌شود (`npx playwright install` شکست می‌خورد). پس این تست‌ها نوشته شده‌اند ولی خروجی‌شان را ندیده‌ام.
 - [ ] تست دستی با Dynamic Type +۲۰۰٪ روی دو صفحهٔ جدید

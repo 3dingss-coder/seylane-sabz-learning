@@ -1,4 +1,17 @@
-import type { HomeData, Me, PackageSummary, QuizData, SectionDetail } from '@/lib/types';
+import type {
+  BadgeView,
+  HomeData,
+  ManagerNote,
+  Me,
+  MessageItem,
+  NotificationItem,
+  PackageDetail,
+  PackageSummary,
+  PointsData,
+  QuizData,
+  SectionDetail,
+  SectionView,
+} from '@/lib/types';
 
 export const marketer: Me = {
   id: 'u1',
@@ -141,3 +154,64 @@ export const quiz: QuizData = {
     lastAttempt: null,
   },
 };
+
+/** PHASE-7 §7.2 — fixtures for the remaining marketer surfaces, so axe can cover all of them. */
+export const sections: SectionView[] = [
+  {
+    id: 'seed-pkg-formi-s1',
+    order: 1,
+    title: 'معرفی کلی محصول فورمی',
+    mediaType: 'audio',
+    durationSec: 418,
+    quizId: 'seed-pkg-formi-s1-quiz',
+    percent: 100,
+    mediaCompleted: true,
+    quizPassed: false,
+    lastPositionSec: 0,
+    state: 'quiz',
+    lockReason: null,
+    archived: false,
+  },
+  {
+    id: 'seed-pkg-formi-s2',
+    order: 2,
+    title: 'مزیت‌ها در برابر رقیب',
+    mediaType: 'video',
+    durationSec: 527,
+    quizId: 'seed-pkg-formi-s2-quiz',
+    percent: 0,
+    mediaCompleted: false,
+    quizPassed: false,
+    lastPositionSec: 0,
+    state: 'locked',
+    lockReason: 'ابتدا قسمت قبل را کامل کنید.',
+    archived: false,
+  },
+];
+
+export const notes: ManagerNote[] = [
+  { id: 'n1', body: 'روی مزیت درمانی تأکید کن.', fromName: 'مدیر تیم', createdAt: '2026-09-20T08:00:00.000Z' },
+];
+
+export const packageDetail: PackageDetail = { package: pkg, sections, notes };
+
+export const points: PointsData = {
+  balance: 240,
+  ledger: [
+    { id: 'p1', amount: 120, reason: 'on_time_completion', refId: 'seed-pkg-formi-s1', createdAt: '2026-09-21T08:00:00.000Z' },
+    { id: 'p2', amount: 120, reason: 'first_pass_quiz', refId: 'seed-pkg-formi-s1-quiz', createdAt: '2026-09-22T08:00:00.000Z' },
+  ],
+};
+
+export const badges: BadgeView[] = [
+  { id: 'b1', code: 'first_package', title: 'اولین بسته', description: 'اولین بستهٔ آموزشی را تمام کردی', icon: 'package', earned: true, earnedAt: '2026-09-22T08:00:00.000Z' },
+  { id: 'b2', code: 'streak_7', title: 'هفت روز پیوسته', description: 'هفت روز پشت‌سرهم مرور کردی', icon: 'flame', earned: false, earnedAt: null },
+];
+
+export const messages: MessageItem[] = [
+  { id: 'm1', type: 'message', body: 'این هفته روی فورمی تمرکز کنیم.', packageId: pkg.id, fromName: 'مدیر تیم', readAt: null, createdAt: '2026-09-23T08:00:00.000Z' },
+];
+
+export const notifications: NotificationItem[] = [
+  { id: 'nt1', type: 'deadline', title: 'مهلت نزدیک', body: 'مهلت آموزش فورمی نزدیک است.', actionRef: pkg.id, readAt: null, createdAt: '2026-09-23T09:00:00.000Z' },
+];
