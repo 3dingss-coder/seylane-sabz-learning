@@ -162,7 +162,7 @@ export const envelopeSchema = z.object({
   }),
   constraints: z.object({
     locale: z.literal('fa-IR'),
-    maxSentences: z.number().int().min(1).max(8),
+    maxSentences: z.number().int().min(1).max(80),
     noPii: z.literal(true),
     noAnswerKeys: z.literal(true),
     spoken: z.boolean(),
@@ -190,7 +190,19 @@ export function renderGrounding(packet: GroundingPacket, maxCharsPerFact = 900):
   if (!packet.facts.length) return '(هیچ منبع تأییدشده‌ای پیدا نشد)';
   return packet.facts
     .map((f, i) => {
-      const text = f.text.replace(/\s+/g, ' ').slice(0, maxCharsPerFact);
+      // Behaviour boxes are the source of truth. Flattening them into one line, or cutting them
+      // at 900–1600 characters, drops the approved product document before the model ever sees it.
+      const guide = f.kind === 'guide';
+      const cap = guide
+        ? Math.max(maxCharsPerFact, maxCharsPerFact >= 1000 ? 40_000 : 6_000)
+        : maxCharsPerFact;
+      const text = guide
+        ? f.text
+            .replace(/[ \t\u00a0]+/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim()
+            .slice(0, cap)
+        : f.text.replace(/\s+/g, ' ').trim().slice(0, cap);
       return `[${i + 1}] (${f.kind}) ${f.title}\n«${text}»`;
     })
     .join('\n\n');

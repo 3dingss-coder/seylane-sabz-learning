@@ -225,13 +225,16 @@ describe('mentor guardrails (unit)', () => {
     const long = checkOutput('جمله یک. جمله دو. جمله سه. جمله چهار. جمله پنج. جمله شش.');
     // A real answer is no longer chopped at three sentences…
     expect(long.text.split('.').filter((s) => s.trim()).length).toBe(6);
-    // …but it is still bounded, and a voice reply stays short.
+    // …and a long explanation is kept complete, not cut at nine sentences.
     const many = Array.from({ length: 20 }, (_, i) => `جمله شماره ${i}.`).join(' ');
     expect(
       checkOutput(many)
         .text.split('.')
         .filter((s) => s.trim()).length,
-    ).toBeLessThanOrEqual(9);
+    ).toBe(20);
+    expect(checkOutput('این جمله نباید وسط کلمه قطع شود چون توضیح کامل است').text).toBe(
+      'این جمله نباید وسط کلمه قطع شود چون توضیح کامل است',
+    );
     expect(
       checkOutput('یک. دو. سه. چهار.', { spoken: true })
         .text.split('.')

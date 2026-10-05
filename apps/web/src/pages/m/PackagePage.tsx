@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { ProductImage } from '@/components/common/ProductImage';
 import { QueryState } from '@/components/common/QueryState';
 import { MentorLauncher } from '@/components/learning/MentorSheet';
+import { RememberPage } from '@/lib/pageContext';
 import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { faDate, faDuration, faPercent } from '@/lib/format';
@@ -41,6 +42,17 @@ export function PackagePage() {
         const current = live.find((s) => s.state !== 'completed' && s.state !== 'locked');
         return (
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+            <RememberPage
+              kind="package"
+              brandId={p.brand?.id ?? null}
+              brandName={p.brand?.name ?? null}
+              productId={p.product?.id ?? null}
+              productName={p.product?.name ?? null}
+              packageId={p.id}
+              packageTitle={p.title}
+              progressPercent={p.percent}
+              activityLine={`آموزش «${p.title}» را باز کرد`}
+            />
             <div className="flex flex-col gap-4 lg:flex-1">
               <PageHeader
                 title={p.title}

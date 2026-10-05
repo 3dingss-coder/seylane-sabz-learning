@@ -97,6 +97,62 @@ const seedSnapshot: Record<string, Record<string, Data>> | undefined = fs.exists
   ? (JSON.parse(fs.readFileSync(snapshotPath, 'utf8')) as Record<string, Record<string, Data>>)
   : undefined;
 
+describe('Cloudflare D1 store limits', () => {
+  it('loads many documents in one query and keeps a long Persian guide', async () => {
+    const db = createSqliteD1();
+    let prepares = 0;
+    const counting: D1Database = {
+      prepare(sql: string) {
+        prepares++;
+        return db.prepare(sql);
+      },
+      batch: (statements) => db.batch(statements),
+    };
+    const store = new D1Store(counting);
+    await store.set('products/a', { name: 'کرم الف', brandId: 'brand-1', archived: false });
+    await store.set('products/b', { name: 'کرم ب', brandId: 'brand-1', archived: false });
+    await store.set('chat_messages/1', {
+      userId: 'u1',
+      role: 'user',
+      text: 'مزیت این محصول چیست',
+      createdAt: '2026-10-01T00:00:00.000Z',
+    });
+    await store.set('chat_messages/2', {
+      userId: 'u2',
+      role: 'user',
+      text: 'پیام کاربر دیگر',
+      createdAt: '2026-10-01T00:00:01.000Z',
+    });
+    prepares = 0;
+    const rows = await store.getMany<{ name: string }>([
+      'products/b',
+      'products/missing',
+      'products/a',
+    ]);
+    expect(rows.map((r) => r?.id ?? null)).toEqual(['b', null, 'a']);
+    expect(prepares).toBe(1);
+
+    const mine = await store.query<{ userId: string }>({
+      collection: 'chat_messages',
+      where: [['userId', '==', 'u1']],
+    });
+    expect(mine).toHaveLength(1);
+    expect(mine[0]?.userId).toBe('u1');
+
+    const document = 'مزیت تأییدشدهٔ محصول. '.repeat(4000);
+    await store.set('mentor_guides/product:a', {
+      kind: 'product',
+      targetId: 'a',
+      document,
+      summary: 'خلاصهٔ رفتار',
+      enabled: true,
+    });
+    const back = await store.get<{ document: string }>('mentor_guides/product:a');
+    expect(back?.document).toBe(document);
+    expect(new TextEncoder().encode(JSON.stringify(back)).length).toBeGreaterThan(20_000);
+  });
+});
+
 describe('Cloudflare D1 + Web Fetch Handler', () => {
   it('keeps the app starting when mentor guide seeding fails, and retries on the next start', async () => {
     const db = createSqliteD1();

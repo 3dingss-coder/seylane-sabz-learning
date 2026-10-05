@@ -22,7 +22,7 @@ import {
 
 /**
  * Task → provider preference. This is the single place where "which AI does what" is decided:
- *  • Persian speech in  → Groq Whisper (fast, free, accurate for `fa`).
+ *  • Persian speech in  → Groq Whisper (fast, free, accurate for `fa`); Gemini audio when no Groq key.
  *  • Persian speech out → Gemini TTS (Groq has no Persian voice; Azure/ElevenLabs can be plugged in
  *    as extra providers without touching a line of business logic).
  *  • Images / PDF / video / audio understanding and embeddings → Gemini (native multimodality).
@@ -33,7 +33,7 @@ export const TASK_PREFERENCE: Record<AiTask, AiProviderId[]> = {
   chat: ['gemini', 'groq', 'legacy'],
   classify: ['groq', 'gemini', 'legacy'],
   vision: ['gemini'],
-  transcribe: ['groq'],
+  transcribe: ['groq', 'gemini'],
   synthesize: ['gemini'],
   embed: ['gemini', 'local'],
   realtime: ['gemini'],

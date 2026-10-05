@@ -569,6 +569,8 @@ export interface MentorGuide {
   tone: MentorGuideTone;
   personaNote: string;
   summary: string;
+  /** Full approved knowledge file. Older boxes omit it. */
+  document?: string;
   keyPoints: string[];
   sellingPoints: string[];
   objections: Array<{ objection: string; answer: string }>;

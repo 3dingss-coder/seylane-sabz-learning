@@ -595,7 +595,9 @@ export async function rebuildKnowledgeIndex(
     writes.push({
       path: `${KNOWLEDGE_COLLECTION}/${item.id}`,
       data: item as unknown as Record<string, unknown>,
-      merge: true,
+      // Full document, not a patch. One D1 batch stays inside the free-plan subrequest cap;
+      // merge:true would read every row again before writing it.
+      merge: false,
     });
   }
 
