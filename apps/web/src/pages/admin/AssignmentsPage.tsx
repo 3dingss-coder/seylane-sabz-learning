@@ -447,11 +447,6 @@ function Paths() {
                           <span>
                             {toPersianDigits(i + 1)}. {title.get(it.packageId) ?? it.packageId}
                           </span>
-                          {it.deadlineOffsetDays !== null && (
-                            <span className="text-xs text-text-secondary">
-                              روز {toPersianDigits(it.deadlineOffsetDays)}
-                            </span>
-                          )}
                         </li>
                       ))}
                     </ol>
@@ -526,7 +521,7 @@ export function PathDialog({
         startAt: fromZonedInput(startAt),
         items: items.map((i) => ({
           packageId: i.packageId,
-          deadlineOffsetDays: i.deadlineOffsetDays === '' ? null : Number(i.deadlineOffsetDays),
+          deadlineOffsetDays: null,
         })),
       };
       return initial
@@ -636,20 +631,6 @@ export function PathDialog({
               <span className="flex-1 text-sm">
                 {toPersianDigits(i + 1)}. {titles.get(it.packageId) ?? it.packageId}
               </span>
-              <input
-                type="number"
-                min={0}
-                dir="ltr"
-                aria-label="مهلت (روز پس از شروع)"
-                placeholder="روز"
-                value={it.deadlineOffsetDays}
-                onChange={(e) =>
-                  setItems((l) =>
-                    l.map((x, j) => (j === i ? { ...x, deadlineOffsetDays: e.target.value } : x)),
-                  )
-                }
-                className="min-h-11 w-20 rounded-input border border-border px-2"
-              />
               <Button
                 variant="ghost"
                 className="px-2"

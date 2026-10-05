@@ -47,6 +47,8 @@ export interface SectionView {
   mediaType: 'video' | 'audio';
   durationSec: number;
   quizId: string;
+  /** false = no quiz on this section (the package quiz is on its podcast section). */
+  quizRequired?: boolean;
   percent: number;
   mediaCompleted: boolean;
   quizPassed: boolean;
@@ -126,6 +128,9 @@ export interface SectionDetail {
   };
   position: { index: number; total: number };
   nextSectionId: string | null;
+  /** The package's single quiz lives on one section; every media row links to it. */
+  quizSectionId?: string;
+  packageQuizPassed?: boolean;
   completionThreshold: number;
 }
 
@@ -161,6 +166,8 @@ export interface AttemptInfo {
   remaining: number;
   passed: boolean;
   mediaCompleted: boolean;
+  /** Last try was below the pass mark: content must be watched/listened to again first. */
+  rewatchRequired?: boolean;
   canAttempt: boolean;
   inProgressAttemptId: string | null;
   inProgressAnswers: Record<string, string>;
@@ -194,6 +201,7 @@ export interface SubmitResult {
   correctCount: number;
   total: number;
   remainingAttempts: number;
+  rewatchRequired?: boolean;
   nextAction: 'next_section' | 'package_complete' | 'retry' | 'request_retake' | 'retake_pending';
   packageCompleted: boolean;
   pointsEarned: number;

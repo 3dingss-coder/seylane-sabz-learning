@@ -229,7 +229,7 @@ describe('M7/M8 quiz', () => {
     fireEvent.click(await screen.findByTestId('quiz-confirm'));
     expect(await screen.findByTestId('quiz-result')).toHaveTextContent('قبول شدی');
     expect(screen.getByText('+۲۰ امتیاز')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'قسمت بعد' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'بازگشت به بسته' })).toBeInTheDocument();
     // Wait for the invalidation refetch, then make sure the result is still shown.
     await waitFor(() =>
       expect(

@@ -32,6 +32,8 @@ export interface SectionView {
   mediaType: 'video' | 'audio';
   durationSec: number;
   quizId: string;
+  /** false = no quiz gates this section (the package quiz is on another section). */
+  quizRequired: boolean;
   percent: number;
   mediaCompleted: boolean;
   quizPassed: boolean;
@@ -107,9 +109,9 @@ export function assignedPackageIds(
 }
 
 export function sectionScore(
-  s: Pick<SectionView, 'mediaCompleted' | 'quizPassed' | 'percent'>,
+  s: Pick<SectionView, 'mediaCompleted' | 'quizPassed' | 'percent'> & { quizRequired?: boolean },
 ): number {
-  if (s.mediaCompleted && s.quizPassed) return 100;
+  if (s.mediaCompleted && (s.quizPassed || s.quizRequired === false)) return 100;
   return Math.min(90, Math.round(s.percent * 0.9));
 }
 
@@ -150,18 +152,22 @@ export function computePackageView(
   const deadlineAt = effectiveDeadlineAt(pkg, user);
   const sections: SectionView[] = [];
   const ordered = [...pkg.sections].sort((a, b) => a.order - b.order);
+  // Video and podcast are two ways to consume the SAME content: finishing either one is enough
+  // to make the package quiz «ready». The quiz itself is open from the start.
+  const anyMediaDone = ordered.some((s) => !s.archived && !!progress.get(s.id)?.completed);
   for (const s of ordered) {
     const p = progress.get(s.id);
     // Archived sections: keep only if the user already engaged with them (edge case 27.2).
     if (s.archived && !p) continue;
     const mediaCompleted = !!p?.completed;
     const quizPassed = !!p?.quizPassed;
-    const done = mediaCompleted && quizPassed;
+    const quizRequired = s.quizRequired !== false;
     let state: SectionState;
     const lockReason: string | null = null;
-    // No sequential lock: every section is open regardless of earlier sections' progress.
-    if (done) state = 'completed';
-    else if (mediaCompleted) state = 'quiz';
+    // No sequential lock. A media-only section is done once played; the quiz section is done
+    // only when the quiz is passed (no media needed), and is «quiz» once any media was finished.
+    if (quizRequired ? quizPassed : mediaCompleted) state = 'completed';
+    else if (quizRequired && anyMediaDone) state = 'quiz';
     else if ((p?.playedSeconds ?? 0) > 0) state = 'in_progress';
     else state = 'open';
     sections.push({
@@ -171,6 +177,7 @@ export function computePackageView(
       mediaType: s.mediaType,
       durationSec: s.durationSec,
       quizId: s.quizId,
+      quizRequired,
       percent: p?.percent ?? 0,
       mediaCompleted,
       quizPassed,
@@ -181,14 +188,14 @@ export function computePackageView(
     });
   }
   const active = sections.filter((s) => !s.archived);
-  const totalDur = active.reduce((a, s) => a + Math.max(1, s.durationSec), 0);
-  const percent =
-    totalDur > 0
-      ? Math.round(
-          active.reduce((a, s) => a + sectionScore(s) * Math.max(1, s.durationSec), 0) / totalDur,
-        )
-      : 0;
-  const allDone = active.length > 0 && active.every((s) => s.state === 'completed');
+  // The package is complete when its quiz is passed. Playback only moves the bar up to 90%.
+  const gating = active.filter((s) => s.quizRequired !== false);
+  const allDone =
+    active.length > 0 &&
+    (gating.length > 0 ? gating.every((s) => s.quizPassed) : active.every((s) => s.mediaCompleted));
+  const percent = allDone
+    ? 100
+    : Math.min(90, Math.round(Math.max(0, ...active.map((s) => s.percent)) * 0.9));
   const anyProgress = sections.some((s) => s.percent > 0 || s.quizPassed);
   const lastActivity =
     [...progress.values()]
@@ -235,9 +242,12 @@ export function sortPackages(list: PackageView[]): PackageView[] {
 export function computeNextItem(list: PackageView[]): NextItem | null {
   for (const p of sortPackages(list)) {
     if (p.status === 'completed' || p.packageStatus === 'archived') continue;
-    const s = p.sections.find(
-      (x) => !x.archived && x.state !== 'completed' && x.state !== 'locked',
-    );
+    const open = p.sections.filter((x) => !x.archived && x.state !== 'locked');
+    const s =
+      open.find((x) => x.state === 'quiz') ??
+      open.find((x) => x.state === 'in_progress') ??
+      open.find((x) => x.state !== 'completed') ??
+      open[0];
     if (!s) continue;
     return {
       packageId: p.id,

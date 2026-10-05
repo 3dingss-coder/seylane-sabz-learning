@@ -7,8 +7,6 @@ import { ApiError, api } from '@/lib/api';
 import { errMsg } from '@/lib/errors';
 import type { AdminPackage } from '@/lib/types';
 import { useBrands, useProducts } from './adminQueries';
-import { fromZonedInput, toZonedInput } from '@/lib/dates';
-import { JalaliDateField } from '@/components/common/JalaliDateField';
 
 /** Create or edit package metadata. Brand may stay empty → unassigned draft (D33). */
 export function PackageFormDialog({
@@ -28,8 +26,6 @@ export function PackageFormDialog({
   const [description, setDescription] = useState(initial?.description ?? '');
   const [brandId, setBrandId] = useState(initial?.brandId ?? presetBrandId ?? '');
   const [productId, setProductId] = useState(initial?.productId ?? presetProductId ?? '');
-  const [deadline, setDeadline] = useState(toZonedInput(initial?.deadlineAt ?? null));
-  const [hours, setHours] = useState(initial?.deadlineHours ? String(initial.deadlineHours) : '');
   const [minutes, setMinutes] = useState(String(initial?.estimatedMinutes ?? ''));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const brands = useBrands();
@@ -44,9 +40,9 @@ export function PackageFormDialog({
         description: description.trim(),
         brandId: brandId || null,
         productId: productId || null,
-        // A personal window (hours from each marketer's own start) replaces the fixed date.
-        deadlineHours: hours ? Number(hours) : null,
-        deadlineAt: hours ? null : fromZonedInput(deadline),
+        // Packages have no deadline any more: always clear it.
+        deadlineHours: null,
+        deadlineAt: null,
         ...(minutes ? { estimatedMinutes: Number(minutes) } : {}),
       };
       return initial
@@ -139,29 +135,6 @@ export function PackageFormDialog({
           </Select>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            label="مهلت یادگیری برای هر بازاریاب (ساعت)"
-            type="number"
-            ltr
-            min={1}
-            value={hours}
-            onChange={(e) => setHours(e.target.value)}
-            error={errors.deadlineHours}
-            hint="مثلاً ۲۴ = هر بازاریاب از لحظه ثبت‌نام خودش ۲۴ ساعت وقت دارد."
-          />
-          <JalaliDateField
-            label="مهلت ثابت برای همه (اختیاری)"
-            mode="datetime"
-            disablePast
-            value={deadline}
-            onChange={setDeadline}
-            error={errors.deadlineAt}
-            hint={
-              hours
-                ? 'وقتی مهلت به ساعت تعیین شده، این تاریخ نادیده گرفته می‌شود.'
-                : 'تا پایان این لحظه (به وقت تهران) باید آموزش تمام شود.'
-            }
-          />
           <Input
             label="زمان تقریبی (دقیقه)"
             type="number"

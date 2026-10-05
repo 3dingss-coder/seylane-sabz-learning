@@ -151,6 +151,7 @@ describe('next item + scoring', () => {
       mediaType: 'audio' as const,
       durationSec: 10,
       quizId: 'q',
+      quizRequired: true,
       percent: 0,
       mediaCompleted: false,
       quizPassed: false,

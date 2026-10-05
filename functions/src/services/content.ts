@@ -512,11 +512,9 @@ export async function validatePublish(
 ): Promise<string[]> {
   const issues: string[] = [];
   if (!pkg.brandId) issues.push('برند بسته مشخص نشده است (پیش‌نویس بدون تخصیص).');
-  if (!pkg.deadlineHours) {
-    if (!pkg.deadlineAt) issues.push('مهلت بسته تعیین نشده است.');
-    else if (pkg.deadlineAt <= d.clock().toISOString())
-      issues.push('مهلت بسته باید در آینده باشد.');
-  }
+  // A deadline is optional. When an absolute one is set it must still lie in the future.
+  if (!pkg.deadlineHours && pkg.deadlineAt && pkg.deadlineAt <= d.clock().toISOString())
+    issues.push('مهلت بسته باید در آینده باشد.');
   const sections = (
     sectionsIn ??
     (await d.store.query<Section>({ collection: `packages/${(pkg as Doc<Package>).id}/sections` }))
@@ -529,6 +527,7 @@ export async function validatePublish(
       issues.push(`${label}: لینک یوتیوب معتبر نیست.`);
     if (s.mediaSource === 'file' && !s.mediaPath)
       issues.push(`${label}: فایل رسانه آپلود نشده است.`);
+    if (s.quizRequired === false) continue; // the package quiz lives on another section
     const qs = await d.store.query<Question>({
       collection: `quizzes/${s.quizId}/questions`,
       where: [['archived', '==', false]],
@@ -759,6 +758,7 @@ export async function refreshPackageSummary(d: Deps, packageId: string) {
     mediaType: s.mediaType,
     durationSec: s.durationSec,
     quizId: s.quizId,
+    quizRequired: s.quizRequired !== false,
     archived: s.archived,
   }));
   const minutes = Math.round(
