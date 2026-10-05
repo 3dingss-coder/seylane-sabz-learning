@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
 import type {
   AdminPackageDetail,
+  AdminQuestion,
+  AdminQuiz,
   AdminSection,
   AdminTeam,
   AuditEntry,
   ContentTree,
   Me,
+  PolicyData,
 } from '@/lib/types';
 import { marketer } from '@/test/fixtures';
 import { mockApi } from '@/test/mockApi';
@@ -214,6 +217,105 @@ describe('admin: everything understandable at a glance', () => {
     fireEvent.change(box, { target: { value: 'nothing-matches-this' } });
     await waitFor(() => expect(screen.queryByRole('table')).toBeNull());
     expect(await screen.findByText('موردی نیست')).toBeInTheDocument();
+  });
+
+  /** Typed on purpose: the builder reads passScore/maxAttempts off `quiz`, and a
+   *  partial literal here would let a missing field pass as `undefined`. */
+  const adminQuiz = (over: Partial<AdminQuiz['quiz']> = {}): AdminQuiz => ({
+    quiz: {
+      id: 'qz1',
+      sectionId: 's1',
+      packageId: 'p1',
+      passScore: null,
+      maxAttempts: null,
+      version: 1,
+      active: true,
+      questionCount: 1,
+      needsReview: false,
+      ...over,
+    },
+    questions: [
+      {
+        id: 'qn1',
+        stem: 'کدام مورد درست است؟',
+        options: [
+          { key: 'a', text: 'گزینه الف' },
+          { key: 'b', text: 'گزینه ب' },
+        ],
+        answerKey: 'a',
+        explanation: '',
+        order: 1,
+      } satisfies AdminQuestion,
+    ],
+    archivedCount: 0,
+  });
+
+  /** Live `GET /v1/admin/policies` returns 19 fields; only two are read by the hints. */
+  const policy = (over: Partial<PolicyData> = {}): PolicyData => ({
+    passScore: 80,
+    maxAttempts: 3,
+    completionThreshold: 85,
+    pointsTable: { first_pass_quiz: 20, package_completion: 30, on_time_completion: 50 },
+    penaltyEnabled: false,
+    latePenalty: 0,
+    warningHours: [72, 24],
+    quietHours: { start: '22:00', end: '07:00' },
+    weeklyDigestDay: 6,
+    weeklyDigestHour: 9,
+    reminderInactiveDays: 3,
+    mentorChatEnabled: true,
+    mentorDailyLimitPerUser: 20,
+    mentorDailyLimitGlobal: 2000,
+    mentorVoiceEnabled: true,
+    mentorVoiceMinutesPerUser: 10,
+    mentorVoiceMinutesGlobal: 200,
+    ...over,
+  });
+
+  const quizRoutes = (p?: PolicyData) => ({
+    ...asAdmin(),
+    'GET /v1/admin/quizzes/qz1': () => ({ data: adminQuiz() }),
+    // deliberately absent when `p` is undefined: the route 404s, so `policy.data` stays
+    // undefined — the exact state in which the hint used to invent ۷۰٪
+    ...(p ? { 'GET /v1/admin/policies': () => ({ data: p }) } : {}),
+  });
+
+  it('quiz settings name the server pass mark, and never invent one while it loads', async () => {
+    // Regression guard for the removed `?? 70`: with no policy yet the hint must carry
+    // no number at all, not a plausible-looking wrong one.
+    const { calls } = mockApi(quizRoutes());
+    renderApp('/admin/quizzes/qz1');
+    // both inheritable fields (pass mark, max attempts) render the same bare hint, so this
+    // has to be findAllByText — findByText throws on the second match
+    const hints = await screen.findAllByText('خالی = پیش‌فرض سیاست');
+    expect(hints).toHaveLength(2);
+    for (const h of hints) expect(h.textContent).not.toMatch(/[۰-۹]/);
+    expect(calls.some((c) => c.key === 'GET /v1/admin/policies')).toBe(true);
+  });
+
+  it('quiz settings show the policy default as ۸۰٪ once the policy resolves', async () => {
+    mockApi(quizRoutes(policy()));
+    renderApp('/admin/quizzes/qz1');
+    expect(await screen.findByText('خالی = پیش‌فرض سیاست (۸۰٪)')).toBeInTheDocument();
+    expect(screen.queryByText('خالی = پیش‌فرض سیاست (۷۰٪)')).not.toBeInTheDocument();
+  });
+
+  it('saving quiz settings with an empty pass mark sends null, not a fallback number', async () => {
+    const { calls } = mockApi({
+      ...quizRoutes(policy()),
+      'PATCH /v1/admin/quizzes/qz1': () => ({ data: { ok: true } }),
+    });
+    renderApp('/admin/quizzes/qz1');
+    await screen.findByText('خالی = پیش‌فرض سیاست (۸۰٪)');
+
+    fireEvent.change(screen.getByLabelText('نمره قبولی (٪)'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تنظیمات' }));
+
+    await waitFor(() =>
+      expect(calls.some((c) => c.key === 'PATCH /v1/admin/quizzes/qz1')).toBe(true),
+    );
+    const patch = calls.find((c) => c.key === 'PATCH /v1/admin/quizzes/qz1');
+    expect(patch?.body).toEqual({ passScore: null, maxAttempts: null });
   });
 
   it('dashboard shows the 4-step publish guide and the «انتشار آموزش جدید» shortcut', async () => {
