@@ -76,7 +76,7 @@
 | `npx playwright install chromium` | `Download failure, code=1` |
 | `storage.googleapis.com` / `cdn.playwright.dev` / `playwright.azureedge.net` | همه `000` (مسدود) |
 | `deb.debian.org` / `security.debian.org` / `mirrors.kernel.org` | همه `000` (مسدود) |
-| `apt-get install` | `Permission denied` (بدون root) |
+| `sudo -n apt-get install -y libnss3 libnspr4` | `E: Unable to locate package` — نه به‌خاطر نبودِ دسترسی |
 | npm registry / `github.com` / `codeload` / `pypi.org` | **باز** (`200`) |
 
 چون registry باز است، `@sparticuz/chromium` نصب شد و **یک باینری واقعی ۲۰۹ مگابایتی** از
@@ -87,13 +87,34 @@
 ldd /tmp/chromium | grep -c "not found"   →  3   (libnspr4, libnss3, libnssutil3)
 ```
 
-**باز کردن قفل (یک دستور، روی ماشین با root):**
+**تصحیح ۲۰۲۶‑۱۰‑۰۵ — مانع، root نیست.** پیش‌تر اینجا نوشته بود «`Permission denied`
+(بدون root)». اندازه‌گیری مجدد نشان داد این اشتباه بوده:
+
+```
+$ id -u                       → 1001        (root نیست)
+$ sudo -n true                → موفق        (sudo بدون رمز در دسترس است)
+$ sudo -n apt-get install -y libnss3 libnspr4
+  E: Unable to locate package libnss3
+  E: Unable to locate package libnspr4
+$ sudo -n apt-get update
+  W: Failed to fetch http://deb.debian.org/debian/dists/bookworm/InRelease
+     Connection failed [IP: 151.101.130.132 80]
+```
+
+یعنی دسترسی هست و **شبکه به آرشیو دبیان نیست**. فهرست پکیج‌ها هرگز بارگیری نمی‌شود، پس
+apt اساساً نمی‌داند `libnss3` چیست. تفاوتش عملی است: با rootِ تنها هیچ چیز باز نمی‌شود؛
+یا باید مسیر شبکه به آرشیو باز شود، یا `.deb`ها دستی وارد شوند.
+
+**باز کردن قفل (روی ماشینی که هم root دارد و هم به آرشیو می‌رسد):**
 
 ```bash
 apt-get install -y libnss3 libnspr4   # سپس: npx playwright install chromium
 npm run test:e2e                      # axe مرورگری + سناریوها
 npx lighthouse http://localhost:3000/quiz/seed-pkg-bubble-s1 --only-categories=performance,a11y
 ```
+
+در این سندباکس هیچ‌کدام ممکن نیست: رجیستری npm باز است (`200`) ولی `deb.debian.org`،
+`cdn.playwright.dev` و `storage.googleapis.com` هر سه `000`.
 
 **چرا به کتابخانهٔ قلابی (stub) رو نیاوردیم:** NSS فقط برای لینک شدن لازم نیست؛ کروم در
 زمان اجرا واقعاً صدایش می‌زند. با stub یا کرش می‌کرد یا عددِ ساختگی تولید می‌کرد — و عددِ
