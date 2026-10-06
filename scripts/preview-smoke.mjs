@@ -70,8 +70,22 @@ check('user-specific response not publicly cacheable', !/public|s-maxage/.test(c
 for (const [n, a] of [['register', regT], ['login', logT], ['refresh', refT], ['me/home', homeT], ['me/packages', pkgT], ['health', healthT]]) {
   out(`latency ${n}: n=${a.length} p50=${pct(a, 0.5).toFixed(0)}ms p95=${pct(a, 0.95).toFixed(0)}ms max=${Math.max(...a).toFixed(0)}ms`);
 }
-check('register p95 < 2000ms', pct(regT, 0.95) < 2000);
-check('login p95 < 2000ms', pct(logT, 0.95) < 2000);
+
+// ---- REAL app paths: phone-register / phone-login (passwordless, what the app actually uses) ----
+const prT = [], plT = [];
+for (let i = 0; i < N; i++) {
+  const phone = `0935${run.slice(-5)}${String(i).padStart(2, '0')}`;
+  const r = await call('POST', '/v1/auth/phone-register', { name: `Phone User ${i}`, phone, province: 'تهران', city: 'تهران' });
+  prT.push(r.ms);
+  if (i === 0) out(`phone-register sample: status=${r.status} ${r.text.slice(0, 160).replace(/"(idToken|refreshToken)":"[^"]+"/g, '"$1":"***"')}`);
+  const l = await call('POST', '/v1/auth/phone-login', { phone });
+  plT.push(l.ms);
+  if (i === 0) { check('phone-register 201', r.status === 201, `status=${r.status}`); check('phone-login 200', l.status === 200, `status=${l.status}`); }
+}
+out(`latency phone-register (REAL): n=${prT.length} p50=${pct(prT, 0.5).toFixed(0)}ms p95=${pct(prT, 0.95).toFixed(0)}ms max=${Math.max(...prT).toFixed(0)}ms`);
+out(`latency phone-login (REAL): n=${plT.length} p50=${pct(plT, 0.5).toFixed(0)}ms p95=${pct(plT, 0.95).toFixed(0)}ms max=${Math.max(...plT).toFixed(0)}ms`);
+check('phone-register p95 < 2000ms', pct(prT, 0.95) < 2000);
+check('phone-login p95 < 2000ms', pct(plT, 0.95) < 2000);
 
 out('media Range: NOT TESTED (needs an admin upload + an enrolled marketer; a fresh user has no active packages)');
 const bad = await call('POST', '/v1/auth/login', { identifier: '09000000000', password: 'wrongpass' });
