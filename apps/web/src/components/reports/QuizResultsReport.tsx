@@ -26,14 +26,17 @@ type Filter =
   'brand' | 'product' | 'user' | 'team' | 'province' | 'city' | 'result' | 'from' | 'to';
 type View = 'summary' | 'attempts';
 
-const fa = (n: number | null | undefined) => (n === null || n === undefined ? '—' : toPersianDigits(n));
+const fa = (n: number | null | undefined) =>
+  n === null || n === undefined ? '—' : toPersianDigits(n);
 const score = (n: number | null | undefined) =>
   n === null || n === undefined ? '—' : faPercent(n);
 const durationFa = (sec: number | null) => {
   if (sec === null) return '—';
   const m = Math.floor(sec / 60);
   const s = sec % 60;
-  return m ? `${toPersianDigits(m)} دقیقه و ${toPersianDigits(s)} ثانیه` : `${toPersianDigits(s)} ثانیه`;
+  return m
+    ? `${toPersianDigits(m)} دقیقه و ${toPersianDigits(s)} ثانیه`
+    : `${toPersianDigits(s)} ثانیه`;
 };
 const resultLabel = (r: Pick<QuizSummaryRow, 'passed' | 'attempts' | 'passedAtAttempt'>) =>
   r.passed ? `قبول (تلاش ${toPersianDigits(r.passedAtAttempt ?? r.attempts)})` : 'مردود';
@@ -268,7 +271,9 @@ export function QuizResultsReport({
       `quiz-results-${view}-${day}.csv`,
       toCsv(
         cols.map((c) => c.header),
-        rows.map((r) => cols.map((c) => (r as Record<string, string | number | null>)[c.key] ?? '')),
+        rows.map((r) =>
+          cols.map((c) => (r as Record<string, string | number | null>)[c.key] ?? ''),
+        ),
       ),
     );
   };
@@ -284,7 +289,12 @@ export function QuizResultsReport({
   return (
     <div className="flex flex-col gap-3">
       <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard title="کاربران آزمون‌داده" value={faNumber(kpis.learners)} icon={Users} tone="info" />
+        <KpiCard
+          title="کاربران آزمون‌داده"
+          value={faNumber(kpis.learners)}
+          icon={Users}
+          tone="info"
+        />
         <KpiCard title="مجموع تلاش‌ها" value={faNumber(kpis.attempts)} icon={Repeat} />
         <KpiCard
           title="قبول / مردود"
@@ -312,7 +322,11 @@ export function QuizResultsReport({
             ))}
           </Select>
         )}
-        <Select label="استان" value={f('province')} onChange={(e) => set('province', e.target.value)}>
+        <Select
+          label="استان"
+          value={f('province')}
+          onChange={(e) => set('province', e.target.value)}
+        >
           <option value="">همه</option>
           {opts.provinces.map((p) => (
             <option key={p} value={p}>
@@ -488,7 +502,10 @@ export function QuizResultsReport({
                     <span className="inline-flex items-center gap-1 font-bold text-danger">
                       <XCircle className="size-4" aria-hidden /> {resultLabel(r)}
                       {r.inProgress && (
-                        <span className="text-xs font-normal text-text-secondary"> (در حال آزمون)</span>
+                        <span className="text-xs font-normal text-text-secondary">
+                          {' '}
+                          (در حال آزمون)
+                        </span>
                       )}
                     </span>
                   ),

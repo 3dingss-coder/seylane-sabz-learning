@@ -458,7 +458,10 @@ export async function managerQuizReport(
   f: z.infer<typeof quizReportQuery>,
 ) {
   const users = await teamMembers(d, manager);
-  const [members, attempts] = await Promise.all([loadMembers(d, users), attemptsForUsers(d, users)]);
+  const [members, attempts] = await Promise.all([
+    loadMembers(d, users),
+    attemptsForUsers(d, users),
+  ]);
   await track(d, 'manager_report_viewed', manager.id, { filters: Object.keys(f), kind: 'quizzes' });
   return {
     ...quizResultRows(members, attempts, f),
@@ -472,7 +475,10 @@ export async function adminQuizReport(d: Deps, f: z.infer<typeof quizReportQuery
   if (f.city) where.push(['city', '==', f.city]);
   if (f.province) where.push(['province', '==', f.province]);
   const users = await d.store.query<User>({ collection: 'users', where });
-  const [members, attempts] = await Promise.all([loadMembers(d, users), attemptsForUsers(d, users)]);
+  const [members, attempts] = await Promise.all([
+    loadMembers(d, users),
+    attemptsForUsers(d, users),
+  ]);
   return quizResultRows(members, attempts, f);
 }
 

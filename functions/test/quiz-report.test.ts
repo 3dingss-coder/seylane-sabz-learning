@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { buildFixture, createCtx, passQuiz, watchSection, type Fixture, type TestCtx } from './support/ctx';
+import {
+  buildFixture,
+  createCtx,
+  passQuiz,
+  watchSection,
+  type Fixture,
+  type TestCtx,
+} from './support/ctx';
 
 let ctx: TestCtx;
 let fx: Fixture;
@@ -50,10 +57,23 @@ describe('quiz results report', () => {
     const { attempts, summary } = res.body.data;
     expect(attempts).toHaveLength(2);
     const byN = [...attempts].sort(
-      (a: { attemptNumber: number }, b: { attemptNumber: number }) => a.attemptNumber - b.attemptNumber,
+      (a: { attemptNumber: number }, b: { attemptNumber: number }) =>
+        a.attemptNumber - b.attemptNumber,
     );
-    expect(byN[0]).toMatchObject({ attemptNumber: 1, correct: 0, wrong: 3, total: 3, passed: false });
-    expect(byN[1]).toMatchObject({ attemptNumber: 2, correct: 3, wrong: 0, total: 3, passed: true });
+    expect(byN[0]).toMatchObject({
+      attemptNumber: 1,
+      correct: 0,
+      wrong: 3,
+      total: 3,
+      passed: false,
+    });
+    expect(byN[1]).toMatchObject({
+      attemptNumber: 2,
+      correct: 3,
+      wrong: 0,
+      total: 3,
+      passed: true,
+    });
     expect(summary).toHaveLength(1);
     expect(summary[0]).toMatchObject({
       userName: 'بازاریاب الف',
