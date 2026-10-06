@@ -4,7 +4,7 @@ name: Preview deploy (manual, isolated)
 # Never touches the production Worker / D1 / R2.
 on:
   push:
-    branches: [step1-outage-reliability]   # preview branch only, never main
+    branches: [step1-outage-reliability] # preview branch only, never main
   workflow_dispatch:
 
 permissions:
