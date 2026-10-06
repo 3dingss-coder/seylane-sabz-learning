@@ -42,3 +42,8 @@ database_id = "f7a2ed30-00f4-42e6-b26f-343c24fe1853"
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "seylane-sabz-media"
+
+# Workers Logs: capture invocations and errors (1101/1102/503) for diagnosis.
+[observability]
+enabled = true
+head_sampling_rate = 1
