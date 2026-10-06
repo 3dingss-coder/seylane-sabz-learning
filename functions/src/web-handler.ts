@@ -84,6 +84,7 @@ export async function buildCloudflareDeps(
     PLAYBACK_BUDGET: stringEnv.PLAYBACK_BUDGET ?? 'off',
     RATE_LIMIT_SCALE: stringEnv.RATE_LIMIT_SCALE ?? '20',
   });
+  const bucket = env.MEDIA_BUCKET;
   const store: DocStore = db ? new D1Store(db, seedSnapshot) : new InMemoryStore(seedSnapshot);
   const secret = await resolveSigningSecret(store, stringEnv.LOCAL_AUTH_SECRET, isProd);
   const finalConfig: AppConfig = { ...config, localSecret: secret };
@@ -110,9 +111,9 @@ export async function buildCloudflareDeps(
             return row?.ok === 1;
           }
         : undefined,
-      r2: env.MEDIA_BUCKET
+      r2: bucket
         ? async () => {
-            await env.MEDIA_BUCKET!.head('__health__');
+            await bucket.head('__health__');
             return true;
           }
         : undefined,
