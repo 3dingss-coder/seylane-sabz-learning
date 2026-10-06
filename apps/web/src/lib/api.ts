@@ -121,6 +121,7 @@ export async function request<T>(
   path: string,
   opts: RequestOptions = {},
   retried = false,
+  attempt = 0,
 ): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
@@ -154,14 +155,15 @@ export async function request<T>(
       onSessionExpired?.();
     }
   }
-  // One quiet retry for idempotent calls and phone-login when the Worker is cold/overloaded.
+  // Quiet retries (600 ms, then 1.5 s) for idempotent calls and phone-login when the Worker is
+  // cold or briefly over its CPU limit (Cloudflare 1101/1102/503).
   if (
-    !retried &&
+    attempt < 2 &&
     isTransientStatus(res.status) &&
     ((opts.method ?? 'GET') === 'GET' || path === '/auth/phone-login')
   ) {
-    await sleep(600);
-    return request<T>(path, opts, true);
+    await sleep(attempt === 0 ? 600 : 1500);
+    return request<T>(path, opts, retried, attempt + 1);
   }
   if (res.status === 204) return undefined as T;
   let json: { data?: T; error?: { code: ErrorCode; message: string; details?: unknown } };
@@ -171,9 +173,13 @@ export async function request<T>(
     throw new ApiError('INTERNAL', 'پاسخ سرور نامعتبر است. کمی بعد دوباره تلاش کنید.', res.status);
   }
   if (!res.ok || json.error) {
+    // Cloudflare edge/platform errors (1101/1102/1015…) arrive as JSON without our `error` field.
     const err = json.error ?? {
-      code: 'INTERNAL' as const,
-      message: 'خطایی رخ داد. دوباره تلاش کنید.',
+      code: (res.status === 429 ? 'RATE_LIMIT' : 'INTERNAL') as ErrorCode,
+      message:
+        res.status >= 500 || res.status === 429
+          ? 'سرور موقتاً شلوغ است. چند ثانیه بعد دوباره تلاش کنید.'
+          : 'خطایی رخ داد. دوباره تلاش کنید.',
     };
     throw new ApiError(err.code, err.message, res.status, err.details);
   }
