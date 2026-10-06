@@ -47,3 +47,29 @@ jobs:
           echo "::notice::preview URL: $URL"
           sleep 10
           node scripts/preview-smoke.mjs "$URL"
+
+  failtest:
+    name: Fail-fast check (prod mode, no D1 binding)
+    needs: preview
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PREVIEW_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Deploy temporary no-DB Worker
+        run: npx --yes wrangler@4 deploy -c wrangler.nodb.toml 2>&1 | tee deploy.log
+      - name: Run check, then always delete the temporary Worker
+        run: |
+          URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          sleep 10
+          rc=0
+          node scripts/preview-nodb-check.mjs "$URL" || rc=$?
+          npx --yes wrangler@4 delete --name seylane-sabz-learning-preview-nodb --force || true
+          exit $rc
