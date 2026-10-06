@@ -5,7 +5,9 @@ if (!base || /academy-seylaneh\.site/.test(base)) {
   console.error('refusing: pass the preview URL (never production)');
   process.exit(2);
 }
-const out = (m) => console.log(`::notice::${m}`);
+const lines = [];
+const out = (m) => { lines.push(m); console.log(m); };
+const flush = () => console.log(`::notice title=smoke::${lines.join('%0A')}`);
 let errors4 = 0, errors5 = 0, failed = false;
 const pct = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
 async function call(method, path, body, token, extra = {}) {
@@ -74,4 +76,5 @@ const bad = await call('POST', '/v1/auth/login', { identifier: '09000000000', pa
 check('bad login is 4xx not 5xx', bad.status >= 400 && bad.status < 500, `status=${bad.status}`);
 out(`errors observed: 4xx=${errors4} 5xx=${errors5}`);
 check('no 5xx during smoke', errors5 === 0);
+flush();
 process.exit(failed ? 1 : 0);
