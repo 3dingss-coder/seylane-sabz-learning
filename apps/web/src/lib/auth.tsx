@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiError, api, refreshSession, setSessionExpiredHandler } from './api';
+import { ApiError, api, refreshSession, request, setSessionExpiredHandler } from './api';
 import { flushBeats } from './offline-queue';
 import { unregisterPush } from './native';
 import { session } from './session';
@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        const me = await api.get<Me>('/me');
+        const me = await request<Me>('/me', { timeoutMs: 15_000 });
         if (!cancelled) {
           setUser(me);
           setStatus('authenticated');
