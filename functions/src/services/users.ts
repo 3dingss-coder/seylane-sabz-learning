@@ -168,6 +168,7 @@ export async function register(
   input: z.infer<typeof registerSchema>,
   role: Role = 'marketer',
   extra: Partial<User> = {},
+  opts: { passwordless?: boolean } = {},
 ) {
   const idf = parseIdentifier(input.identifier);
   const keyId = ids.uniqueKey(idf.kind, idf.kind === 'phone' ? idf.phone : idf.email);
@@ -192,6 +193,7 @@ export async function register(
       email: idf.authEmail,
       password: input.password,
       displayName: input.name,
+      passwordless: opts.passwordless,
     });
   } catch (e) {
     await d.store.delete(`unique_keys/${keyId}`);

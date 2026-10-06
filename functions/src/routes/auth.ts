@@ -76,6 +76,7 @@ export function authRouter(d: Deps, limiter: RateLimiter): LightRouter {
         const id = users.parseIdentifier(input.phone);
         if (id.kind !== 'phone') throw new ApiError('VALIDATION', 'شماره موبایل وارد کنید.');
         // No password is ever shown or used: a random one satisfies the credential store.
+        // (Passwordless: hashing + re-verifying it cost ~13 ms CPU per sign-up, over the Workers CPU limit.)
         const password = randomBytesBase64Url(24);
         // Self sign-ups join the default sales team (when it exists) so the manager panel sees them.
         const team = await d.store.get('teams/team-seylane');
@@ -90,10 +91,12 @@ export function authRouter(d: Deps, limiter: RateLimiter): LightRouter {
           },
           'marketer',
           team ? { teamId: 'team-seylane' } : {},
+          { passwordless: true },
         );
         await notifyTemplate(d, [user.id], 'welcome', { name: user.name }, { actionRef: '/' });
-        const session = await users.login(d, { identifier: input.phone, password });
-        return session;
+        const session = await phoneAuth.demoSignIn(id.authEmail);
+        if (!session.ok) throw new ApiError('INTERNAL');
+        return { user: users.publicUser(user), ...session.tokens };
       }, 201),
     );
   }
