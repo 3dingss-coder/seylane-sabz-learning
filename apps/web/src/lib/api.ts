@@ -49,38 +49,63 @@ export function fileUrl(url: string | null | undefined): string {
 }
 
 type RefreshResult = { idToken: string; refreshToken: string; expiresIn: number };
-let refreshing: Promise<boolean> | null = null;
 let onSessionExpired: (() => void) | null = null;
 export function setSessionExpiredHandler(fn: () => void) {
   onSessionExpired = fn;
 }
 
-/** Single-flight refresh; returns false when the refresh token is invalid. */
-export async function refreshSession(): Promise<boolean> {
+type RefreshOutcome = 'ok' | 'invalid' | 'transient';
+let refreshingOutcome: Promise<RefreshOutcome> | null = null;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const isTransientStatus = (s: number) => s === 429 || s === 408 || s >= 500;
+
+async function refreshOnce(rt: string): Promise<RefreshOutcome> {
+  try {
+    const res = await fetch(`${API_BASE}/v1/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rt }),
+    });
+    if (res.status === 401 || res.status === 403) return 'invalid';
+    if (!res.ok) return 'transient';
+    const { data } = (await res.json()) as { data: RefreshResult };
+    session.setAccess(data.idToken, data.expiresIn);
+    session.setRefresh(data.refreshToken);
+    return 'ok';
+  } catch {
+    // Network drop, Worker cold-start failure (1101/1102/503) or unparsable body: not a verdict
+    // on the token, so the session must be kept.
+    return 'transient';
+  }
+}
+
+/**
+ * Single-flight refresh. Only a definitive 401/403 from /auth/refresh clears the session;
+ * transient failures are retried once and then reported as 'transient' without logging out.
+ */
+export function refreshSessionOutcome(): Promise<RefreshOutcome> {
   const rt = session.refresh;
-  if (!rt) return false;
-  refreshing ??= (async () => {
+  if (!rt) return Promise.resolve('invalid');
+  refreshingOutcome ??= (async () => {
     try {
-      const res = await fetch(`${API_BASE}/v1/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: rt }),
-      });
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) session.clear();
-        return false;
+      let out = await refreshOnce(rt);
+      if (out === 'transient') {
+        await sleep(700);
+        out = await refreshOnce(session.refresh ?? rt);
       }
-      const { data } = (await res.json()) as { data: RefreshResult };
-      session.setAccess(data.idToken, data.expiresIn);
-      session.setRefresh(data.refreshToken);
-      return true;
-    } catch {
-      return false;
+      if (out === 'invalid') session.clear();
+      return out;
     } finally {
-      setTimeout(() => (refreshing = null), 0);
+      setTimeout(() => (refreshingOutcome = null), 0);
     }
   })();
-  return refreshing;
+  return refreshingOutcome;
+}
+
+/** Returns true when a fresh access token is available. */
+export async function refreshSession(): Promise<boolean> {
+  return (await refreshSessionOutcome()) === 'ok';
 }
 
 export interface RequestOptions {
@@ -120,9 +145,23 @@ export async function request<T>(
     throw new ApiError('NETWORK', NETWORK_MESSAGE, 0);
   }
   if (res.status === 401 && !opts.anonymous && !retried) {
-    if (await refreshSession()) return request<T>(path, opts, true);
-    session.clear();
-    onSessionExpired?.();
+    const outcome = await refreshSessionOutcome();
+    if (outcome === 'ok') return request<T>(path, opts, true);
+    // Log out only when the server says the refresh token is invalid; a cold-start 503 or a
+    // dropped connection must not destroy a valid session.
+    if (outcome === 'invalid') {
+      session.clear();
+      onSessionExpired?.();
+    }
+  }
+  // One quiet retry for idempotent calls and phone-login when the Worker is cold/overloaded.
+  if (
+    !retried &&
+    isTransientStatus(res.status) &&
+    ((opts.method ?? 'GET') === 'GET' || path === '/auth/phone-login')
+  ) {
+    await sleep(600);
+    return request<T>(path, opts, true);
   }
   if (res.status === 204) return undefined as T;
   let json: { data?: T; error?: { code: ErrorCode; message: string; details?: unknown } };
