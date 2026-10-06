@@ -43,7 +43,7 @@ const regT = [], logT = [], refT = [], homeT = [], pkgT = [], healthT = [];
 let tokens;
 const N = 12;
 for (let i = 0; i < N; i++) {
-  const phone = `09${run}0${i}`;
+  const phone = `0912${run.slice(-5)}${String(i).padStart(2, '0')}`;
   const pw = 'PreviewPass123!';
   const r = await call('POST', '/v1/auth/register', { name: `Preview User ${i}`, identifier: phone, password: pw });
   regT.push(r.ms);
@@ -73,36 +73,7 @@ for (const [n, a] of [['register', regT], ['login', logT], ['refresh', refT], ['
 check('register p95 < 2000ms', pct(regT, 0.95) < 2000);
 check('login p95 < 2000ms', pct(logT, 0.95) < 2000);
 
-// ---- media Range (via a marketer-visible section, if the seed has file-based media) ----
-try {
-  const pk = await call('GET', '/v1/me/packages', null, idToken);
-  const pkgs = JSON.stringify(pk.json ?? {});
-  const pkgIds = [...new Set([...pkgs.matchAll(/"id":"([^"]+)"/g)].map((m) => m[1]))].slice(0, 12);
-  const secIds = [];
-  for (const id of pkgIds) {
-    const d = await call('GET', `/v1/me/packages/${id}`, null, idToken);
-    if (d.status !== 200) continue;
-    for (const m of JSON.stringify(d.json).matchAll(/"sectionId":"([^"]+)"|"id":"(sec[^"]*|s_[^"]+)"/g)) secIds.push(m[1] || m[2]);
-    if (secIds.length > 20) break;
-  }
-  out(`media: packages scanned=${pkgIds.length} section candidates=${[...new Set(secIds)].length}`);
-  let done = false;
-  for (const sid of [...new Set(secIds)].slice(0, 20)) {
-    const m = await call('GET', `/v1/me/sections/${sid}/media`, null, idToken);
-    const data = m.json?.data;
-    if (m.status === 200 && data?.source === 'file' && data.url) {
-      const url = data.url.startsWith('http') ? data.url : base + data.url;
-      const r = await fetch(url, { headers: { Range: 'bytes=0-1023' } });
-      const buf = await r.arrayBuffer();
-      out(`media Range: status=${r.status} accept-ranges=${r.headers.get('accept-ranges')} content-range=${r.headers.get('content-range')} bytes=${buf.byteLength} cache-control=${r.headers.get('cache-control')}`);
-      check('media Range 206', r.status === 206 && /^bytes 0-/.test(r.headers.get('content-range') || ''));
-      check('signed media not public-cacheable', !/public/.test(r.headers.get('cache-control') || ''));
-      done = true; break;
-    }
-  }
-  if (!done) out('media Range: NOT TESTED (no unlocked file-based section reachable by a new marketer)');
-} catch (e) { out(`media Range: error ${e}`); }
-
+out('media Range: NOT TESTED (needs an admin upload + an enrolled marketer; a fresh user has no active packages)');
 const bad = await call('POST', '/v1/auth/login', { identifier: '09000000000', password: 'wrongpass' });
 check('bad login is 4xx not 5xx', bad.status >= 400 && bad.status < 500, `status=${bad.status}`);
 out(`errors observed: 4xx=${errors4} 5xx=${errors5}`);

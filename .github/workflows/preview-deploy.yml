@@ -51,6 +51,7 @@ jobs:
   failtest:
     name: Fail-fast check (prod mode, no D1 binding)
     needs: preview
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PREVIEW_API_TOKEN }}
