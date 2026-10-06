@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-06 — Media storage moves from D1 to R2 (faster image/audio/video loading)
+
+- New R2 bucket `seylane-sabz-media`, bound as `MEDIA_BUCKET` in `wrangler.toml`. New uploads of images/audio/video are written to R2; reads prefer R2 and fall back to the D1 copy, so nothing breaks while files are still being moved.
+- Seeks in audio/video read only the requested byte window from R2 (before: 256 KB chunks decoded from base64 in D1).
+- New cron job `migrate-blobs` (every 15 min, a few files per run): copies each file D1 → R2 (big files as 8 MiB multipart parts), verifies the size, and only deletes the D1 copy when `R2_MIGRATE_PURGE = "on"` (default `"off"`). Staging parts of resumable uploads (`uploads/…`) stay in D1 and are moved after they are assembled.
+- Public brand/product images are served with `Cache-Control: public, max-age=86400`.
+- At the time of the change D1 held 24 files (~118 MB: 19 audio/video, 5 images). Tests: `functions/test/r2-migration.test.ts`.
+
 ## 2026-10-05 — اصلاح املای «کلامین» و نام برند «بابل»
 
 - «کالمین» همه‌جا به «کلامین» و «آیس بابل» به «بابل» اصلاح شد. بابل برندی جداست و آموزش‌های خودش را دارد (با برند آیس بال ادغام نمی‌شود).
