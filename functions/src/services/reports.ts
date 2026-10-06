@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { ApiError } from '../http/errors';
-import { DAY, HOUR } from '../lib/time';
+import { DAY, HOUR, zonedOffsetMs } from '../lib/time';
 import type { Doc } from '../store/types';
 import type { Attempt, Message, RetakeRequest, Team, User } from '../domain/types';
 import { audit, track, type Actor, type Deps } from './context';
-import { loadShared, loadUserLearning, type PackageView } from './learning-state';
+import { loadLearningForUsers, loadUserLearning, type PackageView } from './learning-state';
 import { notifyTemplate } from './notify';
 import { publicUser } from './users';
 
@@ -21,11 +21,8 @@ export interface MemberLearning {
 }
 
 export async function loadMembers(d: Deps, users: Array<Doc<User>>): Promise<MemberLearning[]> {
-  const shared = await loadShared(d);
-  const out: MemberLearning[] = [];
-  for (const u of users)
-    out.push({ user: u, packages: (await loadUserLearning(d, u, shared)).packages });
-  return out;
+  const learning = await loadLearningForUsers(d, users);
+  return users.map((u) => ({ user: u, packages: learning.get(u.id)?.packages ?? [] }));
 }
 
 export function summarize(members: MemberLearning[], now: Date) {
@@ -155,14 +152,32 @@ export const reportQuery = z.object({
   province: z.string().max(80).optional(),
 });
 
+const REPORT_TZ = 'Asia/Tehran';
+
+/**
+ * Report date bounds. A plain `YYYY-MM-DD` is a calendar day in Tehran (what the Jalali picker
+ * shows), not a UTC day; anything else is parsed as a full timestamp.
+ */
+export function reportBound(v: string, edge: 'start' | 'end'): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return Date.parse(v);
+  const utc = Date.parse(`${v}T00:00:00Z`);
+  if (Number.isNaN(utc)) return utc;
+  const start = utc - zonedOffsetMs(new Date(utc), REPORT_TZ);
+  return edge === 'start' ? start : start + DAY - 1;
+}
+
 export function completionRows(
   members: MemberLearning[],
   f: z.infer<typeof reportQuery>,
   now: Date,
 ) {
-  const from = f.from ? Date.parse(f.from) : null;
-  const to = f.to ? Date.parse(f.to) : null;
-  if ((f.from && Number.isNaN(from)) || (f.to && Number.isNaN(to)) || (from && to && from > to))
+  const from = f.from ? reportBound(f.from, 'start') : null;
+  const to = f.to ? reportBound(f.to, 'end') : null;
+  if (
+    (from !== null && Number.isNaN(from)) ||
+    (to !== null && Number.isNaN(to)) ||
+    (from !== null && to !== null && from > to)
+  )
     throw new ApiError('VALIDATION', 'بازه تاریخ معتبر نیست.');
   const rows = [];
   for (const m of members) {
@@ -175,7 +190,7 @@ export function completionRows(
       if (f.status === 'overdue' ? !p.overdue : f.status && p.status !== f.status) continue;
       // Date range filters on the package deadline.
       if (from && (!p.deadlineAt || Date.parse(p.deadlineAt) < from)) continue;
-      if (to && (!p.deadlineAt || Date.parse(p.deadlineAt) > to + DAY - 1)) continue;
+      if (to && (!p.deadlineAt || Date.parse(p.deadlineAt) > to)) continue;
       const stuck = p.sections.find((s) => s.state !== 'completed');
       rows.push({
         userId: m.user.id,
@@ -355,19 +370,23 @@ export async function listRetakes(
     await d.store.getMany<User>([...new Set(list.map((r) => r.userId))].map((id) => `users/${id}`))
   ).filter((u): u is Doc<User> => !!u);
   const names = new Map(userDocs.map((u) => [u.id, u.name]));
+  // Batched: one attempts query per distinct quiz and one getMany for packages (was 2 per request).
+  const quizIds = [...new Set(list.map((r) => r.quizId))];
+  const attemptsByQuiz = new Map<string, Doc<Attempt>[]>();
+  for (const quizId of quizIds)
+    attemptsByQuiz.set(
+      quizId,
+      await d.store.query<Attempt>({ collection: 'attempts', where: [['quizId', '==', quizId]] }),
+    );
+  type PkgLite = { title: string; sections: Array<{ id: string; title: string }> };
+  const pkgDocs = await d.store.getMany<PkgLite>(
+    [...new Set(list.map((r) => r.packageId))].map((id) => `packages/${id}`),
+  );
+  const pkgById = new Map(pkgDocs.filter((p): p is Doc<PkgLite> => !!p).map((p) => [p.id, p]));
   const out = [];
   for (const r of list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))) {
-    const attempts = await d.store.query<Attempt>({
-      collection: 'attempts',
-      where: [
-        ['userId', '==', r.userId],
-        ['quizId', '==', r.quizId],
-      ],
-    });
-    const pkg = await d.store.get<{
-      title: string;
-      sections: Array<{ id: string; title: string }>;
-    }>(`packages/${r.packageId}`);
+    const attempts = (attemptsByQuiz.get(r.quizId) ?? []).filter((a) => a.userId === r.userId);
+    const pkg = pkgById.get(r.packageId);
     const requester = userDocs.find((u) => u.id === r.userId);
     out.push({
       ...r,

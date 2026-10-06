@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Database, RefreshCw, ThumbsDown, ThumbsUp, Users, Volume2 } from 'lucide-react';
 import { Button, Card, KpiCard, Skeleton, TableSkeleton, useToast } from '@/components/ui';
 import { Tabs } from '@/components/common/Field';
@@ -76,6 +76,10 @@ function Completion() {
   }, [sp]);
   const q = useQuery({
     queryKey: ['admin', 'report', 'completion', qs],
+    // Keep the filter card mounted (and the last rows visible) while a new range loads.
+    placeholderData: keepPreviousData,
+    // An inverted range is shown inline by the filter card; don't send it (server answers 400).
+    enabled: !(sp.get('from') && sp.get('to') && (sp.get('from') ?? '') > (sp.get('to') ?? '')),
     queryFn: ({ signal }) =>
       api.get<Data>(`/admin/reports/completion${qs ? `?${qs}` : ''}`, signal),
   });

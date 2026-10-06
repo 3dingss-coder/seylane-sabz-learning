@@ -337,6 +337,56 @@ export async function loadUserLearning(
   return { packages: computeUserPackages(sh, user, progressRows, completions), progressRows };
 }
 
+/**
+ * Many users at once with a constant number of queries (reports / dashboards).
+ * `loadUserLearning` per member costs 2 queries each — every one a full-collection scan on D1 —
+ * so a team of N members used to need 2N sequential queries and could blow the Worker's
+ * per-request limits (HTTP 500 / timeout).
+ */
+export async function loadLearningForUsers(
+  d: Deps,
+  users: Array<Doc<User>>,
+  shared?: SharedData,
+): Promise<Map<string, UserLearning>> {
+  const out = new Map<string, UserLearning>();
+  if (!users.length) return out;
+  const ids = new Set(users.map((u) => u.id));
+  const [allProgress, allCompletions, sh] = await Promise.all([
+    d.store.query<SectionProgress>({ collection: 'section_progress' }),
+    d.store.query<PackageCompletion>({ collection: 'package_completions' }),
+    shared ?? loadShared(d),
+  ]);
+  const progressBy = new Map<string, Doc<SectionProgress>[]>();
+  for (const r of allProgress) {
+    if (!ids.has(r.userId)) continue;
+    const list = progressBy.get(r.userId);
+    if (list) list.push(r);
+    else progressBy.set(r.userId, [r]);
+  }
+  const completionsBy = new Map<string, PackageCompletion[]>();
+  for (const c of allCompletions) {
+    if (!ids.has(c.userId)) continue;
+    const list = completionsBy.get(c.userId);
+    if (list) list.push(c);
+    else completionsBy.set(c.userId, [c]);
+  }
+  const missing = new Set<string>();
+  for (const rows of progressBy.values())
+    for (const r of rows) if (!sh.packages.has(r.packageId)) missing.add(r.packageId);
+  if (missing.size) {
+    for (const p of await d.store.getMany<Package>([...missing].map((id) => `packages/${id}`)))
+      if (p && p.status !== 'draft') sh.packages.set(p.id, p);
+  }
+  for (const u of users) {
+    const progressRows = progressBy.get(u.id) ?? [];
+    out.set(u.id, {
+      packages: computeUserPackages(sh, u, progressRows, completionsBy.get(u.id) ?? []),
+      progressRows,
+    });
+  }
+  return out;
+}
+
 export function computeUserPackages(
   sh: SharedData,
   user: Doc<User>,

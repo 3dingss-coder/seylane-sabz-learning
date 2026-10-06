@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { TableSkeleton } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
@@ -30,6 +30,10 @@ export function ManagerReports() {
   }, [sp]);
   const q = useQuery({
     queryKey: ['manager', 'report', qs],
+    // Keep the filter card mounted (and the last rows visible) while a new range loads.
+    placeholderData: keepPreviousData,
+    // An inverted range is shown inline by the filter card; don't send it (server answers 400).
+    enabled: !(sp.get('from') && sp.get('to') && (sp.get('from') ?? '') > (sp.get('to') ?? '')),
     queryFn: ({ signal }) =>
       api.get<Data>(`/manager/reports/completion${qs ? `?${qs}` : ''}`, signal),
   });
