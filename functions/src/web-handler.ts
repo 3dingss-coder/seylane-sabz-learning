@@ -36,8 +36,16 @@ export interface CloudflareEnv {
   [key: string]: unknown;
 }
 
-async function resolveSigningSecret(store: DocStore, envSecret?: string): Promise<string> {
+async function resolveSigningSecret(
+  store: DocStore,
+  envSecret: string | undefined,
+  isProd: boolean,
+): Promise<string> {
   if (envSecret && envSecret.trim().length >= 16) return envSecret.trim();
+  if (isProd) {
+    // Never derive/persist the signing secret from the database in production.
+    throw new Error('LOCAL_AUTH_SECRET is required (>= 16 chars) when APP_ENV=prod');
+  }
   const key = '_system/auth_secret';
   const existing = await store.get<{ value: string }>(key);
   if (existing?.value) return existing.value;
@@ -53,7 +61,8 @@ async function resolveSigningSecret(store: DocStore, envSecret?: string): Promis
 
 /**
  * Builds `Deps` backed by Cloudflare D1 (with automatic schema creation + initial catalog seed).
- * Falls back to in-memory seeded store if `env.DB` is not bound yet so previews never 500.
+ * Outside production it falls back to an in-memory seeded store if `env.DB` is not bound.
+ * With `APP_ENV=prod` a missing D1 binding or auth secret fails fast instead of degrading silently.
  */
 export async function buildCloudflareDeps(
   env: CloudflareEnv,
@@ -64,6 +73,10 @@ export async function buildCloudflareDeps(
     if (typeof v === 'string') stringEnv[k] = v;
   }
   const db = env.DB && typeof env.DB.prepare === 'function' ? env.DB : undefined;
+  const isProd = stringEnv.APP_ENV === 'prod';
+  if (isProd && !db) {
+    throw new Error('D1 binding "DB" is missing; refusing in-memory fallback when APP_ENV=prod');
+  }
   const config = loadConfig({
     ...stringEnv,
     DATA_BACKEND: db ? 'd1' : 'memory',
@@ -72,7 +85,7 @@ export async function buildCloudflareDeps(
     RATE_LIMIT_SCALE: stringEnv.RATE_LIMIT_SCALE ?? '20',
   });
   const store: DocStore = db ? new D1Store(db, seedSnapshot) : new InMemoryStore(seedSnapshot);
-  const secret = await resolveSigningSecret(store, stringEnv.LOCAL_AUTH_SECRET);
+  const secret = await resolveSigningSecret(store, stringEnv.LOCAL_AUTH_SECRET, isProd);
   const finalConfig: AppConfig = { ...config, localSecret: secret };
   return {
     config: finalConfig,
@@ -90,6 +103,20 @@ export async function buildCloudflareDeps(
       ? new GeminiClient(finalConfig.geminiApiKey, finalConfig.geminiModel)
       : null,
     clock: systemClock,
+    health: {
+      d1: db
+        ? async () => {
+            const row = await db.prepare('SELECT 1 AS ok').first<{ ok: number }>();
+            return row?.ok === 1;
+          }
+        : undefined,
+      r2: env.MEDIA_BUCKET
+        ? async () => {
+            await env.MEDIA_BUCKET!.head('__health__');
+            return true;
+          }
+        : undefined,
+    },
   };
 }
 
@@ -191,7 +218,7 @@ export function createFetchHandler(
     handles.limiter ?? new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale);
 
   const v1 = Router();
-  v1.use(healthRouter(config));
+  v1.use(healthRouter(config, deps.health));
   v1.use(authRouter(deps, limiter));
   v1.use(
     ['/me', '/manager', '/admin'],
