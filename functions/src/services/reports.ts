@@ -219,6 +219,263 @@ export function completionRows(
   return rows.sort((a, b) => Number(b.lagging) - Number(a.lagging) || a.percent - b.percent);
 }
 
+// ─── Quiz results report (per attempt + per learner/quiz) ────────────────────
+export const quizReportQuery = reportQuery.omit({ status: true });
+
+/** Correct / wrong / unanswered counts for a submitted attempt (derived from its snapshot). */
+export function attemptTally(a: Pick<Attempt, 'snapshot' | 'answers'>) {
+  const snapshot = a.snapshot ?? [];
+  const answers = a.answers ?? {};
+  const total = snapshot.length;
+  const correct = snapshot.filter((s) => answers[s.questionId] === s.answerKey).length;
+  const unanswered = snapshot.filter((s) => !answers[s.questionId]).length;
+  return { total, correct, wrong: Math.max(0, total - correct - unanswered), unanswered };
+}
+
+export interface QuizAttemptRow {
+  attemptId: string;
+  userId: string;
+  userName: string;
+  teamId: string | null;
+  province: string | null;
+  city: string | null;
+  packageId: string;
+  packageTitle: string;
+  brandName: string | null;
+  productName: string | null;
+  sectionId: string;
+  sectionTitle: string;
+  quizId: string;
+  attemptNumber: number;
+  total: number;
+  correct: number;
+  wrong: number;
+  unanswered: number;
+  score: number | null;
+  passScore: number;
+  passed: boolean | null;
+  startedAt: string;
+  submittedAt: string | null;
+  durationSec: number | null;
+}
+
+export interface QuizSummaryRow {
+  userId: string;
+  userName: string;
+  teamId: string | null;
+  province: string | null;
+  city: string | null;
+  packageId: string;
+  packageTitle: string;
+  brandName: string | null;
+  productName: string | null;
+  sectionId: string;
+  sectionTitle: string;
+  quizId: string;
+  attempts: number;
+  passed: boolean;
+  /** Number of the attempt that passed (null while not passed). */
+  passedAtAttempt: number | null;
+  firstScore: number | null;
+  lastScore: number | null;
+  bestScore: number | null;
+  passScore: number;
+  lastTotal: number;
+  lastCorrect: number;
+  lastWrong: number;
+  totalCorrect: number;
+  totalWrong: number;
+  inProgress: boolean;
+  lastSubmittedAt: string | null;
+}
+
+async function attemptsForUsers(d: Deps, users: Array<Doc<User>>): Promise<Array<Doc<Attempt>>> {
+  if (users.length === 0) return [];
+  const ids = new Set(users.map((u) => u.id));
+  if (users.length <= 30) {
+    const lists = await Promise.all(
+      users.map((u) =>
+        d.store.query<Attempt>({ collection: 'attempts', where: [['userId', '==', u.id]] }),
+      ),
+    );
+    return lists.flat();
+  }
+  return (await d.store.query<Attempt>({ collection: 'attempts' })).filter((a) =>
+    ids.has(a.userId),
+  );
+}
+
+export function quizResultRows(
+  members: MemberLearning[],
+  attempts: Array<Doc<Attempt>>,
+  f: z.infer<typeof quizReportQuery>,
+) {
+  const from = f.from ? reportBound(f.from, 'start') : null;
+  const to = f.to ? reportBound(f.to, 'end') : null;
+  if (
+    (from !== null && Number.isNaN(from)) ||
+    (to !== null && Number.isNaN(to)) ||
+    (from !== null && to !== null && from > to)
+  )
+    throw new ApiError('VALIDATION', 'بازه تاریخ معتبر نیست.');
+
+  const sections = new Map<
+    string,
+    {
+      packageId: string;
+      packageTitle: string;
+      brandId: string | null;
+      brandName: string | null;
+      productId: string | null;
+      productName: string | null;
+      sectionTitle: string;
+    }
+  >();
+  for (const m of members)
+    for (const p of m.packages)
+      for (const s of p.sections)
+        if (!sections.has(s.id))
+          sections.set(s.id, {
+            packageId: p.id,
+            packageTitle: p.title,
+            brandId: p.brand?.id ?? null,
+            brandName: p.brand?.name ?? null,
+            productId: p.product?.id ?? null,
+            productName: p.product?.name ?? null,
+            sectionTitle: s.title,
+          });
+  const byUser = new Map(members.map((m) => [m.user.id, m.user]));
+
+  const attemptRows: QuizAttemptRow[] = [];
+  const inProgress = new Set<string>();
+  const kept: Array<Doc<Attempt>> = [];
+  for (const a of attempts) {
+    const u = byUser.get(a.userId);
+    if (!u) continue;
+    if (f.user && u.id !== f.user) continue;
+    if (f.city && u.city !== f.city) continue;
+    if (f.province && u.province !== f.province) continue;
+    const info = sections.get(a.sectionId);
+    if (f.brand && info?.brandId !== f.brand) continue;
+    if (f.product && info?.productId !== f.product) continue;
+    if (a.status !== 'submitted') {
+      inProgress.add(`${a.userId}|${a.quizId}`);
+      continue;
+    }
+    const at = a.submittedAt ? Date.parse(a.submittedAt) : NaN;
+    if (from !== null && !(at >= from)) continue;
+    if (to !== null && !(at <= to)) continue;
+    kept.push(a);
+    const t = attemptTally(a);
+    attemptRows.push({
+      attemptId: a.id,
+      userId: u.id,
+      userName: u.name,
+      teamId: u.teamId,
+      province: u.province,
+      city: u.city,
+      packageId: a.packageId,
+      packageTitle: info?.packageTitle ?? '—',
+      brandName: info?.brandName ?? null,
+      productName: info?.productName ?? null,
+      sectionId: a.sectionId,
+      sectionTitle: info?.sectionTitle ?? '—',
+      quizId: a.quizId,
+      attemptNumber: a.attemptNumber,
+      ...t,
+      score: a.score,
+      passScore: a.passScore,
+      passed: a.passed,
+      startedAt: a.startedAt,
+      submittedAt: a.submittedAt,
+      durationSec:
+        a.submittedAt && a.startedAt
+          ? Math.max(0, Math.round((Date.parse(a.submittedAt) - Date.parse(a.startedAt)) / 1000))
+          : null,
+    });
+  }
+  attemptRows.sort(
+    (x, y) =>
+      Date.parse(y.submittedAt ?? '') - Date.parse(x.submittedAt ?? '') ||
+      x.userName.localeCompare(y.userName, 'fa'),
+  );
+
+  const groups = new Map<string, QuizAttemptRow[]>();
+  for (const r of attemptRows) {
+    const k = `${r.userId}|${r.quizId}`;
+    const g = groups.get(k);
+    if (g) g.push(r);
+    else groups.set(k, [r]);
+  }
+  const summary: QuizSummaryRow[] = [];
+  for (const [k, g] of groups) {
+    const ordered = [...g].sort((a, b) => a.attemptNumber - b.attemptNumber);
+    const first = ordered[0];
+    const last = ordered[ordered.length - 1];
+    if (!first || !last) continue;
+    const passedAt = ordered.find((r) => r.passed === true) ?? null;
+    const scores = ordered.map((r) => r.score).filter((x): x is number => x !== null);
+    summary.push({
+      userId: first.userId,
+      userName: first.userName,
+      teamId: first.teamId,
+      province: first.province,
+      city: first.city,
+      packageId: first.packageId,
+      packageTitle: first.packageTitle,
+      brandName: first.brandName,
+      productName: first.productName,
+      sectionId: first.sectionId,
+      sectionTitle: first.sectionTitle,
+      quizId: first.quizId,
+      attempts: ordered.length,
+      passed: passedAt !== null,
+      passedAtAttempt: passedAt?.attemptNumber ?? null,
+      firstScore: first.score,
+      lastScore: last.score,
+      bestScore: scores.length ? Math.max(...scores) : null,
+      passScore: last.passScore,
+      lastTotal: last.total,
+      lastCorrect: last.correct,
+      lastWrong: last.wrong,
+      totalCorrect: ordered.reduce((n, r) => n + r.correct, 0),
+      totalWrong: ordered.reduce((n, r) => n + r.wrong, 0),
+      inProgress: inProgress.has(k),
+      lastSubmittedAt: last.submittedAt,
+    });
+  }
+  summary.sort(
+    (a, b) =>
+      Date.parse(b.lastSubmittedAt ?? '') - Date.parse(a.lastSubmittedAt ?? '') ||
+      a.userName.localeCompare(b.userName, 'fa'),
+  );
+  return { attempts: attemptRows, summary };
+}
+
+export async function managerQuizReport(
+  d: Deps,
+  manager: Doc<User>,
+  f: z.infer<typeof quizReportQuery>,
+) {
+  const users = await teamMembers(d, manager);
+  const [members, attempts] = await Promise.all([loadMembers(d, users), attemptsForUsers(d, users)]);
+  await track(d, 'manager_report_viewed', manager.id, { filters: Object.keys(f), kind: 'quizzes' });
+  return {
+    ...quizResultRows(members, attempts, f),
+    members: members.map((m) => ({ id: m.user.id, name: m.user.name })),
+  };
+}
+
+export async function adminQuizReport(d: Deps, f: z.infer<typeof quizReportQuery>) {
+  const where: Array<[string, '==', unknown]> = [['role', '==', 'marketer']];
+  if (f.team) where.push(['teamId', '==', f.team]);
+  if (f.city) where.push(['city', '==', f.city]);
+  if (f.province) where.push(['province', '==', f.province]);
+  const users = await d.store.query<User>({ collection: 'users', where });
+  const [members, attempts] = await Promise.all([loadMembers(d, users), attemptsForUsers(d, users)]);
+  return quizResultRows(members, attempts, f);
+}
+
 export async function managerReport(d: Deps, manager: Doc<User>, f: z.infer<typeof reportQuery>) {
   const members = await loadMembers(d, await teamMembers(d, manager));
   await track(d, 'manager_report_viewed', manager.id, { filters: Object.keys(f) });
@@ -256,6 +513,9 @@ export async function userTimeline(d: Deps, viewer: Doc<User>, userId: string) {
             score: a.score,
             passed: a.passed,
             submittedAt: a.submittedAt,
+            startedAt: a.startedAt,
+            passScore: a.passScore,
+            ...attemptTally(a),
           })),
       })),
     })),

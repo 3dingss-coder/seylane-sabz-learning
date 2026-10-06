@@ -7,6 +7,7 @@ import { Tabs } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { CompletionReport } from '@/components/reports/CompletionReport';
+import { QuizResultsReport } from '@/components/reports/QuizResultsReport';
 import { RetakeList } from '@/components/reports/RetakeList';
 import { api } from '@/lib/api';
 import { toPersianDigits } from '@/lib/digits';
@@ -17,6 +18,7 @@ import type {
   KnowledgeStats,
   MentorQuality,
   MentorReport,
+  QuizReport,
 } from '@/lib/types';
 import { useTeams } from './adminQueries';
 
@@ -29,7 +31,7 @@ const OUTCOME: Record<string, string> = {
 
 /** A9 — گزارش‌ها: completion (all teams), retakes (incl. escalated), mentor quality (aggregate only). */
 export function ReportsPage() {
-  const [tab, setTab] = useState<'completion' | 'retakes' | 'mentor'>('completion');
+  const [tab, setTab] = useState<'completion' | 'quizzes' | 'retakes' | 'mentor'>('completion');
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="گزارش‌ها" />
@@ -39,12 +41,15 @@ export function ReportsPage() {
         onChange={setTab}
         items={[
           { value: 'completion', label: 'تکمیل' },
+          { value: 'quizzes', label: 'نتایج آزمون' },
           { value: 'retakes', label: 'آزمون مجدد' },
           { value: 'mentor', label: 'کیفیت منتور' },
         ]}
       />
       {tab === 'completion' ? (
         <Completion />
+      ) : tab === 'quizzes' ? (
+        <QuizResults />
       ) : tab === 'retakes' ? (
         <RetakeList base="/admin" memberLink={(id) => `/admin/users/${id}`} isAdmin />
       ) : (
@@ -89,6 +94,25 @@ function Completion() {
       {(d) => (
         <CompletionReport
           rows={d.rows}
+          memberLink={(id) => `/admin/users/${id}`}
+          teams={teams.data?.map((t) => ({ id: t.id, name: t.name }))}
+        />
+      )}
+    </QueryState>
+  );
+}
+
+function QuizResults() {
+  const q = useQuery({
+    queryKey: ['admin', 'report', 'quizzes'],
+    queryFn: ({ signal }) => api.get<QuizReport>('/admin/reports/quizzes', signal),
+  });
+  const teams = useTeams();
+  return (
+    <QueryState query={q} loading={<TableSkeleton rows={8} />}>
+      {(d) => (
+        <QuizResultsReport
+          data={d}
           memberLink={(id) => `/admin/users/${id}`}
           teams={teams.data?.map((t) => ({ id: t.id, name: t.name }))}
         />
