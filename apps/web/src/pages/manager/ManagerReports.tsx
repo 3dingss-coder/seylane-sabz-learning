@@ -1,15 +1,48 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { TableSkeleton } from '@/components/ui';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
+import { Tabs } from '@/components/common/Field';
 import { CompletionReport } from '@/components/reports/CompletionReport';
+import { QuizResultsReport } from '@/components/reports/QuizResultsReport';
 import { api } from '@/lib/api';
-import type { CompletionReport as Data } from '@/lib/types';
+import type { CompletionReport as Data, QuizReport } from '@/lib/types';
 
-/** W2 — گزارش تکمیل تیم. */
+/** W2 — گزارش تیم: تکمیل آموزش + نتایج آزمون هر عضو. */
 export function ManagerReports() {
+  const [tab, setTab] = useState<'completion' | 'quizzes'>('completion');
+  return (
+    <div className="flex flex-col gap-3">
+      <PageHeader title="گزارش‌ها" subtitle="وضعیت آموزش و نتایج آزمون هر عضو تیم" />
+      <Tabs
+        label="گزارش"
+        value={tab}
+        onChange={setTab}
+        items={[
+          { value: 'completion', label: 'تکمیل آموزش' },
+          { value: 'quizzes', label: 'نتایج آزمون' },
+        ]}
+      />
+      {tab === 'completion' ? <ManagerCompletion /> : <ManagerQuizResults />}
+    </div>
+  );
+}
+
+function ManagerQuizResults() {
+  const q = useQuery({
+    queryKey: ['manager', 'report', 'quizzes'],
+    queryFn: ({ signal }) => api.get<QuizReport>('/manager/reports/quizzes', signal),
+  });
+  return (
+    <QueryState query={q} loading={<TableSkeleton rows={6} />}>
+      {(d) => <QuizResultsReport data={d} memberLink={(id) => `/manager/members/${id}`} />}
+    </QueryState>
+  );
+}
+
+function ManagerCompletion() {
   const [sp] = useSearchParams();
   const qs = useMemo(() => {
     const params = new URLSearchParams();
@@ -38,11 +71,8 @@ export function ManagerReports() {
       api.get<Data>(`/manager/reports/completion${qs ? `?${qs}` : ''}`, signal),
   });
   return (
-    <div>
-      <PageHeader title="گزارش تکمیل" subtitle="وضعیت آموزش هر عضو به تفکیک بسته" />
-      <QueryState query={q} loading={<TableSkeleton rows={6} />}>
-        {(d) => <CompletionReport rows={d.rows} memberLink={(id) => `/manager/members/${id}`} />}
-      </QueryState>
-    </div>
+    <QueryState query={q} loading={<TableSkeleton rows={6} />}>
+      {(d) => <CompletionReport rows={d.rows} memberLink={(id) => `/manager/members/${id}`} />}
+    </QueryState>
   );
 }

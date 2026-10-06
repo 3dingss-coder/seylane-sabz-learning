@@ -503,6 +503,71 @@ export interface TimelineAttempt {
   score: number | null;
   passed: boolean | null;
   submittedAt: string | null;
+  startedAt?: string;
+  passScore?: number;
+  total?: number;
+  correct?: number;
+  wrong?: number;
+  unanswered?: number;
+}
+export interface QuizAttemptRow {
+  attemptId: string;
+  userId: string;
+  userName: string;
+  teamId: string | null;
+  province: string | null;
+  city: string | null;
+  packageId: string;
+  packageTitle: string;
+  brandName: string | null;
+  productName: string | null;
+  sectionId: string;
+  sectionTitle: string;
+  quizId: string;
+  attemptNumber: number;
+  total: number;
+  correct: number;
+  wrong: number;
+  unanswered: number;
+  score: number | null;
+  passScore: number;
+  passed: boolean | null;
+  startedAt: string;
+  submittedAt: string | null;
+  durationSec: number | null;
+}
+export interface QuizSummaryRow {
+  userId: string;
+  userName: string;
+  teamId: string | null;
+  province: string | null;
+  city: string | null;
+  packageId: string;
+  packageTitle: string;
+  brandName: string | null;
+  productName: string | null;
+  sectionId: string;
+  sectionTitle: string;
+  quizId: string;
+  attempts: number;
+  passed: boolean;
+  passedAtAttempt: number | null;
+  firstScore: number | null;
+  lastScore: number | null;
+  bestScore: number | null;
+  passScore: number;
+  lastTotal: number;
+  lastCorrect: number;
+  lastWrong: number;
+  totalCorrect: number;
+  totalWrong: number;
+  inProgress: boolean;
+  lastSubmittedAt: string | null;
+}
+export interface QuizReport {
+  attempts: QuizAttemptRow[];
+  summary: QuizSummaryRow[];
+  members?: Array<{ id: string; name: string }>;
 }
 export interface Timeline {
   user: Me;

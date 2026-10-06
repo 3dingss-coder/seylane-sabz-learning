@@ -56,6 +56,11 @@ function persianDigits(v: string | number): string {
 }
 
 export async function exportExcel(opts: ExcelOptions): Promise<void> {
+  await exportExcelSheets(opts.fileName, [opts]);
+}
+
+/** One workbook with several styled sheets (e.g. per-learner summary + every attempt). */
+export async function exportExcelSheets(fileName: string, sheets: ExcelOptions[]): Promise<void> {
   const [{ default: ExcelJS }, { saveAs }] = await Promise.all([
     import('exceljs'),
     import('file-saver'),
@@ -65,9 +70,17 @@ export async function exportExcel(opts: ExcelOptions): Promise<void> {
   wb.lastModifiedBy = 'آکادمی سیلانه';
   wb.created = new Date();
   wb.modified = new Date();
-  // RTL is set per-worksheet (workbook.views typing is missing rightToLeft in some versions).
+  for (const opts of sheets) addStyledSheet(wb, opts);
+  const buffer = await wb.xlsx.writeBuffer();
+  saveAs(
+    new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `${fileName}.xlsx`,
+  );
+}
 
-  const ws = wb.addWorksheet(opts.sheetName, {
+function addStyledSheet(wb: ExcelJS.Workbook, opts: ExcelOptions): void {
+  // RTL is set per-worksheet (workbook.views typing is missing rightToLeft in some versions).
+  const ws = wb.addWorksheet(opts.sheetName.slice(0, 31), {
     properties: { defaultRowHeight: 22 },
     views: [{ rightToLeft: true, showGridLines: false }],
   });
@@ -196,8 +209,6 @@ export async function exportExcel(opts: ExcelOptions): Promise<void> {
     margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 },
   } as ExcelJS.PageSetup;
 
-  const buffer = await wb.xlsx.writeBuffer();
-  saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${opts.fileName}.xlsx`);
 }
 
 function colLetter(n: number): string {
