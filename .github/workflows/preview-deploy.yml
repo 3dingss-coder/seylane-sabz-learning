@@ -34,10 +34,16 @@ jobs:
           grep -n 'seylane-sabz-learning-preview\|seylane-media-preview' wrangler.toml
           test "$GITHUB_REF" != "refs/heads/main" || { echo "refusing to run from main"; exit 1; }
       - name: Deploy preview Worker
-        run: npx --yes wrangler@4 deploy --env preview
+        run: npx --yes wrangler@4 deploy --env preview 2>&1 | tee deploy.log
       - name: Set preview auth secret
         env:
           PREVIEW_LOCAL_AUTH_SECRET: ${{ secrets.PREVIEW_LOCAL_AUTH_SECRET }}
         run: |
           test -n "$PREVIEW_LOCAL_AUTH_SECRET"
           printf '%s' "$PREVIEW_LOCAL_AUTH_SECRET" | npx --yes wrangler@4 secret put LOCAL_AUTH_SECRET --env preview
+      - name: Smoke test preview
+        run: |
+          URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          echo "::notice::preview URL: $URL"
+          sleep 10
+          node scripts/preview-smoke.mjs "$URL"
