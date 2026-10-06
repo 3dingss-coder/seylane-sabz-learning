@@ -246,4 +246,25 @@ describe('D1 -> R2 media move', () => {
     const store = new CloudflareBlobStore('secret', { db: createSqliteD1() });
     expect(await store.migrateToObjectStorage()).toBeNull();
   });
+
+  it('with purge off, keeps making progress through every file and logs each run', async () => {
+    const { db, r2, store, small, big } = await setup(false);
+    // One new file per run, like the 15-minute cron: earlier, already-copied files must not
+    // use up the batch, otherwise the bigger files would never be reached.
+    for (let i = 0; i < 4; i++) await store.migrateToObjectStorage({ maxFiles: 1 });
+    expect(
+      Buffer.compare(Buffer.from(need(r2, 'media/audio/small.mp4').data), Buffer.from(small)),
+    ).toBe(0);
+    expect(
+      Buffer.compare(Buffer.from(need(r2, 'media/video/big.mp4').data), Buffer.from(big)),
+    ).toBe(0);
+    const last = await store.migrateToObjectStorage({ maxFiles: 1 });
+    expect(last).toMatchObject({ moved: 0, verified: 2, failed: 0 });
+    const log = await db
+      .prepare('SELECT status, COUNT(*) AS n FROM blob_migration_log GROUP BY status')
+      .all<{ status: string; n: number }>();
+    const by = Object.fromEntries((log.results ?? []).map((r) => [r.status, Number(r.n)]));
+    expect(by.copied).toBe(2);
+    expect(by.run).toBe(5);
+  });
 });
