@@ -148,6 +148,13 @@ updated to the documented end-of-day rule. Gate green: format, lint, build, type
 
 ---
 
+## 2026-10-05 — Fix: site not opening / slow for some users (restore old-browser support, shrink catalog images, cache headers)
+
+- **Root cause of "can't open":** the 2026-09-29 perf pass removed the legacy build and raised the floor to 2023+ engines. Older Android phones / WebViews / Samsung Internet then get a blank or unstyled page (no polyfills, Tailwind v4 CSS without `@layer` fallbacks). Restored `@vitejs/plugin-legacy` + `legacy-css.ts`, the old `browserslist`, and dropped the pinned `build.target`.
+- **Slowness:** catalog PNGs were 600-1500 px / up to 1 MB but displayed at 40-130 px (70.8 MB total). New `scripts/optimize-catalog.mjs` (sharp, runs after `sync-assets`) resizes the mirrored copies to max 480 px → 8.9 MB. File names are unchanged, originals untouched.
+- `public/_headers`: `/assets/*` immutable 1-year cache, `/icons/*` 7 days, `/catalog/*` 1 day + stale-while-revalidate (previously every file was re-validated on each visit).
+- Trade-off: modern browsers download the polyfill chunk again (~+50 KB gzip) — see the 2026-09-29 numbers.
+
 ## 2026-09-29 — Performance pass: removed legacy-browser machinery (perf, no behavior change on modern browsers)
 
 **Why:** the production build was paying for browsers from ~2017 (browserslist floor: iOS 12 / Chrome 64 /
