@@ -60,7 +60,12 @@ export class MemoryAuthProvider implements AuthProvider {
     };
   }
 
-  async createUser(p: { email: string; password: string; displayName: string }) {
+  async createUser(p: {
+    email: string;
+    password: string;
+    displayName: string;
+    passwordless?: boolean;
+  }) {
     const email = p.email.toLowerCase();
     const deterministicId = `u_${sha(email).slice(0, 18)}`;
     const uid = (await this.store.get(`_auth/${deterministicId}`))
@@ -69,7 +74,8 @@ export class MemoryAuthProvider implements AuthProvider {
     await this.store.create(`_auth_email/${sha(email)}`, { uid });
     await this.store.create(`_auth/${uid}`, {
       email,
-      passwordHash: hashPassword(p.password),
+      // 'none' never verifies (verifyPassword needs 3 parts), so a passwordless account can't be password-signed-in.
+      passwordHash: p.passwordless ? 'none' : hashPassword(p.password),
       displayName: p.displayName,
       disabled: false,
       claims: {},

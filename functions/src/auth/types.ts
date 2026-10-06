@@ -15,7 +15,13 @@ export type SignInResult =
  * implementation is used for tests and the no-emulator local server.
  */
 export interface AuthProvider {
-  createUser(p: { email: string; password: string; displayName: string }): Promise<string>;
+  /** `passwordless`: phone-only account — no password is ever checked, so skip the costly hash. */
+  createUser(p: {
+    email: string;
+    password: string;
+    displayName: string;
+    passwordless?: boolean;
+  }): Promise<string>;
   deleteUser(uid: string): Promise<void>;
   signIn(email: string, password: string): Promise<SignInResult>;
   refresh(refreshToken: string): Promise<{ uid: string; tokens: AuthTokens } | null>;
