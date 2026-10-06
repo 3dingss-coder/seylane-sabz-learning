@@ -4,7 +4,7 @@ import { DAY, HOUR, zonedOffsetMs } from '../lib/time';
 import type { Doc } from '../store/types';
 import type { Attempt, Message, RetakeRequest, Team, User } from '../domain/types';
 import { audit, track, type Actor, type Deps } from './context';
-import { loadShared, loadUserLearning, type PackageView } from './learning-state';
+import { loadLearningForUsers, loadUserLearning, type PackageView } from './learning-state';
 import { notifyTemplate } from './notify';
 import { publicUser } from './users';
 
@@ -21,11 +21,8 @@ export interface MemberLearning {
 }
 
 export async function loadMembers(d: Deps, users: Array<Doc<User>>): Promise<MemberLearning[]> {
-  const shared = await loadShared(d);
-  const out: MemberLearning[] = [];
-  for (const u of users)
-    out.push({ user: u, packages: (await loadUserLearning(d, u, shared)).packages });
-  return out;
+  const learning = await loadLearningForUsers(d, users);
+  return users.map((u) => ({ user: u, packages: learning.get(u.id)?.packages ?? [] }));
 }
 
 export function summarize(members: MemberLearning[], now: Date) {
@@ -373,19 +370,23 @@ export async function listRetakes(
     await d.store.getMany<User>([...new Set(list.map((r) => r.userId))].map((id) => `users/${id}`))
   ).filter((u): u is Doc<User> => !!u);
   const names = new Map(userDocs.map((u) => [u.id, u.name]));
+  // Batched: one attempts query per distinct quiz and one getMany for packages (was 2 per request).
+  const quizIds = [...new Set(list.map((r) => r.quizId))];
+  const attemptsByQuiz = new Map<string, Doc<Attempt>[]>();
+  for (const quizId of quizIds)
+    attemptsByQuiz.set(
+      quizId,
+      await d.store.query<Attempt>({ collection: 'attempts', where: [['quizId', '==', quizId]] }),
+    );
+  type PkgLite = { title: string; sections: Array<{ id: string; title: string }> };
+  const pkgDocs = await d.store.getMany<PkgLite>(
+    [...new Set(list.map((r) => r.packageId))].map((id) => `packages/${id}`),
+  );
+  const pkgById = new Map(pkgDocs.filter((p): p is Doc<PkgLite> => !!p).map((p) => [p.id, p]));
   const out = [];
   for (const r of list.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))) {
-    const attempts = await d.store.query<Attempt>({
-      collection: 'attempts',
-      where: [
-        ['userId', '==', r.userId],
-        ['quizId', '==', r.quizId],
-      ],
-    });
-    const pkg = await d.store.get<{
-      title: string;
-      sections: Array<{ id: string; title: string }>;
-    }>(`packages/${r.packageId}`);
+    const attempts = (attemptsByQuiz.get(r.quizId) ?? []).filter((a) => a.userId === r.userId);
+    const pkg = pkgById.get(r.packageId);
     const requester = userDocs.find((u) => u.id === r.userId);
     out.push({
       ...r,
