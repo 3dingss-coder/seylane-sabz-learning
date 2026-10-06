@@ -287,11 +287,13 @@ export function CompletionReport({
           columns={[
             {
               key: 'u',
+              sortValue: (r) => r.userName,
               header: 'نام',
               cell: (r) => <span className="font-bold">{r.userName}</span>,
             },
             {
               key: 'loc',
+              sortValue: (r) => (r.city ? `${r.province ?? ''} ${r.city}` : null),
               header: 'شهر',
               cell: (r) =>
                 r.city ? (
@@ -302,7 +304,12 @@ export function CompletionReport({
                   '—'
                 ),
             },
-            { key: 'p', header: 'آموزش', cell: (r) => r.packageTitle },
+            {
+              key: 'p',
+              sortValue: (r) => r.packageTitle,
+              header: 'آموزش',
+              cell: (r) => r.packageTitle,
+            },
             {
               key: 'b',
               header: 'برند/محصول',
@@ -311,6 +318,7 @@ export function CompletionReport({
             },
             {
               key: 'pct',
+              sortValue: (r) => r.percent,
               header: 'پیشرفت',
               cell: (r) => (
                 <div className="flex min-w-24 items-center gap-2">
@@ -321,6 +329,7 @@ export function CompletionReport({
             },
             {
               key: 's',
+              sortValue: (r) => (r.overdue ? 3 : r.lagging ? 2 : r.status === 'completed' ? 0 : 1),
               header: 'وضعیت',
               cell: (r) =>
                 r.overdue ? (
@@ -333,12 +342,14 @@ export function CompletionReport({
             },
             {
               key: 'd',
+              sortValue: (r) => (r.deadlineAt ? Date.parse(r.deadlineAt) : null),
               header: 'مهلت',
               cell: (r) => (r.deadlineAt ? faDate(r.deadlineAt) : '—'),
               hideOnMobile: true,
             },
             {
               key: 'l',
+              sortValue: (r) => (r.lastActivityAt ? Date.parse(r.lastActivityAt) : null),
               header: 'آخرین فعالیت',
               cell: (r) => (r.lastActivityAt ? faRelative(r.lastActivityAt) : 'هرگز'),
               hideOnMobile: true,
