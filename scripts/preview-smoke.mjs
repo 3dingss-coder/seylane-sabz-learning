@@ -41,9 +41,9 @@ check('health deep 200', deep.status === 200, `${deep.ms.toFixed(0)}ms`);
 const run = Date.now().toString().slice(-7);
 const regT = [], logT = [], refT = [], homeT = [], pkgT = [], healthT = [];
 let tokens;
-const N = 8;
+const N = 12;
 for (let i = 0; i < N; i++) {
-  const phone = `0900${run}${i}`.slice(0, 11);
+  const phone = `09${run}0${i}`;
   const pw = 'PreviewPass123!';
   const r = await call('POST', '/v1/auth/register', { name: `Preview User ${i}`, identifier: phone, password: pw });
   regT.push(r.ms);
