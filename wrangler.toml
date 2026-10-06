@@ -42,3 +42,35 @@ database_id = "f7a2ed30-00f4-42e6-b26f-343c24fe1853"
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "seylane-sabz-media"
+
+# ---------------------------------------------------------------------------
+# Preview environment (isolated: its own Worker, D1 and R2 — never production).
+# Deploy with: npx wrangler deploy --env preview
+# APP_ENV=prod here on purpose so the preview exercises the production fail-fast rules.
+# Required Worker secret (set outside git): LOCAL_AUTH_SECRET
+# ---------------------------------------------------------------------------
+[env.preview]
+name = "seylane-sabz-learning-preview"
+triggers = { crons = [] }
+
+[env.preview.vars]
+APP_ENV = "prod"
+APP_VERSION = "step1-outage-reliability"
+PLAYBACK_BUDGET = "off"
+RATE_LIMIT_SCALE = "20"
+R2_MIGRATE_PURGE = "off"
+
+[env.preview.assets]
+directory = "apps/web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/v1/*"]
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "seylane-sabz-learning-preview"
+database_id = "d24c27e3-41d0-4808-ac33-78432d18b9c2"
+
+[[env.preview.r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "seylane-media-preview"

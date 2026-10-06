@@ -60,7 +60,7 @@ export function createApp(deps: Deps, handles: Partial<AppHandles> = {}): Expres
   // Payload limit ≤ 1MB (spec §24). Media goes straight to Storage via signed URLs.
   // Voice clips that would exceed this should send a transcript instead of raw audio.
   v1.use(express.json({ limit: '1mb' }));
-  v1.use(healthRouter(config));
+  v1.use(healthRouter(config, deps.health));
   v1.use(authRouter(deps, limiter));
   v1.use(
     ['/me', '/manager', '/admin'],

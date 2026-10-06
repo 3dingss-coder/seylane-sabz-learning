@@ -1,0 +1,9 @@
+# Throwaway config used ONLY by the preview fail-fast test: prod mode, NO D1 binding.
+name = "seylane-sabz-learning-preview-nodb"
+main = "functions/src/cloudflare-worker.ts"
+compatibility_date = "2025-04-01"
+workers_dev = true
+
+[vars]
+APP_ENV = "prod"
+LOCAL_AUTH_SECRET = "nodb-test-secret-not-used-for-anything-real-0123456789"

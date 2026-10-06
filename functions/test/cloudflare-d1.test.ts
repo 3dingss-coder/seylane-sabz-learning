@@ -276,7 +276,10 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     const db = createSqliteD1();
 
     // Instance 1 (first cold start: creates tables + seeds catalog)
-    const deps1 = await buildCloudflareDeps({ DB: db, APP_ENV: 'prod' }, seedSnapshot);
+    const deps1 = await buildCloudflareDeps(
+      { DB: db, APP_ENV: 'prod', LOCAL_AUTH_SECRET: 'test-secret-'.repeat(4) },
+      seedSnapshot,
+    );
     const handler1 = createFetchHandler(deps1);
 
     // 1. Health check reports d1 backend
@@ -307,7 +310,10 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     expect(regData.data.user.phone).toBe('09359998877');
 
     // 3. Simulate a serverless cold start (new Worker isolate with the same D1 database)
-    const deps2 = await buildCloudflareDeps({ DB: db, APP_ENV: 'prod' }, seedSnapshot);
+    const deps2 = await buildCloudflareDeps(
+      { DB: db, APP_ENV: 'prod', LOCAL_AUTH_SECRET: 'test-secret-'.repeat(4) },
+      seedSnapshot,
+    );
     const handler2 = createFetchHandler(deps2);
 
     // Refresh token issued by Instance 1 works on Instance 2 because signing secret & user live in D1

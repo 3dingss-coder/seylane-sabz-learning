@@ -1,3 +1,4 @@
+import type { HealthProbes } from '../routes/health';
 import type { Mailer } from '../mail/types';
 import type { AiHub } from '../ai/hub';
 import type { AppConfig } from '../config';
@@ -27,6 +28,8 @@ export interface Deps {
    */
   ai?: AiHub;
   clock: Clock;
+  /** Optional dependency probes for GET /v1/health (D1 `SELECT 1`, R2 `head`). */
+  health?: HealthProbes;
 }
 
 export interface Actor {

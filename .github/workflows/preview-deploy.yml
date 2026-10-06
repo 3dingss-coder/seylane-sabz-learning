@@ -1,0 +1,76 @@
+name: Preview deploy (manual, isolated)
+
+# Manual only. Deploys the Worker "seylane-sabz-learning-preview" with its own D1 + R2.
+# Never touches the production Worker / D1 / R2.
+on:
+  push:
+    branches: [step1-outage-reliability] # preview branch only, never main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-deploy
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PREVIEW_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Show targets (names only, no secrets)
+        run: |
+          echo "ref: $GITHUB_REF  sha: $GITHUB_SHA"
+          grep -n 'seylane-sabz-learning-preview\|seylane-media-preview' wrangler.toml
+          test "$GITHUB_REF" != "refs/heads/main" || { echo "refusing to run from main"; exit 1; }
+      - name: Deploy preview Worker
+        run: npx --yes wrangler@4 deploy --env preview 2>&1 | tee deploy.log
+      - name: Set preview auth secret
+        env:
+          PREVIEW_LOCAL_AUTH_SECRET: ${{ secrets.PREVIEW_LOCAL_AUTH_SECRET }}
+        run: |
+          test -n "$PREVIEW_LOCAL_AUTH_SECRET"
+          printf '%s' "$PREVIEW_LOCAL_AUTH_SECRET" | npx --yes wrangler@4 secret put LOCAL_AUTH_SECRET --env preview
+      - name: Smoke test preview
+        run: |
+          URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          echo "::notice::preview URL: $URL"
+          sleep 10
+          node scripts/preview-smoke.mjs "$URL"
+
+  failtest:
+    name: Fail-fast check (prod mode, no D1 binding)
+    needs: preview
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PREVIEW_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Deploy temporary no-DB Worker
+        run: npx --yes wrangler@4 deploy -c wrangler.nodb.toml 2>&1 | tee deploy.log
+      - name: Run check, then always delete the temporary Worker
+        run: |
+          URL=$(grep -oE 'https://[A-Za-z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          sleep 10
+          rc=0
+          node scripts/preview-nodb-check.mjs "$URL" || rc=$?
+          npx --yes wrangler@4 delete --name seylane-sabz-learning-preview-nodb --force || true
+          exit $rc

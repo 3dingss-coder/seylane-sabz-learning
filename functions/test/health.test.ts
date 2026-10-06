@@ -82,3 +82,12 @@ describe('auth header fallback (proxies that strip Authorization)', () => {
     expect(bad.status).toBe(401);
   });
 });
+
+describe('health hardening', () => {
+  it('does not expose AI key length or whitespace flags', async () => {
+    const res = await request(app).get('/v1/health');
+    expect(res.body.data.ai.geminiKeyLength).toBeUndefined();
+    expect(res.body.data.ai.geminiKeyHasWhitespace).toBeUndefined();
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+});
