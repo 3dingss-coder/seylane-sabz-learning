@@ -1,0 +1,33 @@
+name: D1 production backup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Export production D1 and record Time Travel bookmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Export production D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p backup-artifact
+          npx --yes wrangler@4 d1 export seylane-sabz-db --remote --output backup-artifact/seylane-sabz-db-${GITHUB_RUN_ID}.sql --skip-confirmation
+          npx --yes wrangler@4 d1 time-travel info seylane-sabz-db --json > backup-artifact/time-travel-${GITHUB_RUN_ID}.json
+          date -u +%Y-%m-%dT%H:%M:%SZ > backup-artifact/created-at-${GITHUB_RUN_ID}.txt
+          sha256sum backup-artifact/seylane-sabz-db-${GITHUB_RUN_ID}.sql > backup-artifact/sha256-${GITHUB_RUN_ID}.txt
+      - name: Upload protected backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: seylane-sabz-db-backup-${{ github.run_id }}
+          path: backup-artifact/
+          retention-days: 30
+          if-no-files-found: error
