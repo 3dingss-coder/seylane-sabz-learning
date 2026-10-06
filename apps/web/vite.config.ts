@@ -1,9 +1,11 @@
 /// <reference types="vitest/config" />
 import { fileURLToPath, URL } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
+import legacy from '@vitejs/plugin-legacy';
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { legacyCss } from './legacy-css';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -16,9 +18,12 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
-      // Browser support floor (2023+ engines) is set by `browserslist` in package.json —
-      // vite transpiles to it. No legacy/polyfill bundles: see docs/CHANGELOG.md 2026-09-29
-      // (perf pass) if older devices must be supported again.
+      // Older browsers (iOS 12+, Android WebView/Chrome 64+, Samsung Internet 9+; targets in
+      // package.json `browserslist`): syntax down-levelled + core-js polyfills for modern chunks,
+      // and a SystemJS legacy bundle for browsers without ES-module support. Many field devices
+      // (older Android phones) cannot run a 2023+-only build and see a blank/unstyled page.
+      legacy({ modernPolyfills: true, renderLegacyChunks: true }),
+      legacyCss(),
       VitePWA({
         registerType: 'autoUpdate',
         // Registered manually in main.tsx so the Android (Capacitor) build skips the service worker.
@@ -45,7 +50,7 @@ export default defineConfig(({ mode }) => {
         workbox: {
           // Catalog images and the rarely used ExcelJS export chunk are fetched on demand.
           // ExcelJS (~940 KB) must not be downloaded during PWA installation for marketers.
-          globIgnores: ['**/catalog/**', '**/ffmpeg/**', '**/exceljs*.js'],
+          globIgnores: ['**/catalog/**', '**/ffmpeg/**', '**/exceljs*.js', '**/*-legacy-*.js'],
           // Web Push handler (src/lib/webPush.ts) — self-hosted, no Firebase script in the worker.
           importScripts: ['push-sw.js'],
           navigateFallbackDenylist: [/^\/v1\//],
@@ -97,11 +102,6 @@ export default defineConfig(({ mode }) => {
     ],
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
-    },
-    build: {
-      // Transpile exactly to the `browserslist` floor (2023+ engines, see package.json) —
-      // keep these two lists in sync. No legacy/polyfill bundles.
-      target: ['chrome110', 'edge110', 'firefox115', 'safari16.4', 'ios16.4'],
     },
     server: {
       host: '0.0.0.0',
