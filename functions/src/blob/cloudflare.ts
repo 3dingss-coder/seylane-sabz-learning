@@ -18,6 +18,12 @@ export interface R2ObjectBodyLike {
   httpMetadata?: { contentType?: string };
 }
 
+export interface R2MultipartUploadLike {
+  uploadPart(partNumber: number, value: ArrayBuffer | Uint8Array): Promise<unknown>;
+  complete(parts: unknown[]): Promise<unknown>;
+  abort(): Promise<void>;
+}
+
 export interface R2BucketLike {
   put(
     key: string,
@@ -25,8 +31,31 @@ export interface R2BucketLike {
     options?: { httpMetadata?: { contentType?: string } },
   ): Promise<unknown>;
   head(key: string): Promise<{ size: number; httpMetadata?: { contentType?: string } } | null>;
-  get(key: string): Promise<R2ObjectBodyLike | null>;
+  get(
+    key: string,
+    options?: { range?: { offset: number; length: number } },
+  ): Promise<R2ObjectBodyLike | null>;
   delete(key: string): Promise<void>;
+  createMultipartUpload?(
+    key: string,
+    options?: { httpMetadata?: { contentType?: string } },
+  ): Promise<R2MultipartUploadLike>;
+}
+
+/** Resumable-upload staging parts always live in D1 (they are composed there, then moved). */
+const STAGING_PREFIX = 'uploads/';
+const isStaging = (p: string) => p.startsWith(STAGING_PREFIX);
+/** R2 multipart parts must all have the same size (except the last) and be >= 5 MiB. */
+const R2_PART_BYTES = 8 * 1024 * 1024;
+/** Files up to this size are copied D1 -> R2 with a single put; bigger ones stream in parts. */
+const SINGLE_PUT_MAX = 16 * 1024 * 1024;
+
+export interface MigrateResult {
+  moved: number;
+  bytes: number;
+  purged: number;
+  failed: number;
+  remaining: number;
 }
 
 /** 256 KB raw binary per row (~341 KB base64), safely under D1's 1 MB SQL statement limit. */
@@ -66,8 +95,15 @@ export class CloudflareBlobStore implements BlobStore {
       db?: D1Database;
       r2?: R2BucketLike;
       now?: () => number;
+      /** Delete the D1 copy once the R2 copy is verified (env R2_MIGRATE_PURGE=on). */
+      purgeAfterMigrate?: boolean;
     } = {},
   ) {}
+
+  /** True when this path is stored in R2 (everything except resumable-upload staging parts). */
+  private useR2(p: string): boolean {
+    return Boolean(this.opts.r2) && !isStaging(p);
+  }
 
   private now(): number {
     return this.opts.now ? this.opts.now() : Date.now();
@@ -111,7 +147,7 @@ export class CloudflareBlobStore implements BlobStore {
 
   async put(p: string, data: Uint8Array, contentType: string): Promise<void> {
     const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-    if (this.opts.r2) {
+    if (this.opts.r2 && this.useR2(p)) {
       await this.opts.r2.put(p, bytes, { httpMetadata: { contentType } });
       return;
     }
@@ -206,7 +242,7 @@ export class CloudflareBlobStore implements BlobStore {
   }
 
   async stat(p: string): Promise<{ size: number; contentType: string } | null> {
-    if (this.opts.r2) {
+    if (this.opts.r2 && this.useR2(p)) {
       const head = await this.opts.r2.head(p);
       if (head) {
         return {
@@ -237,7 +273,7 @@ export class CloudflareBlobStore implements BlobStore {
   }
 
   async read(p: string): Promise<{ data: Uint8Array; contentType: string } | null> {
-    if (this.opts.r2) {
+    if (this.opts.r2 && this.useR2(p)) {
       const obj = await this.opts.r2.get(p);
       if (obj) {
         return {
@@ -299,31 +335,40 @@ export class CloudflareBlobStore implements BlobStore {
   }
 
   async readRange(p: string, start: number, end: number): Promise<Buffer> {
-    if (!this.opts.r2) {
-      const db = await this.ensureD1();
-      if (db) {
-        const meta = await db
-          .prepare('SELECT size, chunk_count FROM blobs WHERE path = ?1')
-          .bind(p)
-          .first<{ size: number; chunk_count: number }>();
-        if (meta) {
-          const size = Number(meta.size);
-          const last = Math.min(end, size - 1);
-          if (start > last) return toBufferLike(new Uint8Array(0));
-          const cs = await this.chunkSizeOf(db, p, size, Number(meta.chunk_count));
-          if (cs > 0) {
-            const firstIdx = Math.floor(start / cs);
-            const lastIdx = Math.floor(last / cs);
-            const rows = await db
-              .prepare(
-                'SELECT data FROM blob_chunks WHERE path = ?1 AND idx BETWEEN ?2 AND ?3 ORDER BY idx ASC',
-              )
-              .bind(p, firstIdx, lastIdx)
-              .all<{ data: string }>();
-            const joined = concatBytes((rows.results ?? []).map((c) => base64ToBytes(c.data)));
-            const offset = start - firstIdx * cs;
-            return toBufferLike(joined.subarray(offset, offset + (last - start + 1)));
-          }
+    if (this.opts.r2 && this.useR2(p) && end >= start) {
+      try {
+        // Only the requested window is read from R2 (videos seek with Range requests).
+        const obj = await this.opts.r2.get(p, {
+          range: { offset: start, length: end - start + 1 },
+        });
+        if (obj) return toBufferLike(new Uint8Array(await obj.arrayBuffer()));
+      } catch {
+        // fall through to the D1 copy (not migrated yet)
+      }
+    }
+    const db = await this.ensureD1();
+    if (db) {
+      const meta = await db
+        .prepare('SELECT size, chunk_count FROM blobs WHERE path = ?1')
+        .bind(p)
+        .first<{ size: number; chunk_count: number }>();
+      if (meta) {
+        const size = Number(meta.size);
+        const last = Math.min(end, size - 1);
+        if (start > last) return toBufferLike(new Uint8Array(0));
+        const cs = await this.chunkSizeOf(db, p, size, Number(meta.chunk_count));
+        if (cs > 0) {
+          const firstIdx = Math.floor(start / cs);
+          const lastIdx = Math.floor(last / cs);
+          const rows = await db
+            .prepare(
+              'SELECT data FROM blob_chunks WHERE path = ?1 AND idx BETWEEN ?2 AND ?3 ORDER BY idx ASC',
+            )
+            .bind(p, firstIdx, lastIdx)
+            .all<{ data: string }>();
+          const joined = concatBytes((rows.results ?? []).map((c) => base64ToBytes(c.data)));
+          const offset = start - firstIdx * cs;
+          return toBufferLike(joined.subarray(offset, offset + (last - start + 1)));
         }
       }
     }
@@ -337,7 +382,6 @@ export class CloudflareBlobStore implements BlobStore {
   }
 
   async listStored(prefix: string): Promise<Array<{ path: string; size: number }> | null> {
-    if (this.opts.r2) return null;
     const db = await this.ensureD1();
     if (!db) return null;
     const rows = await db
@@ -356,7 +400,6 @@ export class CloudflareBlobStore implements BlobStore {
     dest: string,
     contentType: string,
   ): Promise<boolean | null> {
-    if (this.opts.r2) return null;
     const db = await this.ensureD1();
     if (!db || parts.length === 0) return null;
     const bases: number[] = [];
@@ -403,7 +446,6 @@ export class CloudflareBlobStore implements BlobStore {
   }
 
   async deletePrefix(prefix: string): Promise<boolean | null> {
-    if (this.opts.r2) return null;
     const db = await this.ensureD1();
     if (!db) return null;
     const like = CloudflareBlobStore.likePrefix(prefix);
@@ -429,11 +471,133 @@ export class CloudflareBlobStore implements BlobStore {
     return `/v1/files/public/${p.split('/').map(encodeURIComponent).join('/')}`;
   }
 
-  async delete(p: string): Promise<void> {
-    if (this.opts.r2) {
-      await this.opts.r2.delete(p);
-      return;
+  /**
+   * One bounded batch of the D1 -> R2 move (run from the 15-minute cron until nothing is left).
+   * For each stored file: read it back from D1, write it to R2, verify the size, and only then —
+   * when `purgeAfterMigrate` is on — delete the D1 rows. Reads already prefer R2 and fall back
+   * to D1, so files keep working at every step. Staging parts (`uploads/`) are never moved.
+   */
+  async migrateToObjectStorage(
+    o: { maxFiles?: number; maxBytes?: number } = {},
+  ): Promise<MigrateResult | null> {
+    const r2 = this.opts.r2;
+    if (!r2) return null;
+    const db = await this.ensureD1();
+    if (!db) return null;
+    const maxFiles = o.maxFiles ?? 6;
+    const maxBytes = o.maxBytes ?? 48 * 1024 * 1024;
+    const purge = Boolean(this.opts.purgeAfterMigrate);
+    const out: MigrateResult = { moved: 0, bytes: 0, purged: 0, failed: 0, remaining: 0 };
+
+    const rows = await db
+      .prepare(
+        `SELECT path, content_type, size, chunk_count FROM blobs
+         WHERE path NOT LIKE 'uploads/%'
+           AND chunk_count = (SELECT COUNT(*) FROM blob_chunks c WHERE c.path = blobs.path)
+         ORDER BY size ASC LIMIT 200`,
+      )
+      .all<{ path: string; content_type: string; size: number; chunk_count: number }>();
+    const todo = rows.results ?? [];
+
+    for (const row of todo) {
+      if (out.moved + out.failed >= maxFiles) break;
+      const size = Number(row.size);
+      if (out.bytes > 0 && out.bytes + size > maxBytes) continue;
+      try {
+        const contentType = row.content_type || 'application/octet-stream';
+        const head = await r2.head(row.path);
+        if (!head || head.size !== size) {
+          if (size <= SINGLE_PUT_MAX) {
+            const chunks = await db
+              .prepare('SELECT data FROM blob_chunks WHERE path = ?1 ORDER BY idx ASC')
+              .bind(row.path)
+              .all<{ data: string }>();
+            const whole = concatBytes((chunks.results ?? []).map((c) => base64ToBytes(c.data)));
+            if (whole.byteLength !== size) throw new Error('size mismatch while reading D1');
+            await r2.put(row.path, whole, { httpMetadata: { contentType } });
+          } else {
+            await this.copyLargeToR2(db, r2, row.path, size, Number(row.chunk_count), contentType);
+          }
+          const after = await r2.head(row.path);
+          if (!after || after.size !== size) throw new Error('R2 copy failed verification');
+        }
+        out.moved++;
+        out.bytes += size;
+        if (purge) {
+          await db.batch([
+            db.prepare('DELETE FROM blob_chunks WHERE path = ?1').bind(row.path),
+            db.prepare('DELETE FROM blobs WHERE path = ?1').bind(row.path),
+          ]);
+          out.purged++;
+        }
+      } catch (err) {
+        out.failed++;
+        console.warn(
+          `[blob:migrate] ${row.path} skipped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
+
+    const left = await db
+      .prepare("SELECT COUNT(*) AS n FROM blobs WHERE path NOT LIKE 'uploads/%'")
+      .first<{ n: number }>();
+    out.remaining = Number(left?.n ?? 0);
+    return out;
+  }
+
+  /** Streams a big D1 blob into an R2 multipart upload (fixed 8 MiB parts, bounded memory). */
+  private async copyLargeToR2(
+    db: D1Database,
+    r2: R2BucketLike,
+    p: string,
+    size: number,
+    chunkCount: number,
+    contentType: string,
+  ): Promise<void> {
+    if (!r2.createMultipartUpload) throw new Error('R2 multipart upload unavailable');
+    const upload = await r2.createMultipartUpload(p, { httpMetadata: { contentType } });
+    const done: unknown[] = [];
+    try {
+      let pending: Uint8Array[] = [];
+      let pendingBytes = 0;
+      let total = 0;
+      const flush = async (final: boolean) => {
+        while (pendingBytes >= R2_PART_BYTES || (final && pendingBytes > 0)) {
+          const joined = concatBytes(pending);
+          const take = Math.min(R2_PART_BYTES, joined.byteLength);
+          done.push(await upload.uploadPart(done.length + 1, joined.slice(0, take)));
+          const rest = joined.subarray(take);
+          pending = rest.byteLength ? [rest] : [];
+          pendingBytes = rest.byteLength;
+        }
+      };
+      const PER_QUERY = 8;
+      for (let from = 0; from < chunkCount; from += PER_QUERY) {
+        const res = await db
+          .prepare(
+            'SELECT data FROM blob_chunks WHERE path = ?1 AND idx >= ?2 AND idx < ?3 ORDER BY idx ASC',
+          )
+          .bind(p, from, from + PER_QUERY)
+          .all<{ data: string }>();
+        for (const c of res.results ?? []) {
+          const bytes = base64ToBytes(c.data);
+          pending.push(bytes);
+          pendingBytes += bytes.byteLength;
+          total += bytes.byteLength;
+        }
+        await flush(false);
+      }
+      await flush(true);
+      if (total !== size) throw new Error('size mismatch while streaming D1 -> R2');
+      await upload.complete(done);
+    } catch (err) {
+      await upload.abort().catch(() => {});
+      throw err;
+    }
+  }
+
+  async delete(p: string): Promise<void> {
+    if (this.opts.r2 && this.useR2(p)) await this.opts.r2.delete(p);
     const db = await this.ensureD1();
     if (db) {
       await db.batch([

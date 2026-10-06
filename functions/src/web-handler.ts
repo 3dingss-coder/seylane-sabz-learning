@@ -81,6 +81,7 @@ export async function buildCloudflareDeps(
     blob: new CloudflareBlobStore(secret, {
       db,
       r2: env.MEDIA_BUCKET,
+      purgeAfterMigrate: stringEnv.R2_MIGRATE_PURGE === 'on',
       now: () => systemClock().getTime(),
     }),
     push: new RecordingPushSender(),
@@ -146,10 +147,11 @@ function serveBytes(
   data: Uint8Array,
   contentType: string,
   baseHeaders: Headers,
+  cacheControl = 'private, max-age=3600',
 ): Response {
   const h = new Headers(baseHeaders);
   h.set('Content-Type', contentType);
-  h.set('Cache-Control', 'private, max-age=3600');
+  h.set('Cache-Control', cacheControl);
   h.set('Accept-Ranges', 'bytes');
   const size = data.byteLength;
   const range = request.headers.get('range');
@@ -304,7 +306,14 @@ export function createFetchHandler(
         }
         const uploaded = await blob.read(rawPath);
         if (uploaded) {
-          return serveBytes(request, uploaded.data, uploaded.contentType, baseHeaders);
+          return serveBytes(
+            request,
+            uploaded.data,
+            uploaded.contentType,
+            baseHeaders,
+            // Public catalog images: let browsers and the Cloudflare edge reuse them.
+            'public, max-age=86400, stale-while-revalidate=604800',
+          );
         }
         if (rawPath === 'branding/holding-logo.png') {
           const h = new Headers(baseHeaders);

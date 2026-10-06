@@ -35,4 +35,15 @@ export interface BlobStore {
   ): Promise<boolean | null>;
   /** Delete every blob whose path starts with `prefix` — a single batch. */
   deletePrefix?(prefix: string): Promise<boolean | null>;
+  /**
+   * Optional: move blobs from the database into object storage (Cloudflare D1 -> R2) in small,
+   * verified batches. Returns `null` when the store has nothing to migrate to.
+   */
+  migrateToObjectStorage?(opts?: { maxFiles?: number; maxBytes?: number }): Promise<{
+    moved: number;
+    bytes: number;
+    purged: number;
+    failed: number;
+    remaining: number;
+  } | null>;
 }

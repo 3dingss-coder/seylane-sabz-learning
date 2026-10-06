@@ -13,7 +13,8 @@ export type JobName =
   | 'weekly-digest'
   | 'daily-reminders'
   | 'mentor-daily'
-  | 'knowledge-reindex';
+  | 'knowledge-reindex'
+  | 'migrate-blobs';
 
 export interface JobOptions {
   /** Manual triggers ignore the "only at this weekday/hour" gates (the weekly digest). */
@@ -41,6 +42,9 @@ export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>
     invalidateIndexCache(d);
     return { ...result, extraction };
   },
+  // Moves files stored in D1 into R2 (a few verified files per run; a no-op once D1 is empty or
+  // when no R2 bucket is bound).
+  'migrate-blobs': async (d) => (await d.blob.migrateToObjectStorage?.()) ?? { skipped: true },
 };
 
 export const JOB_NAMES = Object.keys(JOBS) as JobName[];
@@ -60,7 +64,7 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
-  '*/15 * * * *': ['flush-push', 'knowledge-reindex'],
+  '*/15 * * * *': ['flush-push', 'knowledge-reindex', 'migrate-blobs'],
   '0 * * * *': ['deadline-sweep', 'weekly-digest'],
   '30 4 * * *': ['mentor-daily'],
   '30 6 * * *': ['daily-reminders'],
