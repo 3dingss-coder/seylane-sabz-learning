@@ -49,9 +49,13 @@ const isStaging = (p: string) => p.startsWith(STAGING_PREFIX);
 const R2_PART_BYTES = 8 * 1024 * 1024;
 /** Files up to this size are copied D1 -> R2 with a single put; bigger ones stream in parts. */
 const SINGLE_PUT_MAX = 16 * 1024 * 1024;
+/** Upper bound of R2 lookups per run (stays well under the Worker subrequest limit). */
+const MAX_HEAD_CHECKS = 30;
 
 export interface MigrateResult {
   moved: number;
+  /** Files whose verified R2 copy already existed (not counted against the batch limits). */
+  verified: number;
   bytes: number;
   purged: number;
   failed: number;
@@ -487,7 +491,39 @@ export class CloudflareBlobStore implements BlobStore {
     const maxFiles = o.maxFiles ?? 6;
     const maxBytes = o.maxBytes ?? 48 * 1024 * 1024;
     const purge = Boolean(this.opts.purgeAfterMigrate);
-    const out: MigrateResult = { moved: 0, bytes: 0, purged: 0, failed: 0, remaining: 0 };
+    const out: MigrateResult = {
+      moved: 0,
+      verified: 0,
+      bytes: 0,
+      purged: 0,
+      failed: 0,
+      remaining: 0,
+    };
+    const log = async (path: string, size: number, status: string, detail = '') => {
+      try {
+        await db
+          .prepare(
+            'INSERT INTO blob_migration_log (ts, path, size, status, detail) VALUES (?1, ?2, ?3, ?4, ?5)',
+          )
+          .bind(Date.now(), path, size, status, detail.slice(0, 300))
+          .run();
+      } catch {
+        // the log must never break the migration
+      }
+    };
+    try {
+      await db
+        .prepare(
+          'CREATE TABLE IF NOT EXISTS blob_migration_log (ts INTEGER NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, status TEXT NOT NULL, detail TEXT)',
+        )
+        .run();
+      await db
+        .prepare('DELETE FROM blob_migration_log WHERE ts < ?1')
+        .bind(Date.now() - 14 * 24 * 3600 * 1000)
+        .run();
+    } catch {
+      // logging is best-effort
+    }
 
     const rows = await db
       .prepare(
@@ -499,14 +535,19 @@ export class CloudflareBlobStore implements BlobStore {
       .all<{ path: string; content_type: string; size: number; chunk_count: number }>();
     const todo = rows.results ?? [];
 
+    let checks = 0;
     for (const row of todo) {
-      if (out.moved + out.failed >= maxFiles) break;
+      if (out.moved + out.failed >= maxFiles || checks >= MAX_HEAD_CHECKS) break;
       const size = Number(row.size);
-      if (out.bytes > 0 && out.bytes + size > maxBytes) continue;
       try {
         const contentType = row.content_type || 'application/octet-stream';
+        checks++;
         const head = await r2.head(row.path);
-        if (!head || head.size !== size) {
+        if (head && head.size === size) {
+          // Already copied and size-verified earlier: does not use up this run's batch.
+          out.verified++;
+        } else {
+          if (out.bytes > 0 && out.bytes + size > maxBytes) continue;
           if (size <= SINGLE_PUT_MAX) {
             const chunks = await db
               .prepare('SELECT data FROM blob_chunks WHERE path = ?1 ORDER BY idx ASC')
@@ -520,21 +561,23 @@ export class CloudflareBlobStore implements BlobStore {
           }
           const after = await r2.head(row.path);
           if (!after || after.size !== size) throw new Error('R2 copy failed verification');
+          out.moved++;
+          out.bytes += size;
+          await log(row.path, size, 'copied');
         }
-        out.moved++;
-        out.bytes += size;
         if (purge) {
           await db.batch([
             db.prepare('DELETE FROM blob_chunks WHERE path = ?1').bind(row.path),
             db.prepare('DELETE FROM blobs WHERE path = ?1').bind(row.path),
           ]);
           out.purged++;
+          await log(row.path, size, 'purged');
         }
       } catch (err) {
         out.failed++;
-        console.warn(
-          `[blob:migrate] ${row.path} skipped: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[blob:migrate] ${row.path} skipped: ${msg}`);
+        await log(row.path, size, 'failed', msg);
       }
     }
 
@@ -542,6 +585,7 @@ export class CloudflareBlobStore implements BlobStore {
       .prepare("SELECT COUNT(*) AS n FROM blobs WHERE path NOT LIKE 'uploads/%'")
       .first<{ n: number }>();
     out.remaining = Number(left?.n ?? 0);
+    await log('-', out.bytes, 'run', JSON.stringify(out));
     return out;
   }
 

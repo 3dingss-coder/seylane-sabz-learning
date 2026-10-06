@@ -41,6 +41,7 @@ export interface BlobStore {
    */
   migrateToObjectStorage?(opts?: { maxFiles?: number; maxBytes?: number }): Promise<{
     moved: number;
+    verified: number;
     bytes: number;
     purged: number;
     failed: number;

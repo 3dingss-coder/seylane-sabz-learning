@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-06 (2) — Fix: D1 -> R2 migration stalled on the smallest files
+
+- With `R2_MIGRATE_PURGE = "off"` the `migrate-blobs` job re-checked the same smallest files every run and never reached the larger ones (already-copied files used up the batch). Files already verified in R2 no longer count against the batch limits.
+- New D1 table `blob_migration_log` (14 days kept): one row per copied/failed/purged file and one `run` summary per cron run, so progress can be read with a plain SQL query.
+
 ## 2026-10-06 — Media storage moves from D1 to R2 (faster image/audio/video loading)
 
 - New R2 bucket `seylane-sabz-media`, bound as `MEDIA_BUCKET` in `wrangler.toml`. New uploads of images/audio/video are written to R2; reads prefer R2 and fall back to the D1 copy, so nothing breaks while files are still being moved.
