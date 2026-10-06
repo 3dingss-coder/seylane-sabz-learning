@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ApiError } from '../http/errors';
-import { DAY, HOUR } from '../lib/time';
+import { DAY, HOUR, zonedOffsetMs } from '../lib/time';
 import type { Doc } from '../store/types';
 import type { Attempt, Message, RetakeRequest, Team, User } from '../domain/types';
 import { audit, track, type Actor, type Deps } from './context';
@@ -155,14 +155,32 @@ export const reportQuery = z.object({
   province: z.string().max(80).optional(),
 });
 
+const REPORT_TZ = 'Asia/Tehran';
+
+/**
+ * Report date bounds. A plain `YYYY-MM-DD` is a calendar day in Tehran (what the Jalali picker
+ * shows), not a UTC day; anything else is parsed as a full timestamp.
+ */
+export function reportBound(v: string, edge: 'start' | 'end'): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return Date.parse(v);
+  const utc = Date.parse(`${v}T00:00:00Z`);
+  if (Number.isNaN(utc)) return utc;
+  const start = utc - zonedOffsetMs(new Date(utc), REPORT_TZ);
+  return edge === 'start' ? start : start + DAY - 1;
+}
+
 export function completionRows(
   members: MemberLearning[],
   f: z.infer<typeof reportQuery>,
   now: Date,
 ) {
-  const from = f.from ? Date.parse(f.from) : null;
-  const to = f.to ? Date.parse(f.to) : null;
-  if ((f.from && Number.isNaN(from)) || (f.to && Number.isNaN(to)) || (from && to && from > to))
+  const from = f.from ? reportBound(f.from, 'start') : null;
+  const to = f.to ? reportBound(f.to, 'end') : null;
+  if (
+    (from !== null && Number.isNaN(from)) ||
+    (to !== null && Number.isNaN(to)) ||
+    (from !== null && to !== null && from > to)
+  )
     throw new ApiError('VALIDATION', 'بازه تاریخ معتبر نیست.');
   const rows = [];
   for (const m of members) {
@@ -175,7 +193,7 @@ export function completionRows(
       if (f.status === 'overdue' ? !p.overdue : f.status && p.status !== f.status) continue;
       // Date range filters on the package deadline.
       if (from && (!p.deadlineAt || Date.parse(p.deadlineAt) < from)) continue;
-      if (to && (!p.deadlineAt || Date.parse(p.deadlineAt) > to + DAY - 1)) continue;
+      if (to && (!p.deadlineAt || Date.parse(p.deadlineAt) > to)) continue;
       const stuck = p.sections.find((s) => s.state !== 'completed');
       rows.push({
         userId: m.user.id,

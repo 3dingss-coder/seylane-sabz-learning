@@ -236,7 +236,14 @@ export function CompletionReport({
           <option value="overdue">دیرکرد</option>
         </Select>
         <JalaliDateField label="مهلت از" value={f('from')} onChange={(v) => set('from', v)} />
-        <JalaliDateField label="مهلت تا" value={f('to')} onChange={(v) => set('to', v)} />
+        <JalaliDateField
+          label="مهلت تا"
+          value={f('to')}
+          onChange={(v) => set('to', v)}
+          error={
+            f('from') && f('to') && f('from') > f('to') ? 'تاریخ پایان قبل از شروع است.' : undefined
+          }
+        />
       </Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-text-secondary">{toPersianDigits(filtered.length)} ردیف</p>
