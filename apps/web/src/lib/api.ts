@@ -48,6 +48,8 @@ export function fileUrl(url: string | null | undefined): string {
   return `${API_BASE}${url}`;
 }
 
+const REFRESH_TIMEOUT_MS = 15_000;
+
 type RefreshResult = { idToken: string; refreshToken: string; expiresIn: number };
 let onSessionExpired: (() => void) | null = null;
 export function setSessionExpiredHandler(fn: () => void) {
@@ -61,11 +63,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isTransientStatus = (s: number) => s === 429 || s === 408 || s >= 500;
 
 async function refreshOnce(rt: string): Promise<RefreshOutcome> {
+  // Without a deadline a hung server keeps AuthProvider in 'loading' → endless full-page spinner.
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), REFRESH_TIMEOUT_MS);
   try {
     const res = await fetch(`${API_BASE}/v1/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken: rt }),
+      signal: ctl.signal,
     });
     if (res.status === 401 || res.status === 403) return 'invalid';
     if (!res.ok) return 'transient';
@@ -77,6 +83,8 @@ async function refreshOnce(rt: string): Promise<RefreshOutcome> {
     // Network drop, Worker cold-start failure (1101/1102/503) or unparsable body: not a verdict
     // on the token, so the session must be kept.
     return 'transient';
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -115,6 +123,8 @@ export interface RequestOptions {
   signal?: AbortSignal;
   /** Skip auth header (public endpoints). */
   anonymous?: boolean;
+  /** Abort and fail with a NETWORK error after this many ms (default: no deadline). */
+  timeoutMs?: number;
 }
 
 export async function request<T>(
@@ -134,16 +144,30 @@ export async function request<T>(
     }
   }
   let res: Response;
+  let timedOut = false;
+  let signal = opts.signal;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  if (opts.timeoutMs) {
+    const ctl = new AbortController();
+    timer = setTimeout(() => {
+      timedOut = true;
+      ctl.abort();
+    }, opts.timeoutMs);
+    opts.signal?.addEventListener('abort', () => ctl.abort(), { once: true });
+    signal = ctl.signal;
+  }
   try {
     res = await fetch(`${API_BASE}/v1${path}`, {
       method: opts.method ?? 'GET',
       headers,
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      signal: opts.signal,
+      signal,
     });
   } catch (e) {
-    if ((e as Error).name === 'AbortError') throw e;
+    if ((e as Error).name === 'AbortError' && !timedOut) throw e;
     throw new ApiError('NETWORK', NETWORK_MESSAGE, 0);
+  } finally {
+    clearTimeout(timer);
   }
   if (res.status === 401 && !opts.anonymous && !retried) {
     const outcome = await refreshSessionOutcome();
