@@ -18,40 +18,40 @@ interface ExecutionContextLike {
   passThroughOnException?(): void;
 }
 
-let cachedDeps: Promise<Deps> | null = null;
+/**
+ * Per-isolate caches hold only FINISHED results (never an in-flight promise). A promise started by
+ * one request is settled by that request's own I/O; if the request is cancelled it never settles
+ * and every other request awaiting it hangs («Worker's code had hung»). While the cache is empty,
+ * concurrent cold requests each build their own copy (one cheap D1 read) and the first to finish
+ * wins; everyone then converges on the cached one.
+ */
+let cachedDeps: Deps | null = null;
 let cachedHasD1: boolean | null = null;
 
 /** Deps (store + services) are built once per isolate and reused by the fetch and cron entrypoints. */
-function getDeps(env: CloudflareEnv): Promise<Deps> {
+async function getDeps(env: CloudflareEnv): Promise<Deps> {
   const hasD1 = Boolean(env.DB && typeof env.DB.prepare === 'function');
-  if (!cachedDeps || cachedHasD1 !== hasD1) {
-    cachedHasD1 = hasD1;
-    cachedDeps = buildCloudflareDeps(env, seedSnapshot).catch((err) => {
-      cachedDeps = null;
-      throw err;
-    });
-  }
-  return cachedDeps;
+  if (cachedDeps && cachedHasD1 === hasD1) return cachedDeps;
+  const built = await buildCloudflareDeps(env, seedSnapshot);
+  if (cachedDeps && cachedHasD1 === hasD1) return cachedDeps;
+  cachedDeps = built;
+  cachedHasD1 = hasD1;
+  return built;
 }
 
 type FetchHandler = (request: Request) => Promise<Response>;
-let cachedHandler: { deps: Promise<Deps>; handler: Promise<FetchHandler> } | null = null;
+let cachedHandler: { deps: Deps; handler: FetchHandler } | null = null;
 
 /**
  * The router and its rate limiter are built once per isolate (not per request), so route setup
  * is not repeated and the in-memory rate limits actually accumulate across requests.
  */
-function getHandler(env: CloudflareEnv): Promise<FetchHandler> {
-  const deps = getDeps(env);
-  if (!cachedHandler || cachedHandler.deps !== deps) {
-    const handler = deps.then((d) => createFetchHandler(d));
-    cachedHandler = { deps, handler };
-    handler.catch(() => {
-      if (cachedHandler?.handler === handler) cachedHandler = null;
-      cachedDeps = null;
-    });
-  }
-  return cachedHandler.handler;
+async function getHandler(env: CloudflareEnv): Promise<FetchHandler> {
+  const deps = await getDeps(env);
+  if (cachedHandler?.deps === deps) return cachedHandler.handler;
+  const handler = createFetchHandler(deps);
+  cachedHandler = { deps, handler };
+  return handler;
 }
 
 function unavailable(): Response {

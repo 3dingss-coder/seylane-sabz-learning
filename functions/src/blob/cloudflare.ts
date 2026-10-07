@@ -90,7 +90,6 @@ function concatBytes(arrays: Uint8Array[]): Uint8Array {
  * (100% free tier without requiring a credit card on Cloudflare), with an in-memory fallback.
  */
 export class CloudflareBlobStore implements BlobStore {
-  private initPromise: Promise<void> | null = null;
   private mem = new Map<string, { data: Uint8Array; contentType: string }>();
 
   constructor(
@@ -116,13 +115,9 @@ export class CloudflareBlobStore implements BlobStore {
   private async ensureD1(): Promise<D1Database | null> {
     const db = this.opts.db;
     if (!db) return null;
-    if (!this.initPromise) {
-      this.initPromise = ensureD1Schema(db).catch((err) => {
-        this.initPromise = null;
-        throw err;
-      });
-    }
-    await this.initPromise;
+    // Settled-only: concurrent first calls each run the (idempotent) DDL rather than awaiting a
+    // promise that only the first request could settle (see lib/hang-safe.ts).
+    await ensureD1Schema(db);
     return db;
   }
 

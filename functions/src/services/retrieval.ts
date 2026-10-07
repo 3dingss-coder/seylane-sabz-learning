@@ -1,3 +1,4 @@
+import { waitAtMost } from '../lib/hang-safe';
 import type { User } from '../domain/types';
 import type { Doc } from '../store/types';
 import { aiHub } from '../ai/hub';
@@ -188,7 +189,12 @@ async function bootstrapIndex(d: Deps): Promise<void> {
   const now = d.clock().getTime();
   const state = bootstrapState.get(d) ?? { at: 0, running: null };
   bootstrapState.set(d, state);
-  if (state.running) return state.running;
+  // Another request is rebuilding: wait for it, but never longer than a deadline — if that
+  // request was cancelled its promise never settles (see lib/hang-safe.ts).
+  if (state.running) {
+    await waitAtMost(state.running, 8_000);
+    return;
+  }
   if (now - state.at < BOOTSTRAP_COOLDOWN_MS) return;
   state.at = now;
   state.running = rebuildKnowledgeIndex(d)
