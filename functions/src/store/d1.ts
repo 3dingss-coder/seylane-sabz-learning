@@ -128,6 +128,23 @@ function mentorGuideSnapshotVersion(snapshot: Record<string, Data>): string {
  * Automatically creates tables and seeds initial catalog/demo data on first request.
  */
 const MAX_ROW_JSON = 1_800_000;
+
+/**
+ * Upper bound for one D1 call / the one-time init. A stalled call must fail fast: the queue and
+ * the init promise are shared by every request in an isolate, so one call that never settles would
+ * otherwise freeze them all until the runtime cancels the Worker ("code had hung").
+ */
+export const D1_CALL_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 const GET_MANY_CHUNK = 90;
 
 export class D1Store implements DocStore {
@@ -143,10 +160,12 @@ export class D1Store implements DocStore {
 
   async ensureReady(): Promise<void> {
     if (!this.initPromise) {
-      this.initPromise = this.initialize().catch((err) => {
-        this.initPromise = null;
-        throw err;
-      });
+      this.initPromise = withTimeout(this.initialize(), D1_CALL_TIMEOUT_MS * 2, 'D1 init').catch(
+        (err) => {
+          this.initPromise = null;
+          throw err;
+        },
+      );
     }
     return this.initPromise;
   }
@@ -208,7 +227,10 @@ export class D1Store implements DocStore {
 
   /** Run one D1 call at a time so a Promise.all of reads cannot open a 7th connection. */
   private enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.io.then(fn, fn);
+    const run = this.io.then(
+      () => withTimeout(fn(), D1_CALL_TIMEOUT_MS, 'D1 call'),
+      () => withTimeout(fn(), D1_CALL_TIMEOUT_MS, 'D1 call'),
+    );
     this.io = run.then(
       () => undefined,
       () => undefined,
