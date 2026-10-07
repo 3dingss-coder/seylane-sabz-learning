@@ -41,6 +41,7 @@ function createSqliteD1(): D1Database {
       return stmt;
     };
     return {
+      sql,
       bind(...values: unknown[]): D1PreparedStatement {
         return makeStmt(sql, values);
       },
@@ -68,7 +69,7 @@ function createSqliteD1(): D1Database {
           },
         };
       },
-    };
+    } as unknown as D1PreparedStatement;
   };
 
   return {
@@ -80,7 +81,8 @@ function createSqliteD1(): D1Database {
       try {
         const out: D1Result<T>[] = [];
         for (const s of statements) {
-          out.push((await s.run()) as D1Result<T>);
+          const isSelect = /^\s*select\b/i.test((s as unknown as { sql?: string }).sql ?? '');
+          out.push((isSelect ? await s.all() : await s.run()) as D1Result<T>);
         }
         sqlite.exec('COMMIT');
         return out;
@@ -580,5 +582,47 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
       .bind('media/video/big.mp4')
       .first<{ c: number }>('c');
     expect(Number(chunks)).toBe(2);
+  });
+
+  it('cold start on an already-seeded database costs a single D1 round trip', async () => {
+    const real = createSqliteD1();
+    await new D1Store(real, seedSnapshot).ensureReady(); // first boot seeds the catalog
+    await new D1Store(real, seedSnapshot).ensureReady(); // second boot records the guide-seed marker
+
+    let calls = 0;
+    let inBatch = false;
+    const counted: D1Database = {
+      prepare: (sql) => {
+        const st = real.prepare(sql);
+        const wrap = (stmt: D1PreparedStatement): D1PreparedStatement => ({
+          bind: (...v) => wrap(stmt.bind(...v)),
+          first: (...a) => {
+            if (!inBatch) calls++;
+            return (stmt.first as (...x: unknown[]) => Promise<never>)(...a);
+          },
+          all: () => {
+            if (!inBatch) calls++;
+            return stmt.all();
+          },
+          run: () => {
+            if (!inBatch) calls++;
+            return stmt.run();
+          },
+          ...({ sql } as object),
+        });
+        return wrap(st);
+      },
+      batch: async (stmts) => {
+        calls++;
+        inBatch = true;
+        try {
+          return await real.batch(stmts);
+        } finally {
+          inBatch = false;
+        }
+      },
+    };
+    await new D1Store(counted, seedSnapshot).ensureReady();
+    expect(calls).toBe(1);
   });
 });

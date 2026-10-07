@@ -34,36 +34,73 @@ function getDeps(env: CloudflareEnv): Promise<Deps> {
   return cachedDeps;
 }
 
-function getHandler(env: CloudflareEnv): Promise<(request: Request) => Promise<Response>> {
-  return getDeps(env)
-    .then((deps) => createFetchHandler(deps))
-    .catch((err) => {
+type FetchHandler = (request: Request) => Promise<Response>;
+let cachedHandler: { deps: Promise<Deps>; handler: Promise<FetchHandler> } | null = null;
+
+/**
+ * The router and its rate limiter are built once per isolate (not per request), so route setup
+ * is not repeated and the in-memory rate limits actually accumulate across requests.
+ */
+function getHandler(env: CloudflareEnv): Promise<FetchHandler> {
+  const deps = getDeps(env);
+  if (!cachedHandler || cachedHandler.deps !== deps) {
+    const handler = deps.then((d) => createFetchHandler(d));
+    cachedHandler = { deps, handler };
+    handler.catch(() => {
+      if (cachedHandler?.handler === handler) cachedHandler = null;
       cachedDeps = null;
-      throw err;
     });
+  }
+  return cachedHandler.handler;
+}
+
+function unavailable(): Response {
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: 'INTERNAL',
+        message: 'سرور موقتاً در دسترس نیست. کمی بعد دوباره تلاش کنید.',
+      },
+    }),
+    {
+      status: 503,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Retry-After': '2' },
+    },
+  );
+}
+
+function logFailure(phase: 'startup' | 'request', request: Request, err: unknown): void {
+  const e = err instanceof Error ? err : new Error(String(err));
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      msg: 'cloudflare-worker failure',
+      phase,
+      method: request.method,
+      path: new URL(request.url).pathname,
+      name: e.name,
+      error: e.message.slice(0, 500),
+      stack: (e.stack ?? '').split('\n').slice(0, 4).join(' | '),
+    }),
+  );
 }
 
 export default {
   async fetch(request: Request, env: CloudflareEnv): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/v1' || url.pathname.startsWith('/v1/')) {
+      let handler: FetchHandler;
       try {
-        const handler = await getHandler(env ?? {});
+        handler = await getHandler(env ?? {});
+      } catch (err) {
+        logFailure('startup', request, err);
+        return unavailable();
+      }
+      try {
         return await handler(request);
       } catch (err) {
-        console.error('[cloudflare:worker] unhandled startup/request error', err);
-        return new Response(
-          JSON.stringify({
-            error: {
-              code: 'INTERNAL',
-              message: 'سرور موقتاً در دسترس نیست. کمی بعد دوباره تلاش کنید.',
-            },
-          }),
-          {
-            status: 503,
-            headers: { 'Content-Type': 'application/json; charset=utf-8' },
-          },
-        );
+        logFailure('request', request, err);
+        return unavailable();
       }
     }
 
