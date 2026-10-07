@@ -77,6 +77,20 @@ export interface CronResult {
   jobs: Record<string, { ok: boolean; error?: string; result?: unknown }>;
 }
 
+/** Workers drops an Error's message when it is passed as an object; log the details as text. */
+export function describeError(e: unknown): string {
+  if (e instanceof Error) {
+    const cause = e.cause instanceof Error ? e.cause.message : e.cause;
+    return JSON.stringify({
+      name: e.name,
+      message: e.message,
+      cause: cause === undefined ? undefined : String(cause),
+      stack: e.stack?.split('\n').slice(0, 6).join(' | '),
+    });
+  }
+  return JSON.stringify({ thrown: String(e).slice(0, 500) });
+}
+
 /** Runs every job bound to a cron expression. One failing job never blocks the others. */
 export async function runCron(d: Deps, cron: string): Promise<CronResult> {
   const names = CRON_JOBS[cron] ?? [];
@@ -86,7 +100,7 @@ export async function runCron(d: Deps, cron: string): Promise<CronResult> {
       jobs[name] = { ok: true, result: await runJob(d, name) };
     } catch (e) {
       jobs[name] = { ok: false, error: (e as Error).message?.slice(0, 300) ?? 'failed' };
-      console.error(`[cron:${name}] failed`, e);
+      console.error(`[cron:${name}] failed ${describeError(e)}`);
     }
   }
   return { cron, jobs };
