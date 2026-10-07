@@ -1,3 +1,4 @@
+import { DeadlineMutex } from '../lib/hang-safe';
 import { randomBytesBase64Url } from '../lib/crypto';
 import { applyUpdate, cmp, deepMerge, getField, matches, splitPath } from './helpers';
 import {
@@ -62,27 +63,23 @@ export const D1_SCHEMA_STATEMENTS = [
   )`,
 ] as const;
 
-const schemaReady = new WeakMap<object, Promise<void>>();
+/**
+ * Bindings whose schema was verified in this isolate. Only the settled outcome is remembered —
+ * never an in-flight promise — so a request that is cancelled mid-DDL cannot leave later
+ * requests awaiting something that will never finish (see lib/hang-safe.ts).
+ */
+const schemaReady = new WeakSet<object>();
 
 /** Records that the schema was verified for this D1 binding, so nobody repeats the DDL batch. */
 function markSchemaReady(db: D1Database): void {
-  schemaReady.set(db, Promise.resolve());
+  schemaReady.add(db);
 }
 
-/** DDL batch, run at most once per D1 binding per isolate (shared by the store and blob store). */
-export function ensureD1Schema(db: D1Database): Promise<void> {
-  let p = schemaReady.get(db);
-  if (!p) {
-    p = db
-      .batch(D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)))
-      .then(() => undefined)
-      .catch((err) => {
-        schemaReady.delete(db);
-        throw err;
-      });
-    schemaReady.set(db, p);
-  }
-  return p;
+/** DDL batch, skipped once it succeeded for this D1 binding (shared by the store and blob store). */
+export async function ensureD1Schema(db: D1Database): Promise<void> {
+  if (schemaReady.has(db)) return;
+  await db.batch(D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)));
+  markSchemaReady(db);
 }
 
 function toPlainData(v: Input): Data {
@@ -130,11 +127,19 @@ function mentorGuideSnapshotVersion(snapshot: Record<string, Data>): string {
 const MAX_ROW_JSON = 1_800_000;
 const GET_MANY_CHUNK = 90;
 
+/** Max time a D1 call waits for the one ahead of it before running anyway (see DeadlineMutex). */
+export const D1_IO_WAIT_MS = 8_000;
+/** Same for whole transactions, which include several queued D1 calls. */
+export const D1_TX_WAIT_MS = 15_000;
+
 export class D1Store implements DocStore {
-  private initPromise: Promise<void> | null = null;
-  private queue: Promise<unknown> = Promise.resolve();
+  /** Set once initialisation succeeded. Concurrent cold requests each run it (it is idempotent)
+   *  instead of awaiting one promise that only the first request can settle. */
+  private ready = false;
+  /** Transactions run one at a time per isolate; a lost holder cannot freeze the rest. */
+  private readonly txLock = new DeadlineMutex(D1_TX_WAIT_MS);
   /** D1 allows 6 connections per invocation and runs one query at a time. Serialize SQL. */
-  private io: Promise<unknown> = Promise.resolve();
+  private readonly ioLock = new DeadlineMutex(D1_IO_WAIT_MS);
 
   constructor(
     private readonly db: D1Database,
@@ -142,13 +147,9 @@ export class D1Store implements DocStore {
   ) {}
 
   async ensureReady(): Promise<void> {
-    if (!this.initPromise) {
-      this.initPromise = this.initialize().catch((err) => {
-        this.initPromise = null;
-        throw err;
-      });
-    }
-    return this.initPromise;
+    if (this.ready) return;
+    await this.initialize();
+    this.ready = true;
   }
 
   private async initialize(): Promise<void> {
@@ -208,12 +209,7 @@ export class D1Store implements DocStore {
 
   /** Run one D1 call at a time so a Promise.all of reads cannot open a 7th connection. */
   private enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.io.then(fn, fn);
-    this.io = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+    return this.ioLock.run(fn);
   }
 
   /**
@@ -608,8 +604,6 @@ export class D1Store implements DocStore {
       for (const w of writes) await w();
       return result;
     };
-    const next = this.queue.then(run, run);
-    this.queue = next.catch(() => undefined);
-    return next;
+    return this.txLock.run(run);
   }
 }
