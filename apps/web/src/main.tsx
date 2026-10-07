@@ -21,7 +21,8 @@ if (!isNative() && 'serviceWorker' in navigator && import.meta.env.PROD) {
       // Tabs that stay open for days only re-check sw.js on navigation; poll hourly so every
       // client picks up a new deploy (autoUpdate then activates it and reloads the page).
       onRegisteredSW(_url, registration) {
-        if (registration) setInterval(() => void registration.update().catch(() => undefined), 3_600_000);
+        if (registration)
+          setInterval(() => void registration.update().catch(() => undefined), 3_600_000);
       },
     }),
   );

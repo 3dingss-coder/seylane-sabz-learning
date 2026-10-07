@@ -20,6 +20,12 @@ export function managerRouter(d: Deps, limiter: RateLimiter): LightRouter {
     h(async (req) => reports.managerReport(d, me(req), parse(reports.reportQuery, req.query))),
   );
   r.get(
+    '/manager/reports/quizzes',
+    h(async (req) =>
+      reports.managerQuizReport(d, me(req), parse(reports.quizReportQuery, req.query)),
+    ),
+  );
+  r.get(
     '/manager/users/:id/progress',
     h(async (req) => reports.userTimeline(d, me(req), String(req.params.id))),
   );

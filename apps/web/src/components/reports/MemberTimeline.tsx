@@ -70,6 +70,12 @@ export function MemberTimeline({ data, canMessage }: { data: Timeline; canMessag
                       </span>
                     </div>
                     {s.attempts.length > 0 && (
+                      <p className="mt-1 text-xs text-text-secondary">
+                        {toPersianDigits(s.attempts.length)} بار آزمون داده •{' '}
+                        {s.attempts.some((a) => a.passed) ? 'قبول شده' : 'هنوز قبول نشده'}
+                      </p>
+                    )}
+                    {s.attempts.length > 0 && (
                       <ul className="mt-1 flex flex-wrap gap-2">
                         {s.attempts.map((a) => (
                           <li
@@ -83,6 +89,12 @@ export function MemberTimeline({ data, canMessage }: { data: Timeline; canMessag
                             )}
                             تلاش {toPersianDigits(a.attemptNumber)}:{' '}
                             {a.score === null ? '—' : faPercent(a.score)}
+                            {a.correct !== undefined && a.wrong !== undefined && (
+                              <span className="text-text-secondary">
+                                {' '}
+                                • {toPersianDigits(a.correct)} درست، {toPersianDigits(a.wrong)} غلط
+                              </span>
+                            )}
                             {a.submittedAt && (
                               <span className="text-muted-fg">({faDate(a.submittedAt)})</span>
                             )}

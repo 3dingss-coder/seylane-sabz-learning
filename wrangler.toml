@@ -18,7 +18,7 @@ PLAYBACK_BUDGET = "off"
 RATE_LIMIT_SCALE = "20"
 # D1 -> R2 media move: files are copied to R2 and verified by size; the D1 copy is deleted only
 # when this is "on" (flip it after checking that images/videos play from R2).
-R2_MIGRATE_PURGE = "off"
+R2_MIGRATE_PURGE = "on"
 
 # Scheduled jobs (deadline warnings, reminders, weekly digest, web-push flush).
 # The Worker's `scheduled` handler (functions/src/cloudflare-worker.ts) dispatches on the cron
@@ -42,3 +42,8 @@ database_id = "f7a2ed30-00f4-42e6-b26f-343c24fe1853"
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "seylane-sabz-media"
+
+# Workers Logs: capture invocations and errors (1101/1102/503) for diagnosis.
+[observability]
+enabled = true
+head_sampling_rate = 1

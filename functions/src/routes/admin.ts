@@ -397,6 +397,10 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     h(async (req) => reports.adminCompletion(d, parse(reports.reportQuery, req.query))),
   );
   r.get(
+    '/admin/reports/quizzes',
+    h(async (req) => reports.adminQuizReport(d, parse(reports.quizReportQuery, req.query))),
+  );
+  r.get(
     '/admin/reports/kpis',
     h(async () => reports.adminKpis(d)),
   );
