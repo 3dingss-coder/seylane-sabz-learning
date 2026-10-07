@@ -8,7 +8,7 @@ import {
 } from '../lib/crypto';
 import { createPlaceholderMp4 } from '../lib/media';
 import type { D1Database, D1PreparedStatement } from '../store/d1';
-import { D1_SCHEMA_STATEMENTS } from '../store/d1';
+import { ensureD1Schema } from '../store/d1';
 import type { LocalTicket } from './local';
 import type { BlobStore, UploadTicket } from './types';
 
@@ -117,13 +117,10 @@ export class CloudflareBlobStore implements BlobStore {
     const db = this.opts.db;
     if (!db) return null;
     if (!this.initPromise) {
-      this.initPromise = db
-        .batch(D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)))
-        .then(() => undefined)
-        .catch((err) => {
-          this.initPromise = null;
-          throw err;
-        });
+      this.initPromise = ensureD1Schema(db).catch((err) => {
+        this.initPromise = null;
+        throw err;
+      });
     }
     await this.initPromise;
     return db;

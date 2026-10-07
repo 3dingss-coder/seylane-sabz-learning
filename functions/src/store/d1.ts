@@ -62,6 +62,29 @@ export const D1_SCHEMA_STATEMENTS = [
   )`,
 ] as const;
 
+const schemaReady = new WeakMap<object, Promise<void>>();
+
+/** Records that the schema was verified for this D1 binding, so nobody repeats the DDL batch. */
+function markSchemaReady(db: D1Database): void {
+  schemaReady.set(db, Promise.resolve());
+}
+
+/** DDL batch, run at most once per D1 binding per isolate (shared by the store and blob store). */
+export function ensureD1Schema(db: D1Database): Promise<void> {
+  let p = schemaReady.get(db);
+  if (!p) {
+    p = db
+      .batch(D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)))
+      .then(() => undefined)
+      .catch((err) => {
+        schemaReady.delete(db);
+        throw err;
+      });
+    schemaReady.set(db, p);
+  }
+  return p;
+}
+
 function toPlainData(v: Input): Data {
   const out = JSON.parse(JSON.stringify(v)) as Data;
   delete out.id;
@@ -129,18 +152,29 @@ export class D1Store implements DocStore {
   }
 
   private async initialize(): Promise<void> {
-    await this.db.batch(D1_SCHEMA_STATEMENTS.map((sql) => this.db.prepare(sql)));
-
-    if (!this.seedSnapshot) return;
-    const existing = await this.db
-      .prepare('SELECT id FROM docs WHERE col = ?1 LIMIT 1')
-      .bind('brands')
-      .first<{ id: string }>();
+    // ONE D1 round trip on a cold start: the schema DDL plus the two reads the seeding decision
+    // needs (was the catalog seeded? which mentor-guide snapshot version was applied?).
+    const ddl = D1_SCHEMA_STATEMENTS.map((sql) => this.db.prepare(sql));
+    if (!this.seedSnapshot) {
+      await this.db.batch(ddl);
+      markSchemaReady(this.db);
+      return;
+    }
+    const probes = [
+      this.db.prepare('SELECT id FROM docs WHERE col = ?1 LIMIT 1').bind('brands'),
+      this.db
+        .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
+        .bind('knowledge_meta', 'mentor_guides_seed_version'),
+    ];
+    const res = await this.db.batch<{ id?: string; data?: string }>([...ddl, ...probes]);
+    markSchemaReady(this.db);
+    const existing = res[ddl.length]?.results?.[0];
+    const marker = res[ddl.length + 1]?.results?.[0];
     if (existing) {
       // Additive and optional: a problem here must never keep the whole app from starting.
       // Nothing is marked as applied on failure, so the next cold start simply tries again.
       try {
-        await this.seedMissingMentorGuides();
+        await this.seedMissingMentorGuides(marker?.data ?? null);
       } catch (err) {
         console.warn(
           `[d1] mentor guide seeding skipped: ${err instanceof Error ? err.message : String(err)}`,
@@ -188,15 +222,20 @@ export class D1Store implements DocStore {
    * missing guide rows, never overwrite admin-authored guides, and remap a seeded brand ID by
    * exact brand name/Latin name when the live catalog uses a different ID.
    */
-  private async seedMissingMentorGuides(): Promise<void> {
+  private async seedMissingMentorGuides(appliedData?: string | null): Promise<void> {
     const snapshotGuides = this.seedSnapshot?.mentor_guides;
     if (!snapshotGuides) return;
 
     const version = mentorGuideSnapshotVersion(snapshotGuides);
-    const applied = await this.db
-      .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
-      .bind('knowledge_meta', 'mentor_guides_seed_version')
-      .first<{ data: string }>();
+    const applied =
+      appliedData !== undefined
+        ? appliedData === null
+          ? null
+          : { data: appliedData }
+        : await this.db
+            .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
+            .bind('knowledge_meta', 'mentor_guides_seed_version')
+            .first<{ data: string }>();
     if (applied) {
       try {
         if ((JSON.parse(applied.data) as { version?: string }).version === version) return;
