@@ -57,14 +57,27 @@ describe('FcmHttpPushSender', () => {
 
   it('prunes only dead tokens, never tokens that failed for other reasons', async () => {
     const { fetchImpl } = harness((t) => {
-      if (t === 'dead') return json(404, { error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] } });
-      if (t === 'badtoken') return json(400, { error: { status: 'INVALID_ARGUMENT', message: 'The registration token is not a valid FCM registration token' } });
-      if (t === 'badmsg') return json(400, { error: { status: 'INVALID_ARGUMENT', message: 'Invalid link' } });
+      if (t === 'dead')
+        return json(404, {
+          error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] },
+        });
+      if (t === 'badtoken')
+        return json(400, {
+          error: {
+            status: 'INVALID_ARGUMENT',
+            message: 'The registration token is not a valid FCM registration token',
+          },
+        });
+      if (t === 'badmsg')
+        return json(400, { error: { status: 'INVALID_ARGUMENT', message: 'Invalid link' } });
       if (t === 'quota') return json(429, { error: { status: 'RESOURCE_EXHAUSTED' } });
       return json(200, {});
     });
     const s = new FcmHttpPushSender(sa, '', fetchImpl);
-    const r = await s.send(['ok', 'dead', 'badtoken', 'badmsg', 'quota'], { title: 't', body: 'b' });
+    const r = await s.send(['ok', 'dead', 'badtoken', 'badmsg', 'quota'], {
+      title: 't',
+      body: 'b',
+    });
     expect(r.sent).toBe(1);
     expect(r.invalidTokens.sort()).toEqual(['badtoken', 'dead']);
   });
