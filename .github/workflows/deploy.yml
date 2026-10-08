@@ -83,6 +83,16 @@ jobs:
           DB_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME || 'seylane-sabz-db' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+          # `wrangler deploy` re-runs `[build] command = "npm run build"` (wrangler.toml) and that
+          # rebuild overwrites apps/web/dist, so the build-time VITE_* values must be present here
+          # too, otherwise the deployed site silently loses them (no web push, no API base).
+          VITE_API_BASE: ${{ vars.VITE_API_BASE }}
+          VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
         run: |
           set -e
           echo "Checking Cloudflare D1 database: $DB_NAME ..."
