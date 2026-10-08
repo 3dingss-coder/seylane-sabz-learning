@@ -49,9 +49,11 @@ describe('FcmHttpPushSender', () => {
     expect(r1).toEqual({ sent: 2, invalidTokens: [] });
     expect(r2.sent).toBe(1);
     expect(calls.filter((c) => c.url.includes('oauth2')).length).toBe(1);
-    const first = JSON.parse(calls.find((c) => c.url.includes('messages:send'))!.body);
+    const sendCall = calls.find((c) => c.url.includes('messages:send'));
+    if (!sendCall) throw new Error('no FCM send call');
+    const first = JSON.parse(sendCall.body);
     expect(first.message.webpush.fcm_options.link).toBe('https://academy-seylaneh.site/messages');
-    expect(calls.find((c) => c.url.includes('messages:send'))!.auth).toBe('Bearer ya29.test');
+    expect(sendCall.auth).toBe('Bearer ya29.test');
     expect(calls.some((c) => c.url.includes('/v1/projects/proj-1/messages:send'))).toBe(true);
   });
 
