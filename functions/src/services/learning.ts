@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { ids } from '../lib/ids';
 import { DAY, HOUR } from '../lib/time';
-import type { Doc } from '../store/types';
+import { newOpTrace, type Doc } from '../store/types';
 import type {
   Attempt,
   AttemptSnapshotItem,
@@ -272,13 +272,77 @@ export async function getProgress(d: Deps, user: Doc<User>, sectionId: string) {
   };
 }
 
+/** Log a progress request when it failed, hit a limit, or was slow; healthy fast beats stay silent. */
+const PROGRESS_SLOW_LOG_MS = 1_500;
+
+/**
+ * Progress heartbeat with one structured log line per failed/slow/limited request, carrying the
+ * request ID so it can be matched with the Cloudflare trace and the `X-Request-Id` response header.
+ * `queueWaitMs` / `d1DurationMs` / `d1Calls` cover the durable path (the transaction and the two
+ * writes after it); the reads in front of it and the analytics writes behind it are inside
+ * `totalDurationMs` only. Nothing sensitive is logged: no tokens, no request body.
+ */
 export async function recordProgress(
   d: Deps,
   user: Doc<User>,
   sectionId: string,
   input: z.infer<typeof heartbeatSchema>,
   idempotencyKey: string | undefined,
-  opts: { skipBudget?: boolean } = {},
+  opts: { skipBudget?: boolean; requestId?: string } = {},
+) {
+  const trace = newOpTrace(opts.requestId ?? 'none');
+  const store = d.store.scoped?.(trace) ?? d.store;
+  const started = Date.now();
+  let outcome: 'success' | 'duplicate' | 'failure' = 'failure';
+  let errorName: string | undefined;
+  let clientError = false;
+  try {
+    const res = await recordProgressInner(d, store, user, sectionId, input, idempotencyKey, opts);
+    outcome = res.duplicate ? 'duplicate' : 'success';
+    return res;
+  } catch (e) {
+    errorName = e instanceof Error ? e.name : 'unknown';
+    clientError = e instanceof ApiError && e.status < 500;
+    throw e;
+  } finally {
+    const totalDurationMs = Date.now() - started;
+    const limited = trace.d1Timeouts > 0 || trace.queueTimeouts > 0;
+    // Client mistakes (validation, locked section) are not incidents; only log what needs a look.
+    const incident = outcome === 'failure' && !clientError;
+    if (incident || limited || totalDurationMs >= PROGRESS_SLOW_LOG_MS) {
+      console.warn(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'progress',
+          operationName: 'recordProgress',
+          requestId: trace.requestId,
+          userId: user.id,
+          sectionId,
+          outcome,
+          success: outcome !== 'failure',
+          failure: outcome === 'failure',
+          timeout: limited || errorName === 'DeadlineError',
+          error: errorName,
+          totalDurationMs,
+          queueWaitMs: trace.queueWaitMs,
+          d1DurationMs: trace.d1DurationMs,
+          d1Calls: trace.d1Calls,
+          d1Timeouts: trace.d1Timeouts,
+          queueTimeouts: trace.queueTimeouts,
+        }),
+      );
+    }
+  }
+}
+
+async function recordProgressInner(
+  d: Deps,
+  store: Deps['store'],
+  user: Doc<User>,
+  sectionId: string,
+  input: z.infer<typeof heartbeatSchema>,
+  idempotencyKey: string | undefined,
+  opts: { skipBudget?: boolean },
 ) {
   const { section, pkg, sv } = await sectionForUser(d, user, sectionId);
   if (sv.state === 'locked') throw new ApiError('FORBIDDEN', LOCKED);
@@ -286,7 +350,7 @@ export async function recordProgress(
   const now = d.clock().toISOString();
   const path = `section_progress/${ids.progress(user.id, sectionId)}`;
   const key = idempotencyKey?.slice(0, 80);
-  const result = await d.store.runTransaction(async (tx) => {
+  const result = await store.runTransaction(async (tx) => {
     const prev = await tx.get<SectionProgress>(path);
     if (key && prev?.recentKeys?.includes(key)) return { duplicate: true, prev, next: null };
     let playedDeltaSec = input.playedDeltaSec;
@@ -338,7 +402,7 @@ export async function recordProgress(
     };
   }
   const nowD = d.clock();
-  await d.store.set(`playback_events/${d.store.newId()}`, {
+  await store.set(`playback_events/${store.newId()}`, {
     userId: user.id,
     sectionId,
     positionSec: input.positionSec,
@@ -350,7 +414,7 @@ export async function recordProgress(
     deviceId: input.deviceId ?? null,
     expireAt: new Date(nowD.getTime() + 90 * DAY),
   });
-  await d.store.update(`users/${user.id}`, { lastActiveAt: now });
+  await store.update(`users/${user.id}`, { lastActiveAt: now });
   if (!result.prev) {
     await track(d, 'section_played', user.id, { sectionId, mediaType: section.mediaType });
     const minutes = Math.max(1, Math.round(section.durationSec / 60));

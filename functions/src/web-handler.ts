@@ -53,7 +53,11 @@ async function resolveSigningSecret(store: DocStore, envSecret?: string): Promis
 
 /**
  * Builds `Deps` backed by Cloudflare D1 (with automatic schema creation + initial catalog seed).
- * Falls back to in-memory seeded store if `env.DB` is not bound yet so previews never 500.
+ *
+ * A missing `DB` binding is a deployment error, not something to paper over: the in-memory store
+ * would answer "success" and silently lose every write when the isolate recycles. It is therefore
+ * refused (the Worker turns this into a controlled 503) unless `ALLOW_MEMORY_STORE=on` is set
+ * explicitly, e.g. for a throwaway preview.
  */
 export async function buildCloudflareDeps(
   env: CloudflareEnv,
@@ -64,6 +68,11 @@ export async function buildCloudflareDeps(
     if (typeof v === 'string') stringEnv[k] = v;
   }
   const db = env.DB && typeof env.DB.prepare === 'function' ? env.DB : undefined;
+  if (!db && stringEnv.ALLOW_MEMORY_STORE !== 'on') {
+    throw new Error(
+      'D1 binding "DB" is missing; refusing to fall back to the in-memory store (set ALLOW_MEMORY_STORE=on to allow it)',
+    );
+  }
   const config = loadConfig({
     ...stringEnv,
     DATA_BACKEND: db ? 'd1' : 'memory',
@@ -185,7 +194,7 @@ function serveBytes(
 export function createFetchHandler(
   deps: Deps,
   handles: { limiter?: RateLimiter } = {},
-): (request: Request) => Promise<Response> {
+): (request: Request, requestId?: string) => Promise<Response> {
   const config = deps.config;
   const limiter =
     handles.limiter ?? new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale);
@@ -202,10 +211,12 @@ export function createFetchHandler(
   v1.use(managerRouter(deps, limiter));
   v1.use(adminRouter(deps, limiter));
 
-  return async (request: Request): Promise<Response> => {
+  return async (request: Request, givenRequestId?: string): Promise<Response> => {
+    const requestId = givenRequestId ?? request.headers.get('cf-ray') ?? randomBytesBase64Url(9);
     const url = new URL(request.url);
     const origin = request.headers.get('origin');
     const baseHeaders = securityHeaders(origin, url, config);
+    baseHeaders.set('X-Request-Id', requestId);
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: baseHeaders });
@@ -379,6 +390,7 @@ export function createFetchHandler(
         headers: headersObj,
         body: parsedBody,
         ip: clientIp,
+        requestId,
         get(name: string) {
           return headersObj[name.toLowerCase()];
         },

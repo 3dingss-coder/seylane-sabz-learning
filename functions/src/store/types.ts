@@ -46,7 +46,38 @@ export interface TxOps {
   update(path: string, data: Input): void;
 }
 
+/**
+ * Per-request timing the D1 store fills in while it serves one request's calls. It is passed in
+ * explicitly (Workers has no request-local storage without extra compatibility flags), so each
+ * request sees only its own queue wait and D1 time.
+ */
+export interface OpTrace {
+  requestId: string;
+  /** Time spent waiting behind other calls/transactions in the isolate. */
+  queueWaitMs: number;
+  /** Time spent inside D1 calls. */
+  d1DurationMs: number;
+  d1Calls: number;
+  /** D1 calls that hit the per-call time limit. */
+  d1Timeouts: number;
+  /** Waits that gave up on a predecessor that never finished (slow or abandoned request). */
+  queueTimeouts: number;
+}
+
+export function newOpTrace(requestId: string): OpTrace {
+  return {
+    requestId,
+    queueWaitMs: 0,
+    d1DurationMs: 0,
+    d1Calls: 0,
+    d1Timeouts: 0,
+    queueTimeouts: 0,
+  };
+}
+
 export interface DocStore {
+  /** Optional: a view of this store that records timing for one request into `trace`. */
+  scoped?(trace: OpTrace): DocStore;
   get<T>(path: string): Promise<Doc<T> | null>;
   getMany<T>(paths: string[]): Promise<Array<Doc<T> | null>>;
   query<T>(q: QuerySpec): Promise<Doc<T>[]>;

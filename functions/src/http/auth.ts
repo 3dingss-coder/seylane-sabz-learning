@@ -9,6 +9,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: Doc<User>;
+      /** Correlation ID for this request (Cloudflare ray ID when available). */
+      requestId?: string;
     }
   }
 }

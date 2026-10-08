@@ -1,3 +1,4 @@
+import { createGate, DeadlineError, waitSettled, withTimeout } from '../lib/bounded';
 import { randomBytesBase64Url } from '../lib/crypto';
 import { applyUpdate, cmp, deepMerge, getField, matches, splitPath } from './helpers';
 import {
@@ -7,6 +8,7 @@ import {
   type Doc,
   type DocStore,
   type Input,
+  type OpTrace,
   type QuerySpec,
   type TxOps,
 } from './types';
@@ -69,7 +71,11 @@ function markSchemaReady(db: D1Database): void {
   schemaReady.set(db, Promise.resolve());
 }
 
-/** DDL batch, run at most once per D1 binding per isolate (shared by the store and blob store). */
+/**
+ * DDL batch, run at most once per D1 binding per isolate (shared by the store and blob store).
+ * The promise is shared by every request in the isolate, so each caller waits on it with a timer of
+ * its own: if the request that started it is cancelled, later callers fail fast and retry fresh.
+ */
 export function ensureD1Schema(db: D1Database): Promise<void> {
   let p = schemaReady.get(db);
   if (!p) {
@@ -82,7 +88,11 @@ export function ensureD1Schema(db: D1Database): Promise<void> {
       });
     schemaReady.set(db, p);
   }
-  return p;
+  const shared = p;
+  return withTimeout(shared, D1_CALL_TIMEOUT_MS * 2, 'D1 schema').catch((err) => {
+    if (schemaReady.get(db) === shared) schemaReady.delete(db);
+    throw err;
+  });
 }
 
 function toPlainData(v: Input): Data {
@@ -130,44 +140,77 @@ function mentorGuideSnapshotVersion(snapshot: Record<string, Data>): string {
 const MAX_ROW_JSON = 1_800_000;
 
 /**
- * Upper bound for one D1 call / the one-time init. A stalled call must fail fast: the queue and
- * the init promise are shared by every request in an isolate, so one call that never settles would
- * otherwise freeze them all until the runtime cancels the Worker ("code had hung").
+ * Time limits. They are nested on purpose, not equal:
+ *   request budget (cloudflare-worker.ts)  >  D1 call  >  transaction queue wait  >  call queue wait
+ * Values are provisional: no production latency measurements were available when they were chosen.
+ * Check `queueWaitMs` / `d1DurationMs` in the progress log lines after deploy and tune from those.
  */
+/** One D1 call (and the one-time init). A stalled call must fail instead of waiting for the runtime. */
 export const D1_CALL_TIMEOUT_MS = 15_000;
+/** How long a D1 call waits behind earlier calls before it stops waiting and goes ahead. */
+export const D1_QUEUE_WAIT_MS = 5_000;
+/** How long a transaction waits behind earlier transactions before it goes ahead. */
+export const D1_TX_QUEUE_WAIT_MS = 10_000;
 
-function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([work, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
 const GET_MANY_CHUNK = 90;
 
-export class D1Store implements DocStore {
-  private initPromise: Promise<void> | null = null;
-  private queue: Promise<unknown> = Promise.resolve();
+interface SharedState {
+  /** True once init succeeded: the hot path then skips the init wait and its timer. */
+  ready: boolean;
+  initPromise: Promise<void> | null;
+  /** Serializes whole transactions (tail of the chain). Per isolate, shared by all requests. */
+  queue: Promise<void>;
   /** D1 allows 6 connections per invocation and runs one query at a time. Serialize SQL. */
-  private io: Promise<unknown> = Promise.resolve();
+  io: Promise<void>;
+}
+
+export class D1Store implements DocStore {
+  /**
+   * All mutable state lives here so that per-request views (`scoped`) share it instead of shadowing
+   * it. Every wait on this state is bounded by a timer owned by the waiter (see lib/bounded.ts).
+   */
+  private readonly shared: SharedState = {
+    ready: false,
+    initPromise: null,
+    queue: Promise.resolve(),
+    io: Promise.resolve(),
+  };
+  private trace: OpTrace | null = null;
 
   constructor(
     private readonly db: D1Database,
     private readonly seedSnapshot?: Record<string, Record<string, Data>>,
   ) {}
 
+  /** A view of this store that records one request's queue wait and D1 time into `trace`. */
+  scoped(trace: OpTrace): D1Store {
+    const view = Object.create(this) as D1Store;
+    view.trace = trace;
+    return view;
+  }
+
   async ensureReady(): Promise<void> {
-    if (!this.initPromise) {
-      this.initPromise = withTimeout(this.initialize(), D1_CALL_TIMEOUT_MS * 2, 'D1 init').catch(
+    const s = this.shared;
+    if (s.ready) return;
+    if (!s.initPromise) {
+      s.initPromise = withTimeout(this.initialize(), D1_CALL_TIMEOUT_MS * 2, 'D1 init').catch(
         (err) => {
-          this.initPromise = null;
+          s.initPromise = null;
           throw err;
         },
       );
     }
-    return this.initPromise;
+    const init = s.initPromise;
+    // The init promise belongs to whichever request started it. If that request was cancelled the
+    // promise (and the timer that guards it) never settle, so this caller waits with its own timer
+    // and, on expiry, clears the stale promise so the next request starts a fresh init.
+    try {
+      await withTimeout(init, D1_CALL_TIMEOUT_MS * 2, 'D1 init wait');
+      s.ready = true;
+    } catch (err) {
+      if (s.initPromise === init) s.initPromise = null;
+      throw err;
+    }
   }
 
   private async initialize(): Promise<void> {
@@ -225,17 +268,42 @@ export class D1Store implements DocStore {
     }
   }
 
-  /** Run one D1 call at a time so a Promise.all of reads cannot open a 7th connection. */
-  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.io.then(
-      () => withTimeout(fn(), D1_CALL_TIMEOUT_MS, 'D1 call'),
-      () => withTimeout(fn(), D1_CALL_TIMEOUT_MS, 'D1 call'),
-    );
-    this.io = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+  /**
+   * Run one D1 call at a time so a Promise.all of reads cannot open a 7th connection.
+   *
+   * Lifecycle: take a gate → wait (bounded, own timer) for the previous gate → run the call under
+   * its own time limit → release the gate in `finally`. If an earlier request was abandoned and
+   * never released its gate, this call gives up waiting after D1_QUEUE_WAIT_MS and proceeds.
+   * Going ahead only loosens the 6-connection courtesy; it cannot corrupt data.
+   */
+  private async enqueue<T>(fn: () => Promise<T>, op = 'call'): Promise<T> {
+    const s = this.shared;
+    const prev = s.io;
+    const gate = createGate();
+    s.io = gate.promise;
+    const trace = this.trace;
+    const wait = await waitSettled(prev, D1_QUEUE_WAIT_MS);
+    if (trace) {
+      trace.queueWaitMs += wait.waitedMs;
+      if (wait.timedOut) trace.queueTimeouts++;
+    }
+    if (wait.timedOut) logStore('queue_wait_timeout', { op, waitedMs: wait.waitedMs }, trace);
+    const started = Date.now();
+    try {
+      return await withTimeout(fn(), D1_CALL_TIMEOUT_MS, `D1 ${op}`);
+    } catch (err) {
+      if (err instanceof DeadlineError) {
+        if (trace) trace.d1Timeouts++;
+        logStore('d1_call_timeout', { op, ms: D1_CALL_TIMEOUT_MS }, trace);
+      }
+      throw err;
+    } finally {
+      if (trace) {
+        trace.d1DurationMs += Date.now() - started;
+        trace.d1Calls++;
+      }
+      gate.release();
+    }
   }
 
   /**
@@ -615,7 +683,9 @@ export class D1Store implements DocStore {
     }
   }
 
-  runTransaction<R>(fn: (tx: TxOps) => Promise<R>): Promise<R> {
+  async runTransaction<R>(fn: (tx: TxOps) => Promise<R>): Promise<R> {
+    const s = this.shared;
+    const trace = this.trace;
     const run = async () => {
       await this.ensureReady();
       const writes: Array<() => Promise<void>> = [];
@@ -630,8 +700,34 @@ export class D1Store implements DocStore {
       for (const w of writes) await w();
       return result;
     };
-    const next = this.queue.then(run, run);
-    this.queue = next.catch(() => undefined);
-    return next;
+    // Same pattern as `enqueue`: bounded wait on the previous transaction, gate released in
+    // `finally`. A failed transaction releases normally, so it can never poison the chain, and an
+    // abandoned one (its request cancelled) is skipped after D1_TX_QUEUE_WAIT_MS.
+    const prev = s.queue;
+    const gate = createGate();
+    s.queue = gate.promise;
+    const wait = await waitSettled(prev, D1_TX_QUEUE_WAIT_MS);
+    if (trace) {
+      trace.queueWaitMs += wait.waitedMs;
+      if (wait.timedOut) trace.queueTimeouts++;
+    }
+    if (wait.timedOut) logStore('tx_queue_wait_timeout', { waitedMs: wait.waitedMs }, trace);
+    try {
+      return await run();
+    } finally {
+      gate.release();
+    }
   }
+}
+
+function logStore(event: string, fields: Record<string, unknown>, trace: OpTrace | null): void {
+  console.warn(
+    JSON.stringify({
+      level: 'warn',
+      msg: 'd1-store',
+      event,
+      requestId: trace?.requestId ?? null,
+      ...fields,
+    }),
+  );
 }
