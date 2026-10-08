@@ -9,7 +9,8 @@ import { randomBytesBase64Url, utf8ByteLength } from './lib/crypto';
 import { systemClock } from './lib/time';
 import { GeminiClient } from './llm/gemini';
 import { DisabledMailer } from './mail/types';
-import { RecordingPushSender } from './push/types';
+import { FcmHttpPushSender, parseServiceAccount } from './push/fcm-http';
+import { RecordingPushSender, type PushSender } from './push/types';
 import { adminRouter } from './routes/admin';
 import { authRouter } from './routes/auth';
 import { healthRouter } from './routes/health';
@@ -30,6 +31,7 @@ export interface CloudflareEnv {
   LOCAL_AUTH_SECRET?: string;
   GEMINI_API_KEY?: string;
   GEMINI_MODEL?: string;
+  FCM_SERVICE_ACCOUNT_JSON?: string;
   APP_URL?: string;
   PLAYBACK_BUDGET?: string;
   RATE_LIMIT_SCALE?: string;
@@ -84,13 +86,25 @@ export async function buildCloudflareDeps(
       purgeAfterMigrate: stringEnv.R2_MIGRATE_PURGE === 'on',
       now: () => systemClock().getTime(),
     }),
-    push: new RecordingPushSender(),
+    push: buildPushSender(stringEnv),
     mail: new DisabledMailer(),
     llm: finalConfig.geminiApiKey
       ? new GeminiClient(finalConfig.geminiApiKey, finalConfig.geminiModel)
       : null,
     clock: systemClock,
   };
+}
+
+/** Real FCM delivery only when a valid service account is configured; never blocks startup. */
+function buildPushSender(env: Record<string, string | undefined>): PushSender {
+  const sa = parseServiceAccount(env.FCM_SERVICE_ACCOUNT_JSON);
+  if (!sa) {
+    if (env.FCM_SERVICE_ACCOUNT_JSON) {
+      console.warn('[push] FCM_SERVICE_ACCOUNT_JSON is set but invalid; push is disabled');
+    }
+    return new RecordingPushSender();
+  }
+  return new FcmHttpPushSender(sa, env.APP_URL ?? '');
 }
 
 function isOriginAllowed(origin: string, requestUrl: URL, allowedOrigins: string[]): boolean {
