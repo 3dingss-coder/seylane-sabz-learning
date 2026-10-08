@@ -68,6 +68,11 @@ jobs:
         env:
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
         run: npm run build
 
       - name: Provision Cloudflare D1 Database & Deploy Full-Stack Worker
@@ -77,6 +82,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DB_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME || 'seylane-sabz-db' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
         run: |
           set -e
           echo "Checking Cloudflare D1 database: $DB_NAME ..."
@@ -114,6 +120,11 @@ jobs:
           if [ -n "$GEMINI_API_KEY" ]; then
             echo "Syncing GEMINI_API_KEY to the Worker ..."
             printf '%s' "$GEMINI_API_KEY" | npx --yes wrangler@4 secret put GEMINI_API_KEY
+          fi
+
+          if [ -n "$FCM_SERVICE_ACCOUNT_JSON" ]; then
+            echo "Syncing FCM_SERVICE_ACCOUNT_JSON to the Worker ..."
+            printf '%s' "$FCM_SERVICE_ACCOUNT_JSON" | npx --yes wrangler@4 secret put FCM_SERVICE_ACCOUNT_JSON
           fi
 
       - name: Optional Deploy to Cloudflare Pages (if CLOUDFLARE_PAGES_PROJECT is set)
