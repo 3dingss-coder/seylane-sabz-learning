@@ -25,7 +25,8 @@ export interface AppHandles {
 export function createApp(deps: Deps, handles: Partial<AppHandles> = {}): Express {
   const config: AppConfig = deps.config;
   const limiter =
-    handles.limiter ?? new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale);
+    handles.limiter ??
+    new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale, deps.rateLimitStore);
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', deps.config.trustProxyHops);

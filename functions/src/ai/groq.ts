@@ -1,3 +1,4 @@
+import { base64ToBytes } from '../lib/crypto';
 import {
   AiError,
   approxTokens,
@@ -112,7 +113,7 @@ export class GroqProvider implements AiProvider {
   }
 
   async transcribe(req: TranscribeRequest): Promise<TranscriptResult> {
-    const bytes = Buffer.from(req.base64, 'base64');
+    const bytes = base64ToBytes(req.base64);
     if (!bytes.length) throw new AiError('Empty audio payload', this.id, 'transcribe', false);
     const form = new FormData();
     form.append('file', new Blob([bytes], { type: req.mime }), `turn.${extFor(req.mime)}`);

@@ -342,6 +342,8 @@ function YouTubeView({
   cbs.current = { onTime, onDuration };
 
   useEffect(() => {
+    setState('loading');
+    setReportedYt(false);
     let player: YTPlayer | null = null;
     let timer: number | undefined;
     let disposed = false;

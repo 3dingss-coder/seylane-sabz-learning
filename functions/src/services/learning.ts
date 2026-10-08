@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { ids } from '../lib/ids';
 import { DAY, HOUR } from '../lib/time';
-import type { Doc } from '../store/types';
+import { userTransactionScope, type Doc } from '../store/types';
 import type {
+  Assignment,
   Attempt,
   AttemptSnapshotItem,
   Message,
@@ -15,8 +16,9 @@ import type {
   SectionProgress,
   User,
 } from '../domain/types';
-import { getPolicy, track, type Deps } from './context';
+import { getPolicy, track, trackInTransaction, type Deps } from './context';
 import {
+  assignmentApplies,
   computeNextItem,
   effectiveDeadlineAt,
   loadUserLearning,
@@ -128,6 +130,76 @@ async function sectionForUser(d: Deps, user: Doc<User>, sectionId: string) {
   const sv = view.sections.find((s) => s.id === sectionId);
   if (!sv) throw new ApiError('NOT_FOUND', 'این قسمت پیدا نشد.');
   return { section, pkg, view, sv };
+}
+
+/**
+ * Progress only needs access to one package and its existing progress, not the full catalog view.
+ * Keep the same visibility rule as computeUserPackages: published+assigned, or already started
+ * and not draft. Targeted reads avoid loading every user completion, all assignments and catalog
+ * data before a heartbeat transaction.
+ */
+async function sectionForProgress(d: Deps, user: Doc<User>, sectionId: string) {
+  const { section, pkg } = await sectionIndex(d, sectionId);
+  const pkgSection = pkg.sections.find((candidate) => candidate.id === sectionId);
+  if (!pkgSection) throw new ApiError('NOT_FOUND', 'این قسمت پیدا نشد.');
+
+  const progressRows =
+    pkg.status === 'draft'
+      ? []
+      : await d.store.query<SectionProgress>({
+          collection: 'section_progress',
+          where: [
+            ['userId', '==', user.id],
+            ['packageId', '==', pkg.id],
+          ],
+        });
+  const started = progressRows.length > 0;
+  let assigned = false;
+  if (!started && pkg.status === 'published') {
+    const assignmentQueries = [
+      d.store.query<Assignment>({
+        collection: 'assignments',
+        where: [['type', '==', 'global']],
+      }),
+      d.store.query<Assignment>({
+        collection: 'assignments',
+        where: [
+          ['type', '==', 'user'],
+          ['targetId', '==', user.id],
+        ],
+      }),
+      ...(user.teamId
+        ? [
+            d.store.query<Assignment>({
+              collection: 'assignments',
+              where: [
+                ['type', '==', 'team'],
+                ['targetId', '==', user.teamId],
+              ],
+            }),
+          ]
+        : []),
+      ...[...new Set(user.brandIds)].map((brandId) =>
+        d.store.query<Assignment>({
+          collection: 'assignments',
+          where: [
+            ['type', '==', 'brand'],
+            ['targetId', '==', brandId],
+          ],
+        }),
+      ),
+    ];
+    const assignments = (await Promise.all(assignmentQueries)).flat();
+    assigned = assignments.some(
+      (assignment) => assignmentApplies(assignment, user) && assignment.packageIds.includes(pkg.id),
+    );
+  }
+
+  const visible = (pkg.status === 'published' && assigned) || (started && pkg.status !== 'draft');
+  const sectionStarted = progressRows.some((progress) => progress.sectionId === sectionId);
+  if (!visible || (pkgSection.archived && !sectionStarted))
+    throw new ApiError('NOT_FOUND', 'این قسمت پیدا نشد.');
+  return { section, pkg };
 }
 
 export async function mySection(d: Deps, user: Doc<User>, sectionId: string) {
@@ -280,53 +352,82 @@ export async function recordProgress(
   idempotencyKey: string | undefined,
   opts: { skipBudget?: boolean } = {},
 ) {
-  const { section, pkg, sv } = await sectionForUser(d, user, sectionId);
-  if (sv.state === 'locked') throw new ApiError('FORBIDDEN', LOCKED);
+  const { section, pkg } = await sectionForProgress(d, user, sectionId);
   const policy = await getPolicy(d);
   const now = d.clock().toISOString();
   const path = `section_progress/${ids.progress(user.id, sectionId)}`;
   const key = idempotencyKey?.slice(0, 80);
-  const result = await d.store.runTransaction(async (tx) => {
-    const prev = await tx.get<SectionProgress>(path);
-    if (key && prev?.recentKeys?.includes(key)) return { duplicate: true, prev, next: null };
-    let playedDeltaSec = input.playedDeltaSec;
-    if (!opts.skipBudget) {
-      const budgetPath = `playback_budgets/${user.id}`;
-      const spent = spendBudget(
-        await tx.get<PlaybackBudget>(budgetPath),
-        d.clock().getTime(),
-        Math.min(MAX_DELTA, playedDeltaSec),
+  const result = await d.store.runTransaction(
+    async (tx) => {
+      const prev = await tx.get<SectionProgress>(path);
+      if (key && prev?.recentKeys?.includes(key)) return { duplicate: true, prev, next: null };
+      let playedDeltaSec = input.playedDeltaSec;
+      if (!opts.skipBudget) {
+        const budgetPath = `playback_budgets/${user.id}`;
+        const spent = spendBudget(
+          await tx.get<PlaybackBudget>(budgetPath),
+          d.clock().getTime(),
+          Math.min(MAX_DELTA, playedDeltaSec),
+        );
+        playedDeltaSec = spent.acceptedSec;
+        tx.set(budgetPath, spent.next as unknown as Record<string, unknown>);
+      }
+      const next = applyHeartbeat(
+        prev,
+        { ...input, playedDeltaSec },
+        section.durationSec,
+        policy.completionThreshold,
       );
-      playedDeltaSec = spent.acceptedSec;
-      tx.set(budgetPath, spent.next as unknown as Record<string, unknown>);
-    }
-    const next = applyHeartbeat(
-      prev,
-      { ...input, playedDeltaSec },
-      section.durationSec,
-      policy.completionThreshold,
-    );
-    const recentKeys = key
-      ? [...(prev?.recentKeys ?? []), key].slice(-30)
-      : (prev?.recentKeys ?? []);
-    const doc: SectionProgress = {
-      userId: user.id,
-      sectionId,
-      packageId: pkg.id,
-      playedSeconds: next.playedSeconds,
-      percent: next.percent,
-      completed: next.completed,
-      completedAt: prev?.completedAt ?? (next.justCompleted ? now : null),
-      lastPositionSec: next.lastPositionSec,
-      quizPassed: prev?.quizPassed ?? false,
-      quizPassedAt: prev?.quizPassedAt ?? null,
-      recentKeys,
-      startedAt: prev?.startedAt ?? now,
-      updatedAt: now,
-    };
-    tx.set(path, doc as unknown as Record<string, unknown>);
-    return { duplicate: false, prev, next: doc, justCompleted: next.justCompleted };
-  });
+      const recentKeys = key
+        ? [...(prev?.recentKeys ?? []), key].slice(-30)
+        : (prev?.recentKeys ?? []);
+      const doc: SectionProgress = {
+        userId: user.id,
+        sectionId,
+        packageId: pkg.id,
+        playedSeconds: next.playedSeconds,
+        percent: next.percent,
+        completed: next.completed,
+        completedAt: prev?.completedAt ?? (next.justCompleted ? now : null),
+        lastPositionSec: next.lastPositionSec,
+        quizPassed: prev?.quizPassed ?? false,
+        quizPassedAt: prev?.quizPassedAt ?? null,
+        recentKeys,
+        startedAt: prev?.startedAt ?? now,
+        updatedAt: now,
+      };
+      tx.set(path, doc as unknown as Record<string, unknown>);
+      const eventNow = d.clock();
+      tx.set(`playback_events/${d.store.newId()}`, {
+        userId: user.id,
+        sectionId,
+        positionSec: input.positionSec,
+        playedDeltaSec: input.playedDeltaSec,
+        acceptedDeltaSec: Math.round((next.playedSeconds - (prev?.playedSeconds ?? 0)) * 10) / 10,
+        clientTs: input.ts ?? null,
+        ts: now,
+        deviceId: input.deviceId ?? null,
+        expireAt: new Date(eventNow.getTime() + 90 * DAY),
+      });
+      tx.update(`users/${user.id}`, { lastActiveAt: now });
+      trackInTransaction(d, tx, 'playback_heartbeat', user.id, {
+        sectionId,
+        deltaSec: input.playedDeltaSec,
+      });
+      if (!prev)
+        trackInTransaction(d, tx, 'section_played', user.id, {
+          sectionId,
+          mediaType: section.mediaType,
+        });
+      if (next.justCompleted)
+        trackInTransaction(d, tx, 'section_completed', user.id, {
+          sectionId,
+          elapsedSec: next.playedSeconds,
+        });
+      return { duplicate: false, prev, next: doc, justCompleted: next.justCompleted };
+    },
+    { scope: userTransactionScope(user.id) },
+  );
   if (result.duplicate || !result.next) {
     const p = result.prev;
     return {
@@ -337,22 +438,7 @@ export async function recordProgress(
       duplicate: true,
     };
   }
-  const nowD = d.clock();
-  await d.store.set(`playback_events/${d.store.newId()}`, {
-    userId: user.id,
-    sectionId,
-    positionSec: input.positionSec,
-    playedDeltaSec: input.playedDeltaSec,
-    acceptedDeltaSec:
-      Math.round((result.next.playedSeconds - (result.prev?.playedSeconds ?? 0)) * 10) / 10,
-    clientTs: input.ts ?? null,
-    ts: now,
-    deviceId: input.deviceId ?? null,
-    expireAt: new Date(nowD.getTime() + 90 * DAY),
-  });
-  await d.store.update(`users/${user.id}`, { lastActiveAt: now });
   if (!result.prev) {
-    await track(d, 'section_played', user.id, { sectionId, mediaType: section.mediaType });
     const minutes = Math.max(1, Math.round(section.durationSec / 60));
     await createNudge(
       d,
@@ -363,13 +449,6 @@ export async function recordProgress(
       sectionId,
     );
     await maybeReengaged(d, user.id);
-  }
-  await track(d, 'playback_heartbeat', user.id, { sectionId, deltaSec: input.playedDeltaSec });
-  if ('justCompleted' in result && result.justCompleted) {
-    await track(d, 'section_completed', user.id, {
-      sectionId,
-      elapsedSec: result.next.playedSeconds,
-    });
   }
   return {
     percent: result.next.percent,
@@ -525,77 +604,80 @@ export async function startAttempt(d: Deps, user: Doc<User>, quizId: string) {
   if (questions.length === 0)
     throw new ApiError('CONFLICT', 'آزمونی برای این قسمت تعریف نشده است. به مدیر اطلاع داده شد.');
   const policy = await getPolicy(d);
-  const res = await d.store.runTransaction(async (tx) => {
-    const attempts = await tx.query<Attempt>({
-      collection: 'attempts',
-      where: [
-        ['userId', '==', user.id],
-        ['quizId', '==', quizId],
-      ],
-    });
-    const approved = await tx.query<RetakeRequest>({
-      collection: 'retake_requests',
-      where: [
-        ['userId', '==', user.id],
-        ['quizId', '==', quizId],
-        ['status', '==', 'approved'],
-      ],
-    });
-    const inProgress = attempts.find((a) => a.status === 'in_progress');
-    if (inProgress)
-      return { attemptId: inProgress.id, attemptNumber: inProgress.attemptNumber, resumed: true };
-    if (attempts.some((a) => a.passed))
-      throw new ApiError('CONFLICT', 'شما قبلاً در این آزمون قبول شده‌اید.');
-    const max =
-      (quiz.maxAttempts ?? policy.maxAttempts) +
-      approved.reduce((a, r) => a + (r.grantedAttempts || 1), 0);
-    if (attempts.length >= max)
-      throw new ApiError(
-        'CONFLICT',
-        'تلاش‌های شما تمام شده است. می‌توانید درخواست تلاش مجدد بدهید.',
-        { reason: 'attempts_exhausted' },
-      );
-    const lastSubmitted = attempts
-      .filter((x) => x.status === 'submitted')
-      .sort((x, y) => x.attemptNumber - y.attemptNumber)
-      .pop();
-    if (
-      lastSubmitted &&
-      !lastSubmitted.passed &&
-      !view.sections.some((s) => !s.archived && s.mediaCompleted)
-    )
-      throw new ApiError(
-        'CONFLICT',
-        'نمره‌ات زیر حد قبولی بود. برای تلاش دوباره، یک بار ویدیو را ببین یا پادکست را گوش بده.',
-        { reason: 'rewatch_required' },
-      );
-    const n = attempts.length + 1;
-    const snapshot: AttemptSnapshotItem[] = questions.map((q) => ({
-      questionId: q.id,
-      answerKey: q.answerKey,
-      optionKeys: q.options.map((o) => o.key),
-      version: q.version,
-    }));
-    const attempt: Attempt = {
-      quizId,
-      userId: user.id,
-      sectionId: quiz.sectionId,
-      packageId: view.id,
-      attemptNumber: n,
-      status: 'in_progress',
-      answers: {},
-      score: null,
-      passed: null,
-      passScore: quiz.passScore ?? policy.passScore, // policy snapshot (edge case 27.2)
-      quizVersion: quiz.version,
-      snapshot,
-      startedAt: d.clock().toISOString(),
-      submittedAt: null,
-    };
-    const id = ids.attempt(user.id, quizId, n);
-    tx.create(`attempts/${id}`, attempt as unknown as Record<string, unknown>);
-    return { attemptId: id, attemptNumber: n, resumed: false };
-  });
+  const res = await d.store.runTransaction(
+    async (tx) => {
+      const attempts = await tx.query<Attempt>({
+        collection: 'attempts',
+        where: [
+          ['userId', '==', user.id],
+          ['quizId', '==', quizId],
+        ],
+      });
+      const approved = await tx.query<RetakeRequest>({
+        collection: 'retake_requests',
+        where: [
+          ['userId', '==', user.id],
+          ['quizId', '==', quizId],
+          ['status', '==', 'approved'],
+        ],
+      });
+      const inProgress = attempts.find((a) => a.status === 'in_progress');
+      if (inProgress)
+        return { attemptId: inProgress.id, attemptNumber: inProgress.attemptNumber, resumed: true };
+      if (attempts.some((a) => a.passed))
+        throw new ApiError('CONFLICT', 'شما قبلاً در این آزمون قبول شده‌اید.');
+      const max =
+        (quiz.maxAttempts ?? policy.maxAttempts) +
+        approved.reduce((a, r) => a + (r.grantedAttempts || 1), 0);
+      if (attempts.length >= max)
+        throw new ApiError(
+          'CONFLICT',
+          'تلاش‌های شما تمام شده است. می‌توانید درخواست تلاش مجدد بدهید.',
+          { reason: 'attempts_exhausted' },
+        );
+      const lastSubmitted = attempts
+        .filter((x) => x.status === 'submitted')
+        .sort((x, y) => x.attemptNumber - y.attemptNumber)
+        .pop();
+      if (
+        lastSubmitted &&
+        !lastSubmitted.passed &&
+        !view.sections.some((s) => !s.archived && s.mediaCompleted)
+      )
+        throw new ApiError(
+          'CONFLICT',
+          'نمره‌ات زیر حد قبولی بود. برای تلاش دوباره، یک بار ویدیو را ببین یا پادکست را گوش بده.',
+          { reason: 'rewatch_required' },
+        );
+      const n = attempts.length + 1;
+      const snapshot: AttemptSnapshotItem[] = questions.map((q) => ({
+        questionId: q.id,
+        answerKey: q.answerKey,
+        optionKeys: q.options.map((o) => o.key),
+        version: q.version,
+      }));
+      const attempt: Attempt = {
+        quizId,
+        userId: user.id,
+        sectionId: quiz.sectionId,
+        packageId: view.id,
+        attemptNumber: n,
+        status: 'in_progress',
+        answers: {},
+        score: null,
+        passed: null,
+        passScore: quiz.passScore ?? policy.passScore, // policy snapshot (edge case 27.2)
+        quizVersion: quiz.version,
+        snapshot,
+        startedAt: d.clock().toISOString(),
+        submittedAt: null,
+      };
+      const id = ids.attempt(user.id, quizId, n);
+      tx.create(`attempts/${id}`, attempt as unknown as Record<string, unknown>);
+      return { attemptId: id, attemptNumber: n, resumed: false };
+    },
+    { scope: userTransactionScope(user.id) },
+  );
   if (!res.resumed)
     await track(d, 'quiz_started', user.id, { quizId, attemptNumber: res.attemptNumber });
   return res;
@@ -630,70 +712,73 @@ export async function submitAttempt(
 ) {
   const path = `attempts/${attemptId}`;
   const now = d.clock().toISOString();
-  const outcome = await d.store.runTransaction(async (tx) => {
-    const a = await tx.get<Attempt>(path);
-    if (!a || a.userId !== user.id) throw new ApiError('NOT_FOUND', 'این تلاش پیدا نشد.');
-    if (a.status === 'submitted')
-      return { a, fresh: false, g: grade(a.snapshot, a.answers, a.passScore) };
-    const missing = a.snapshot.filter((s) => !input.answers[s.questionId]);
-    if (missing.length)
-      throw new ApiError(
-        'VALIDATION',
-        `به همه سؤال‌ها پاسخ دهید (${missing.length} سؤال بی‌پاسخ).`,
-        { missing: missing.map((m) => m.questionId) },
+  const outcome = await d.store.runTransaction(
+    async (tx) => {
+      const a = await tx.get<Attempt>(path);
+      if (!a || a.userId !== user.id) throw new ApiError('NOT_FOUND', 'این تلاش پیدا نشد.');
+      if (a.status === 'submitted')
+        return { a, fresh: false, g: grade(a.snapshot, a.answers, a.passScore) };
+      const missing = a.snapshot.filter((s) => !input.answers[s.questionId]);
+      if (missing.length)
+        throw new ApiError(
+          'VALIDATION',
+          `به همه سؤال‌ها پاسخ دهید (${missing.length} سؤال بی‌پاسخ).`,
+          { missing: missing.map((m) => m.questionId) },
+        );
+      for (const s of a.snapshot) {
+        const ans = input.answers[s.questionId];
+        if (ans && !s.optionKeys.includes(ans))
+          throw new ApiError('VALIDATION', 'یکی از پاسخ‌ها معتبر نیست.');
+      }
+      const answers = Object.fromEntries(
+        a.snapshot.map((s) => [s.questionId, input.answers[s.questionId] ?? '']),
       );
-    for (const s of a.snapshot) {
-      const ans = input.answers[s.questionId];
-      if (ans && !s.optionKeys.includes(ans))
-        throw new ApiError('VALIDATION', 'یکی از پاسخ‌ها معتبر نیست.');
-    }
-    const answers = Object.fromEntries(
-      a.snapshot.map((s) => [s.questionId, input.answers[s.questionId] ?? '']),
-    );
-    const g = grade(a.snapshot, answers, a.passScore);
-    tx.update(path, {
-      status: 'submitted',
-      answers,
-      score: g.score,
-      passed: g.passed,
-      submittedAt: now,
-    });
-    if (g.passed) {
-      const pPath = `section_progress/${ids.progress(user.id, a.sectionId)}`;
-      tx.set(pPath, { quizPassed: true, quizPassedAt: now, updatedAt: now }, { merge: true });
-    } else {
-      // Failed (< pass mark): clear the package's playback so the content has to be watched or
-      // listened to again before the next attempt can start.
-      const prog = await tx.query<SectionProgress>({
-        collection: 'section_progress',
-        where: [
-          ['userId', '==', user.id],
-          ['packageId', '==', a.packageId],
-        ],
-      });
-      for (const p of prog)
-        tx.update(`section_progress/${p.id}`, {
-          completed: false,
-          completedAt: null,
-          percent: 0,
-          playedSeconds: 0,
-          lastPositionSec: 0,
-          updatedAt: now,
-        });
-    }
-    return {
-      a: {
-        ...a,
+      const g = grade(a.snapshot, answers, a.passScore);
+      tx.update(path, {
+        status: 'submitted',
         answers,
-        status: 'submitted' as const,
         score: g.score,
         passed: g.passed,
         submittedAt: now,
-      },
-      fresh: true,
-      g,
-    };
-  });
+      });
+      if (g.passed) {
+        const pPath = `section_progress/${ids.progress(user.id, a.sectionId)}`;
+        tx.set(pPath, { quizPassed: true, quizPassedAt: now, updatedAt: now }, { merge: true });
+      } else {
+        // Failed (< pass mark): clear the package's playback so the content has to be watched or
+        // listened to again before the next attempt can start.
+        const prog = await tx.query<SectionProgress>({
+          collection: 'section_progress',
+          where: [
+            ['userId', '==', user.id],
+            ['packageId', '==', a.packageId],
+          ],
+        });
+        for (const p of prog)
+          tx.update(`section_progress/${p.id}`, {
+            completed: false,
+            completedAt: null,
+            percent: 0,
+            playedSeconds: 0,
+            lastPositionSec: 0,
+            updatedAt: now,
+          });
+      }
+      return {
+        a: {
+          ...a,
+          answers,
+          status: 'submitted' as const,
+          score: g.score,
+          passed: g.passed,
+          submittedAt: now,
+        },
+        fresh: true,
+        g,
+      };
+    },
+    { scope: userTransactionScope(user.id) },
+  );
   const { a, g } = outcome;
   const quiz = await d.store.get<Quiz>(`quizzes/${a.quizId}`);
   const allowance = quiz ? await attemptAllowance(d, user.id, quiz) : null;
@@ -870,33 +955,70 @@ async function onPackageCompleted(d: Deps, user: Doc<User>, pkg: Doc<Package>): 
 // ─── Retake requests (F4 AC④ / F11) ─────────────────────────────────────────
 export async function requestRetake(d: Deps, user: Doc<User>, quizId: string) {
   const { quiz, view } = await quizContext(d, user, quizId);
-  const allowance = await attemptAllowance(d, user.id, quiz);
-  const submitted = allowance.attempts.filter((a) => a.status === 'submitted');
-  if (submitted.some((a) => a.passed))
-    throw new ApiError('CONFLICT', 'شما در این آزمون قبول شده‌اید.');
-  if (submitted.length < allowance.max)
-    throw new ApiError('CONFLICT', 'هنوز تلاش باقی‌مانده دارید.');
-  if (allowance.pending)
-    return { id: allowance.pending.id, status: 'pending' as const, existing: true };
-  const last = submitted[submitted.length - 1];
+  const policy = await getPolicy(d);
   const id = d.store.newId();
-  const escalated = allowance.approvedCount >= 2; // edge case 27.2: after 2 approved retakes → admin
-  const req: RetakeRequest = {
-    userId: user.id,
-    teamId: user.teamId,
-    quizId,
-    sectionId: quiz.sectionId,
-    packageId: view.id,
-    lastAttemptId: last?.id ?? '',
-    status: 'pending',
-    grantedAttempts: 1,
-    reviewedBy: null,
-    reviewNote: null,
-    escalated,
-    createdAt: d.clock().toISOString(),
-    reviewedAt: null,
-  };
-  await d.store.set(`retake_requests/${id}`, req as unknown as Record<string, unknown>);
+  const result = await d.store.runTransaction(
+    async (tx) => {
+      const [attempts, approved, pending] = await Promise.all([
+        tx.query<Attempt>({
+          collection: 'attempts',
+          where: [
+            ['userId', '==', user.id],
+            ['quizId', '==', quizId],
+          ],
+        }),
+        tx.query<RetakeRequest>({
+          collection: 'retake_requests',
+          where: [
+            ['userId', '==', user.id],
+            ['quizId', '==', quizId],
+            ['status', '==', 'approved'],
+          ],
+        }),
+        tx.query<RetakeRequest>({
+          collection: 'retake_requests',
+          where: [
+            ['userId', '==', user.id],
+            ['quizId', '==', quizId],
+            ['status', '==', 'pending'],
+          ],
+        }),
+      ]);
+      const submitted = attempts.filter((attempt) => attempt.status === 'submitted');
+      if (submitted.some((attempt) => attempt.passed))
+        throw new ApiError('CONFLICT', 'شما در این آزمون قبول شده‌اید.');
+      const max =
+        (quiz.maxAttempts ?? policy.maxAttempts) +
+        approved.reduce((sum, request) => sum + (request.grantedAttempts || 1), 0);
+      if (submitted.length < max) throw new ApiError('CONFLICT', 'هنوز تلاش باقی‌مانده دارید.');
+      if (pending[0]) return { id: pending[0].id, existing: true as const, request: null };
+
+      const last = submitted.sort((a, b) => a.attemptNumber - b.attemptNumber).pop();
+      const escalated = approved.length >= 2; // edge case 27.2: after 2 approved retakes → admin
+      const req: RetakeRequest = {
+        userId: user.id,
+        teamId: user.teamId,
+        quizId,
+        sectionId: quiz.sectionId,
+        packageId: view.id,
+        lastAttemptId: last?.id ?? '',
+        status: 'pending',
+        grantedAttempts: 1,
+        reviewedBy: null,
+        reviewNote: null,
+        escalated,
+        createdAt: d.clock().toISOString(),
+        reviewedAt: null,
+      };
+      tx.create(`retake_requests/${id}`, req as unknown as Record<string, unknown>);
+      return { id, existing: false as const, request: req };
+    },
+    { scope: userTransactionScope(user.id) },
+  );
+  if (result.existing) return { id: result.id, status: 'pending' as const, existing: true };
+  const req = result.request;
+  if (!req) throw new Error('Retake request transaction did not return its request.');
+  const escalated = req.escalated;
   await track(d, 'retake_requested', user.id, { quizId });
   const section = view.sections.find((s) => s.id === quiz.sectionId);
   const title = section?.title ?? view.title;

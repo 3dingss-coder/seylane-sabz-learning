@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'RATE_LIMIT'
+  | 'UNAVAILABLE'
   | 'INTERNAL';
 
 export const HTTP_STATUS: Record<ErrorCode, number> = {
@@ -19,6 +20,7 @@ export const HTTP_STATUS: Record<ErrorCode, number> = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   RATE_LIMIT: 429,
+  UNAVAILABLE: 503,
   INTERNAL: 500,
 };
 
@@ -30,6 +32,7 @@ export const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   NOT_FOUND: 'موردی که دنبالش هستید پیدا نشد.',
   CONFLICT: 'این درخواست با وضعیت فعلی سازگار نیست.',
   RATE_LIMIT: 'درخواست‌ها زیاد بود. کمی صبر کنید و دوباره تلاش کنید.',
+  UNAVAILABLE: 'این خدمت فعلاً در دسترس نیست. کمی بعد دوباره تلاش کنید.',
   INTERNAL: 'مشکلی پیش آمد. لطفاً کمی بعد دوباره تلاش کنید.',
 };
 

@@ -4,12 +4,13 @@ import { loadConfig, type AppConfig } from './config';
 import { authenticate } from './http/auth';
 import { ApiError, toErrorBody } from './http/errors';
 import { RateLimiter, rateLimit } from './http/rateLimit';
+import { D1RateLimitStore } from './http/rateLimitD1';
 import { Router } from './http/router';
 import { randomBytesBase64Url, utf8ByteLength } from './lib/crypto';
 import { systemClock } from './lib/time';
 import { GeminiClient } from './llm/gemini';
 import { DisabledMailer } from './mail/types';
-import { RecordingPushSender } from './push/types';
+import { DisabledPushSender } from './push/types';
 import { adminRouter } from './routes/admin';
 import { authRouter } from './routes/auth';
 import { healthRouter } from './routes/health';
@@ -52,8 +53,8 @@ async function resolveSigningSecret(store: DocStore, envSecret?: string): Promis
 }
 
 /**
- * Builds `Deps` backed by Cloudflare D1 (with automatic schema creation + initial catalog seed).
- * Falls back to in-memory seeded store if `env.DB` is not bound yet so previews never 500.
+ * Builds Cloudflare dependencies. Production fails closed when D1 is absent; in-memory fallback is
+ * limited to explicitly non-production previews/local runs.
  */
 export async function buildCloudflareDeps(
   env: CloudflareEnv,
@@ -64,13 +65,18 @@ export async function buildCloudflareDeps(
     if (typeof v === 'string') stringEnv[k] = v;
   }
   const db = env.DB && typeof env.DB.prepare === 'function' ? env.DB : undefined;
+  const requestedEnv = stringEnv.APP_ENV ?? 'dev';
   const config = loadConfig({
     ...stringEnv,
     DATA_BACKEND: db ? 'd1' : 'memory',
-    APP_ENV: stringEnv.APP_ENV ?? 'dev',
-    PLAYBACK_BUDGET: stringEnv.PLAYBACK_BUDGET ?? 'off',
-    RATE_LIMIT_SCALE: stringEnv.RATE_LIMIT_SCALE ?? '20',
+    APP_ENV: requestedEnv,
+    PLAYBACK_BUDGET: stringEnv.PLAYBACK_BUDGET ?? (requestedEnv === 'prod' ? 'on' : 'off'),
+    RATE_LIMIT_SCALE: stringEnv.RATE_LIMIT_SCALE ?? '1',
   });
+  if (config.env === 'prod' && !db)
+    throw new Error(
+      'Cloudflare production requires the D1 binding `DB`; memory fallback is disabled.',
+    );
   const store: DocStore = db ? new D1Store(db, seedSnapshot) : new InMemoryStore(seedSnapshot);
   const secret = await resolveSigningSecret(store, stringEnv.LOCAL_AUTH_SECRET);
   const finalConfig: AppConfig = { ...config, localSecret: secret };
@@ -78,13 +84,14 @@ export async function buildCloudflareDeps(
     config: finalConfig,
     store,
     auth: new MemoryAuthProvider(store, secret, () => systemClock().getTime()),
+    ...(db ? { rateLimitStore: new D1RateLimitStore(db) } : {}),
     blob: new CloudflareBlobStore(secret, {
       db,
       r2: env.MEDIA_BUCKET,
       purgeAfterMigrate: stringEnv.R2_MIGRATE_PURGE === 'on',
       now: () => systemClock().getTime(),
     }),
-    push: new RecordingPushSender(),
+    push: new DisabledPushSender(),
     mail: new DisabledMailer(),
     llm: finalConfig.geminiApiKey
       ? new GeminiClient(finalConfig.geminiApiKey, finalConfig.geminiModel)
@@ -188,7 +195,8 @@ export function createFetchHandler(
 ): (request: Request) => Promise<Response> {
   const config = deps.config;
   const limiter =
-    handles.limiter ?? new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale);
+    handles.limiter ??
+    new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale, deps.rateLimitStore);
 
   const v1 = Router();
   v1.use(healthRouter(config));

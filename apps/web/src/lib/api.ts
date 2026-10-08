@@ -14,6 +14,7 @@ export type ErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'RATE_LIMIT'
+  | 'UNAVAILABLE'
   | 'INTERNAL'
   | 'NETWORK';
 

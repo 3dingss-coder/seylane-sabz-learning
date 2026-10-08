@@ -1,4 +1,4 @@
-import type { Doc } from '../store/types';
+import { userTransactionScope, type Doc } from '../store/types';
 import type { Badge, PointsEntry, PointsReason, User, UserBadge } from '../domain/types';
 import { ids } from '../lib/ids';
 import { track, type Deps } from './context';
@@ -66,22 +66,25 @@ export async function awardPoints(
 ): Promise<boolean> {
   if (!amount) return false;
   const ledgerPath = `points_ledger/${ids.points(userId, reason, refId)}`;
-  const awarded = await d.store.runTransaction(async (tx) => {
-    const existing = await tx.get(ledgerPath);
-    if (existing) return false;
-    const user = await tx.get<User>(`users/${userId}`);
-    if (!user) return false;
-    const entry: PointsEntry = {
-      userId,
-      amount,
-      reason,
-      refId,
-      createdAt: d.clock().toISOString(),
-    };
-    tx.create(ledgerPath, entry as unknown as Record<string, unknown>);
-    tx.update(`users/${userId}`, { pointsBalance: (user.pointsBalance ?? 0) + amount });
-    return true;
-  });
+  const awarded = await d.store.runTransaction(
+    async (tx) => {
+      const existing = await tx.get(ledgerPath);
+      if (existing) return false;
+      const user = await tx.get<User>(`users/${userId}`);
+      if (!user) return false;
+      const entry: PointsEntry = {
+        userId,
+        amount,
+        reason,
+        refId,
+        createdAt: d.clock().toISOString(),
+      };
+      tx.create(ledgerPath, entry as unknown as Record<string, unknown>);
+      tx.update(`users/${userId}`, { pointsBalance: (user.pointsBalance ?? 0) + amount });
+      return true;
+    },
+    { scope: userTransactionScope(userId) },
+  );
   if (awarded) await track(d, 'points_earned', userId, { amount, reason });
   return awarded;
 }

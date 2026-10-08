@@ -20,10 +20,21 @@ import type { AuthResult, Me, Role } from './types';
 interface AuthState {
   user: Me | null;
   status: 'loading' | 'authenticated' | 'anonymous';
-  /** Marketers: phone number only. Rejects with code NOT_FOUND when the number isn't registered. */
-  login(phone: string): Promise<Me>;
-  /** Marketers: sign up with name + phone + residence and be signed in straight away. */
-  register(input: { name: string; phone: string; province: string; city: string }): Promise<Me>;
+  /** Marketers: local demo sign-in or phone + a verified OTP challenge in production. */
+  login(phone: string, verification?: { challengeId: string; code: string }): Promise<Me>;
+  /** Request a real one-time code; production has no default/fake provider. */
+  requestPhoneCode(phone: string): Promise<{ challengeId: string; expiresInSec: number }>;
+  /** Marketers: sign up with name + phone + residence and required production verification. */
+  register(
+    input: {
+      name: string;
+      phone: string;
+      province: string;
+      city: string;
+      challengeId?: string;
+      code?: string;
+    },
+  ): Promise<Me>;
   /** Admin / manager panels: username + password. */
   staffLogin(input: {
     panel: 'admin' | 'manager';
@@ -105,7 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       status,
-      login: async (phone) => accept(await api.post<AuthResult>('/auth/phone-login', { phone })),
+      login: async (phone, verification) =>
+        accept(await api.post<AuthResult>('/auth/phone-login', { phone, ...verification })),
+      requestPhoneCode: async (phone) =>
+        api.post<{ accepted: boolean; challengeId: string; expiresInSec: number }>(
+          '/auth/phone/request',
+          { phone },
+        ),
       register: async (input) => accept(await api.post<AuthResult>('/auth/phone-register', input)),
       staffLogin: async (input) => accept(await api.post<AuthResult>('/auth/staff-login', input)),
       logout: async () => {

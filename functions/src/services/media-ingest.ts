@@ -1,4 +1,5 @@
 import { VISION_EXTRACT_SYSTEM } from '../ai/prompts';
+import { bytesToBase64 } from '../lib/crypto';
 import { aiHub } from '../ai/hub';
 import { AllProvidersFailed } from '../ai/hub';
 import type { MediaPart } from '../ai/types';
@@ -57,7 +58,7 @@ export interface ExtractInput {
   sourceName: string;
   mime: string;
   sizeBytes: number | null;
-  bytes?: Buffer;
+  bytes?: Uint8Array;
   /** Set instead of `bytes` for YouTube sources (Gemini reads the URL directly). */
   fileUri?: string;
   link?: IngestLink;
@@ -151,7 +152,7 @@ export async function extractAsset(d: Deps, input: ExtractInput): Promise<MediaE
       if (bytes) {
         try {
           const stt = await hub.transcribe({
-            base64: bytes.toString('base64'),
+            base64: bytesToBase64(bytes),
             mime: input.mime,
             language: 'fa',
             prompt: input.hint,
@@ -174,7 +175,7 @@ export async function extractAsset(d: Deps, input: ExtractInput): Promise<MediaE
             {
               kind: 'video',
               mime: input.mime,
-              base64: input.bytes.toString('base64'),
+              base64: bytesToBase64(input.bytes),
               label: input.sourceName,
             },
           ],
@@ -193,7 +194,7 @@ export async function extractAsset(d: Deps, input: ExtractInput): Promise<MediaE
           {
             kind: input.sourceKind,
             mime: input.mime,
-            base64: input.bytes.toString('base64'),
+            base64: bytesToBase64(input.bytes),
             label: input.sourceName,
           },
         ],
@@ -402,12 +403,12 @@ export async function extractPendingMedia(
     }
     if (input.sourceKind === 'image') {
       const blobPath = input.blobPath ?? input.path;
-      const stat = await d.blob.stat(blobPath).catch(() => null as null);
+      const stat = await d.blob.stat(blobPath);
       if (!stat) {
         result.skipped++;
         continue;
       }
-      input.bytes = Buffer.from(await d.blob.readRange(blobPath, 0, stat.size - 1));
+      input.bytes = await d.blob.readRange(blobPath, 0, stat.size - 1);
       input.sizeBytes = stat.size;
       input.mime = stat.contentType;
     }
@@ -415,9 +416,8 @@ export async function extractPendingMedia(
     // candidate list could exhaust a Worker's memory before the first provider call.
     if (!input.bytes && input.sourceKind !== 'image' && !input.fileUri) {
       if (input.sizeBytes !== null && input.sizeBytes <= SPEECH_MAX_BYTES)
-        input.bytes = Buffer.from(await d.blob.readRange(input.path, 0, input.sizeBytes - 1));
+        input.bytes = await d.blob.readRange(input.path, 0, input.sizeBytes - 1);
     }
-    if (input.bytes && !Buffer.isBuffer(input.bytes)) input.bytes = Buffer.from(input.bytes);
     const out = await extractAsset(d, input);
     const id = extractionId(input);
     if (out.status === 'ready' || out.status === 'skipped') result.extracted++;

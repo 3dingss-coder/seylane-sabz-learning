@@ -16,11 +16,27 @@ const ip = (req: { ip?: string }) => req.ip ?? 'unknown';
 export function authRouter(d: Deps, limiter: RateLimiter): LightRouter {
   const r = Router();
   const perIp = (name: string, n: number) => rateLimit(limiter, name, n, 60_000, ip);
+  const localDemoPhoneAuth =
+    d.auth instanceof MemoryAuthProvider &&
+    d.config.env !== 'prod' &&
+    (d.config.backend === 'memory' || d.config.env === 'test');
+  const phoneUnavailable = () =>
+    new ApiError(
+      'UNAVAILABLE',
+      'تأیید شماره تا زمان اتصال سرویس پیامکی فعال نیست. از مدیر سامانه راهنمایی بگیرید.',
+    );
+  const signInVerifiedPhone = d.auth.signInVerifiedPhone?.bind(d.auth);
+  const issueVerifiedPhoneSession = async (email: string) => {
+    if (!signInVerifiedPhone) throw phoneUnavailable();
+    return signInVerifiedPhone(email);
+  };
   r.post(
     '/auth/register',
     perIp('register', 5),
     h(async (req) => {
       const input = parse(users.registerSchema, req.body);
+      const identifier = users.parseIdentifier(input.identifier);
+      if (d.config.env === 'prod' && identifier.kind === 'phone') throw phoneUnavailable();
       const user = await users.register(d, input);
       // F1: welcome message (in-app) for self sign-ups.
       await notifyTemplate(d, [user.id], 'welcome', { name: user.name }, { actionRef: '/' });
@@ -41,65 +57,126 @@ export function authRouter(d: Deps, limiter: RateLimiter): LightRouter {
     perIp('login', 10),
     h(async (req) => users.login(d, parse(users.loginSchema, req.body))),
   );
-  // Marketers sign in with their phone number only (MemoryAuthProvider: local + Cloudflare D1).
-  // Staff accounts can never use this route; they sign in with username + password below.
-  if (d.auth instanceof MemoryAuthProvider) {
-    const phoneAuth = d.auth;
-    r.post(
-      '/auth/phone-login',
-      perIp('phone-login', 10),
-      h(async (req) => {
+  const verifiedPhoneSchema = z.object({
+    phone: z.string().max(20),
+    challengeId: z.string().min(8).max(200),
+    code: z.string().min(4).max(12),
+  });
+
+  r.post(
+    '/auth/phone/request',
+    perIp('phone-code', 3),
+    h(async (req) => {
+      const provider = d.phoneVerification;
+      if (!provider) throw phoneUnavailable();
+      const { phone } = parse(z.object({ phone: z.string().max(20) }), req.body);
+      const id = users.parseIdentifier(phone);
+      if (id.kind !== 'phone') throw new ApiError('VALIDATION', 'شماره موبایل وارد کنید.');
+      return { accepted: true, ...(await provider.requestCode(id.phone)) };
+    }, 202),
+  );
+
+  // Passwordless phone sign-in is only available in disposable local/test memory mode, or when
+  // a real provider has verified a one-time challenge. D1/production never accepts a phone alone.
+  r.post(
+    '/auth/phone-login',
+    perIp('phone-login', 10),
+    h(async (req) => {
+      let email: string;
+      if (localDemoPhoneAuth) {
         const { phone } = parse(z.object({ phone: z.string().max(20) }), req.body);
         const id = users.parseIdentifier(phone);
         if (id.kind !== 'phone') throw new ApiError('VALIDATION', 'شماره موبایل وارد کنید.');
-        const result = await phoneAuth.demoSignIn(id.authEmail);
-        if (!result.ok)
+        email = id.authEmail;
+      } else {
+        const provider = d.phoneVerification;
+        if (!provider || !d.auth.signInVerifiedPhone) throw phoneUnavailable();
+        const input = parse(verifiedPhoneSchema, req.body);
+        const id = users.parseIdentifier(input.phone);
+        if (id.kind !== 'phone') throw new ApiError('VALIDATION', 'شماره موبایل وارد کنید.');
+        if (
+          !(await provider.verifyCode({
+            phone: id.phone,
+            challengeId: input.challengeId,
+            code: input.code,
+          }))
+        )
+          throw new ApiError('UNAUTHENTICATED', 'کد تأیید درست یا معتبر نیست.');
+        email = id.authEmail;
+      }
+
+      const result = localDemoPhoneAuth
+        ? await (d.auth as MemoryAuthProvider).demoSignIn(email)
+        : await issueVerifiedPhoneSession(email);
+      if (!result.ok) {
+        if (localDemoPhoneAuth)
           throw new ApiError('NOT_FOUND', 'این شماره هنوز ثبت‌نام نکرده است. ابتدا ثبت‌نام کنید.', {
             reason: 'NOT_REGISTERED',
           });
-        const user = await d.store.get<import('../domain/types').User>(`users/${result.uid}`);
-        if (!user || user.status !== 'active') throw new ApiError('UNAUTHENTICATED');
-        if (user.role !== 'marketer')
-          throw new ApiError(
-            'FORBIDDEN',
-            'این شماره از طریق ورود با شماره موبایل قابل استفاده نیست.',
-          );
-        await d.store.update(`users/${result.uid}`, { lastActiveAt: new Date().toISOString() });
-        return { user: users.publicUser(user), ...result.tokens };
-      }),
-    );
-    r.post(
-      '/auth/phone-register',
-      perIp('phone-register', 5),
-      h(async (req) => {
-        const input = parse(users.phoneRegisterSchema, req.body);
-        const id = users.parseIdentifier(input.phone);
-        if (id.kind !== 'phone') throw new ApiError('VALIDATION', 'شماره موبایل وارد کنید.');
-        // No password is ever shown or used: a random one satisfies the credential store.
-        // (Passwordless: hashing + re-verifying it cost ~13 ms CPU per sign-up, over the Workers CPU limit.)
-        const password = randomBytesBase64Url(24);
-        // Self sign-ups join the default sales team (when it exists) so the manager panel sees them.
-        const team = await d.store.get('teams/team-seylane');
-        const user = await users.register(
-          d,
-          {
-            name: input.name,
-            identifier: input.phone,
-            password,
-            province: input.province,
-            city: input.city,
-          },
-          'marketer',
-          team ? { teamId: 'team-seylane' } : {},
-          { passwordless: true },
+        throw new ApiError('UNAUTHENTICATED', 'شماره یا کد تأیید درست نیست.');
+      }
+      const user = await d.store.get<import('../domain/types').User>(`users/${result.uid}`);
+      if (!user || user.status !== 'active') {
+        await d.auth.revoke(result.uid);
+        throw new ApiError('UNAUTHENTICATED');
+      }
+      if (user.role !== 'marketer') {
+        await d.auth.revoke(result.uid);
+        throw new ApiError(
+          'FORBIDDEN',
+          'این شماره از طریق ورود با شماره موبایل قابل استفاده نیست.',
         );
-        await notifyTemplate(d, [user.id], 'welcome', { name: user.name }, { actionRef: '/' });
-        const session = await phoneAuth.demoSignIn(id.authEmail);
-        if (!session.ok) throw new ApiError('INTERNAL');
-        return { user: users.publicUser(user), ...session.tokens };
-      }, 201),
-    );
-  }
+      }
+      await d.store.update(`users/${result.uid}`, { lastActiveAt: new Date().toISOString() });
+      return { user: users.publicUser(user), ...result.tokens };
+    }),
+  );
+
+  r.post(
+    '/auth/phone-register',
+    perIp('phone-register', 5),
+    h(async (req) => {
+      const provider = d.phoneVerification;
+      if (!localDemoPhoneAuth && (!provider || !signInVerifiedPhone)) throw phoneUnavailable();
+      const input = localDemoPhoneAuth
+        ? parse(users.phoneRegisterSchema, req.body)
+        : parse(users.verifiedPhoneRegisterSchema, req.body);
+      const id = users.parseIdentifier(input.phone);
+      if (id.kind !== 'phone') throw new ApiError('VALIDATION', 'شماره موبایل وارد کنید.');
+      if (!localDemoPhoneAuth) {
+        if (!provider) throw phoneUnavailable();
+        const verification = input as typeof input & { challengeId: string; code: string };
+        const valid = await provider.verifyCode({
+          phone: id.phone,
+          challengeId: verification.challengeId,
+          code: verification.code,
+        });
+        if (!valid) throw new ApiError('UNAUTHENTICATED', 'کد تأیید درست یا معتبر نیست.');
+      }
+      // A fresh random credential is never exposed to the client or used as proof of phone ownership.
+      const password = randomBytesBase64Url(24);
+      const team = await d.store.get('teams/team-seylane');
+      const user = await users.register(
+        d,
+        {
+          name: input.name,
+          identifier: input.phone,
+          password,
+          province: input.province,
+          city: input.city,
+        },
+        'marketer',
+        team ? { teamId: 'team-seylane' } : {},
+        { passwordless: true },
+      );
+      await notifyTemplate(d, [user.id], 'welcome', { name: user.name }, { actionRef: '/' });
+      const session = localDemoPhoneAuth
+        ? await (d.auth as MemoryAuthProvider).demoSignIn(id.authEmail)
+        : await issueVerifiedPhoneSession(id.authEmail);
+      if (!session.ok) throw new ApiError('INTERNAL');
+      return { user: users.publicUser(user), ...session.tokens };
+    }, 201),
+  );
   r.post(
     '/auth/staff-login',
     perIp('staff-login', 10),

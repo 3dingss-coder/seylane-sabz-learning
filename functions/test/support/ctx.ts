@@ -85,13 +85,13 @@ export interface TestCtx {
 let phoneSeq = 0;
 
 export async function createCtx(
-  opts: { llm?: LlmClient | null; start?: string; ai?: AiHub } = {},
+  opts: { llm?: LlmClient | null; start?: string; ai?: AiHub; env?: 'dev' | 'prod' | 'test' } = {},
 ): Promise<TestCtx> {
   const now = { value: new Date(opts.start ?? '2026-10-03T06:30:00.000Z') }; // 10:00 Tehran, Saturday
   const clock = () => new Date(now.value.getTime());
   const store = await makeStore();
   const config = loadConfig({
-    APP_ENV: 'test',
+    APP_ENV: opts.env ?? 'test',
     ALLOWED_ORIGINS: 'https://app.example.com',
     LOCAL_AUTH_SECRET: 'test-secret',
   } as NodeJS.ProcessEnv);

@@ -68,6 +68,20 @@ describe('manager scope (28.2 #5)', () => {
     expect(names).not.toContain('بازاریاب ب');
   });
 
+  it('excludes inactive marketers from manager completion and quiz reports', async () => {
+    const inactive = await ctx.user('marketer', { teamId: 'team-a', name: 'غیرفعال' });
+    await ctx.deps.store.update(`users/${inactive.id}`, { status: 'inactive' });
+
+    const completion = await ctx.api(mgrA.token).get('/v1/manager/reports/completion');
+    const quizzes = await ctx.api(mgrA.token).get('/v1/manager/reports/quizzes');
+    for (const response of [completion, quizzes]) {
+      expect(response.status).toBe(200);
+      const memberIds = response.body.data.members.map((member: { id: string }) => member.id);
+      expect(memberIds).toContain(userA.id);
+      expect(memberIds).not.toContain(inactive.id);
+    }
+  });
+
   it('retake requests of another team cannot be approved', async () => {
     const s1 = fx.sections[0];
     await watchSection(ctx, userB.token, s1?.id ?? '', 60);

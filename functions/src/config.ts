@@ -37,8 +37,8 @@ export interface AppConfig {
   knowledgeRebuildLimit: number;
   dataDir: string;
   /**
-   * Wall-clock playback budget (anti-cheat). Can only be disabled on the in-memory backend
-   * (`PLAYBACK_BUDGET=off`, used by the E2E suite to simulate playback quickly) — never on Firestore.
+   * Wall-clock playback budget (anti-cheat). Production always enforces it; only disposable
+   * local/test backends may opt out (`PLAYBACK_BUDGET=off`) to speed up E2E playback.
    */
   playbackBudget: boolean;
   /**
@@ -95,10 +95,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       Math.min(5000, Number.parseInt(env.KNOWLEDGE_REBUILD_LIMIT ?? '1200', 10) || 1200),
     ),
     dataDir: env.LOCAL_DATA_DIR ?? '.local-data',
-    playbackBudget: !((backend === 'memory' || backend === 'd1') && env.PLAYBACK_BUDGET === 'off'),
+    playbackBudget:
+      appEnv === 'prod' ||
+      !((backend === 'memory' || backend === 'd1') && env.PLAYBACK_BUDGET === 'off'),
     trustProxyHops: Math.max(0, Math.min(5, Number.parseInt(env.TRUST_PROXY_HOPS ?? '1', 10) || 0)),
     rateLimitScale:
-      backend === 'memory' || backend === 'd1'
+      appEnv !== 'prod' && (backend === 'memory' || backend === 'd1')
         ? Math.max(1, Number.parseInt(env.RATE_LIMIT_SCALE ?? '1', 10) || 1)
         : 1,
     smtpUrl: env.SMTP_URL ?? '',

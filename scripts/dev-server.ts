@@ -53,7 +53,11 @@ async function main() {
   ]);
   if (!brands.length || !pkgs.length || process.env.RESEED === 'true') {
     console.info('[dev] seeding catalog + demo data …');
-    const report = await runSeed(deps, { repoRoot, demo: true, linkLocalFiles: true });
+    const report = await runSeed(deps, {
+      repoRoot,
+      demo: config.env !== 'prod',
+      linkLocalFiles: true,
+    });
     console.info(`[dev] seed done: ${report.brands} brands, ${report.packages} packages`);
   }
   const api = createApp(deps);

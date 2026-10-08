@@ -8,6 +8,7 @@ export function PushOptIn() {
   const toast = useToast();
   const [state, setState] = useState<WebPushState>(() => webPushState());
   const [busy, setBusy] = useState(false);
+  const [registrationError, setRegistrationError] = useState('');
   if (state === 'unavailable') return null;
 
   return (
@@ -16,9 +17,14 @@ export function PushOptIn() {
         <Bell className="size-5 text-primary" aria-hidden />
         اعلان‌های گوشی/مرورگر
       </h2>
+      {registrationError && state !== 'granted' && (
+        <p role="alert" className="text-sm text-danger-fg">
+          {registrationError}
+        </p>
+      )}
       {state === 'granted' && (
-        <p className="text-sm text-text-secondary">
-          فعال است. مهلت‌ها و آموزش‌های جدید را خبر می‌دهیم.
+        <p role={registrationError ? 'alert' : undefined} className="text-sm text-text-secondary">
+          {registrationError || 'فعال است. مهلت‌ها و آموزش‌های جدید را خبر می‌دهیم.'}
         </p>
       )}
       {state === 'denied' && (
@@ -37,15 +43,18 @@ export function PushOptIn() {
             onClick={async () => {
               setBusy(true);
               try {
+                setRegistrationError('');
                 const next = await enableWebPush();
                 setState(next);
                 if (next === 'granted')
                   toast.show({ type: 'success', message: 'اعلان‌ها فعال شد.' });
-              } catch {
-                toast.show({
-                  type: 'error',
-                  message: 'فعال‌سازی اعلان انجام نشد. دوباره تلاش کنید.',
-                });
+              } catch (err) {
+                const message =
+                  err instanceof Error
+                    ? err.message
+                    : 'فعال‌سازی اعلان انجام نشد. دوباره تلاش کنید.';
+                setRegistrationError(message);
+                toast.show({ type: 'error', message });
               } finally {
                 setBusy(false);
               }

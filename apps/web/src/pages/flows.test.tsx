@@ -9,7 +9,10 @@ beforeEach(() => {
   localStorage.clear();
   session.clear();
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 const loggedIn = () => {
   localStorage.setItem('ssl.refresh', 'r1');
@@ -50,6 +53,58 @@ describe('M1 login → M3 home', () => {
       'src',
       '/catalog/products/sb-310350101/main.jpg',
     );
+  });
+
+  it('requires a real OTP challenge before production phone login', async () => {
+    vi.stubEnv('VITE_APP_ENV', 'prod');
+    const { calls } = mockApi({
+      'POST /v1/auth/phone/request': () => ({
+        data: { accepted: true, challengeId: 'sms-challenge-123', expiresInSec: 300 },
+      }),
+      'POST /v1/auth/phone-login': () => ({
+        data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
+      }),
+      'GET /v1/me/home': () => ({ data: home }),
+      'GET /v1/me/notifications': () => ({ data: { unread: 0, items: [] } }),
+      'GET /v1/me/mentor/nudges': () => ({ data: [] }),
+    });
+    renderApp('/login');
+    fireEvent.change(await screen.findByLabelText('شماره موبایل'), {
+      target: { value: '۰۹۱۲۰۰۰۰۰۰۴' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'دریافت کد تأیید' }));
+    expect(await screen.findByLabelText('کد تأیید پیامکی')).toBeInTheDocument();
+    expect(calls.find((call) => call.key === 'POST /v1/auth/phone/request')?.body).toEqual({
+      phone: '09120000004',
+    });
+    expect(calls.find((call) => call.key === 'POST /v1/auth/phone-login')).toBeUndefined();
+
+    fireEvent.change(screen.getByLabelText('کد تأیید پیامکی'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: 'تأیید کد و ورود' }));
+    await waitFor(() =>
+      expect(calls.find((call) => call.key === 'POST /v1/auth/phone-login')?.body).toEqual({
+        phone: '09120000004',
+        challengeId: 'sms-challenge-123',
+        code: '123456',
+      }),
+    );
+  });
+
+  it('shows production phone verification unavailability without falling back to passwordless login', async () => {
+    vi.stubEnv('VITE_APP_ENV', 'prod');
+    const { calls } = mockApi({
+      'POST /v1/auth/phone/request': () => ({
+        status: 503,
+        error: { code: 'UNAVAILABLE', message: 'سرویس تأیید شماره فعال نیست.' },
+      }),
+    });
+    renderApp('/login');
+    fireEvent.change(await screen.findByLabelText('شماره موبایل'), {
+      target: { value: '09120000004' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'دریافت کد تأیید' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('سرویس تأیید شماره فعال نیست.');
+    expect(calls.find((call) => call.key === 'POST /v1/auth/phone-login')).toBeUndefined();
   });
 
   it('unknown phone moves to sign-up with the number kept', async () => {

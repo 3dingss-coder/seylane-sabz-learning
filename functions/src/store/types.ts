@@ -46,6 +46,14 @@ export interface TxOps {
   update(path: string, data: Input): void;
 }
 
+export interface TransactionOptions {
+  /** Optional optimistic-lock partition. Every writer of the same logical data must use it. */
+  scope?: string;
+}
+
+/** Shared partition name for transactions and direct writes that touch one user's documents. */
+export const userTransactionScope = (userId: string): string => `user:${userId}`;
+
 export interface DocStore {
   get<T>(path: string): Promise<Doc<T> | null>;
   getMany<T>(paths: string[]): Promise<Array<Doc<T> | null>>;
@@ -58,7 +66,7 @@ export interface DocStore {
   /** Atomically add `by` to a numeric field (creates doc/field if missing). */
   increment(path: string, field: string, by: number): Promise<void>;
   newId(): string;
-  runTransaction<R>(fn: (tx: TxOps) => Promise<R>): Promise<R>;
+  runTransaction<R>(fn: (tx: TxOps) => Promise<R>, options?: TransactionOptions): Promise<R>;
   /** Batched writes for bulk operations (≤ 400 per chunk handled by adapter). */
   batchSet(items: Array<{ path: string; data: Input; merge?: boolean }>): Promise<void>;
 }

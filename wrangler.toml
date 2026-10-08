@@ -13,12 +13,12 @@ not_found_handling = "single-page-application"
 run_worker_first = ["/v1/*"]
 
 [vars]
-APP_ENV = "dev"
-PLAYBACK_BUDGET = "off"
-RATE_LIMIT_SCALE = "20"
-# D1 -> R2 media move: files are copied to R2 and verified by size; the D1 copy is deleted only
-# when this is "on" (flip it after checking that images/videos play from R2).
-R2_MIGRATE_PURGE = "on"
+APP_ENV = "prod"
+PLAYBACK_BUDGET = "on"
+RATE_LIMIT_SCALE = "1"
+# Storage migration is intentionally paused: the owner must verify the live D1/R2 inventory first.
+# Even when manually triggered, D1 cleanup stays disabled until byte-for-byte verification is reviewed.
+R2_MIGRATE_PURGE = "off"
 
 # Scheduled jobs (deadline warnings, reminders, weekly digest, web-push flush).
 # The Worker's `scheduled` handler (functions/src/cloudflare-worker.ts) dispatches on the cron
@@ -29,16 +29,16 @@ R2_MIGRATE_PURGE = "on"
 crons = ["*/15 * * * *", "0 * * * *", "30 4 * * *", "30 6 * * *"]
 
 # Cloudflare D1 Database binding (SQLite at the edge — 100% free tier)
-# To connect your D1 database in Cloudflare Dashboard:
-# Workers & Pages -> seylane-sabz-learning -> Settings -> Bindings -> Add -> D1 database -> Variable name: DB
-# Or uncomment below when deploying via CLI with your database_id:
+# This pre-existing database ID is checked by the deploy workflow; do not replace it with a newly
+# created database without explicit owner approval and a verified backup.
 [[d1_databases]]
 binding = "DB"
 database_name = "seylane-sabz-db"
 database_id = "f7a2ed30-00f4-42e6-b26f-343c24fe1853"
 
-# Cloudflare R2 object storage for uploaded images, audio and video (replaces storing files in D1).
-# Resumable-upload staging parts still use D1 and are moved to R2 automatically when complete.
+# Cloudflare R2 object storage for uploaded images, audio and video.
+# Resumable parts and composed uploads may remain in D1; bulk D1 -> R2 migration is manual, byte-
+# verified, and purge is disabled until the live inventory is explicitly reviewed.
 [[r2_buckets]]
 binding = "MEDIA_BUCKET"
 bucket_name = "seylane-sabz-media"

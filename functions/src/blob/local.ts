@@ -53,7 +53,7 @@ export class LocalBlobStore implements BlobStore {
     }
   }
 
-  async put(p: string, data: Buffer, contentType: string) {
+  async put(p: string, data: Uint8Array, contentType: string) {
     const full = this.resolve(p);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, data);

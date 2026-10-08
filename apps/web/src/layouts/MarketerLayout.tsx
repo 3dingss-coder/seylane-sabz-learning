@@ -74,6 +74,13 @@ export function MarketerLayout() {
           </nav>
           <div className="flex items-center">
             <Link
+              to="/mentor"
+              aria-label="گفت‌وگو با منتور"
+              className="flex size-12 items-center justify-center rounded-card text-text-secondary hover:bg-background lg:hidden"
+            >
+              <Bot className="size-6" aria-hidden />
+            </Link>
+            <Link
               to="/messages"
               aria-label={
                 unread

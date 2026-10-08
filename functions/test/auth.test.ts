@@ -8,6 +8,47 @@ beforeEach(async () => {
 });
 
 describe('auth (PROMPT 002)', () => {
+  it('blocks legacy demo phone identities in production without mutating their records', async () => {
+    ctx.deps.config.env = 'prod';
+    const user = await ensureUser(ctx.deps, {
+      name: 'مدیر نمونه',
+      identifier: '09120000001',
+      password: 'demo1234',
+      role: 'superadmin',
+    });
+    const before = await ctx.deps.store.get(`users/${user.id}`);
+    const login = await ctx.api().post('/v1/auth/login', {
+      identifier: '09120000001',
+      password: 'demo1234',
+    });
+    expect(login.status).toBe(401);
+    expect(await ctx.deps.store.get(`users/${user.id}`)).toEqual(before);
+  });
+
+  it('fails closed for production phone claims when no real verification provider is configured', async () => {
+    const prod = await createCtx({ env: 'prod' });
+    const body = {
+      name: 'ثبت‌نام تولیدی',
+      phone: '09367778899',
+      province: 'تهران',
+      city: 'تهران',
+    };
+    expect((await prod.api().post('/v1/auth/phone-register', body)).status).toBe(503);
+    expect((await prod.api().post('/v1/auth/phone-login', { phone: body.phone })).status).toBe(503);
+    expect(
+      (
+        await prod.api().post('/v1/auth/register', {
+          name: body.name,
+          identifier: body.phone,
+          password: 'longtest123',
+        })
+      ).status,
+    ).toBe(503);
+    expect(
+      await prod.deps.store.query({ collection: 'users', where: [['phone', '==', body.phone]] }),
+    ).toHaveLength(0);
+  });
+
   it('allows phone-only login only in the disposable memory MVP', async () => {
     const created = await ctx.api().post('/v1/auth/register', {
       name: 'آزمایشی',

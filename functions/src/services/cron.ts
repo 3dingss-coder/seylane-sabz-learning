@@ -57,14 +57,15 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 
 // Cloudflare Cron Triggers fire in UTC (Iran has no DST any more: Asia/Tehran = UTC+03:30 all
 // year), so the Tehran wall-clock times of spec §26 are converted here:
-//   every 15 min   → web push deferred by quiet hours + knowledge-reindex (reads up to 8 new media
-//                    files per run, re-indexes only what changed; zero cost once caught up)
+//   every 15 min   → enabled push queue flush + knowledge-reindex (reads up to 8 new media files
+//                    per run, re-indexes only what changed; zero cost once caught up)
 //   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot)
 //   08:00 Tehran   → mentor daily nudges + behaviour sweep + knowledge reindex
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
-  '*/15 * * * *': ['flush-push', 'knowledge-reindex', 'migrate-blobs'],
+  // D1 -> R2 migration remains a manually-triggered job until the live media inventory is verified.
+  '*/15 * * * *': ['flush-push', 'knowledge-reindex'],
   '0 * * * *': ['deadline-sweep', 'weekly-digest'],
   '30 4 * * *': ['mentor-daily'],
   '30 6 * * *': ['daily-reminders'],

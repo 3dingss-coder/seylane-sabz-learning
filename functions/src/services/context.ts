@@ -2,10 +2,12 @@ import type { Mailer } from '../mail/types';
 import type { AiHub } from '../ai/hub';
 import type { AppConfig } from '../config';
 import type { AuthProvider } from '../auth/types';
+import type { PhoneVerificationProvider } from '../auth/phone';
+import type { RateLimitStore } from '../http/rateLimit';
 import type { BlobStore } from '../blob/types';
 import type { LlmClient } from '../llm/types';
 import type { PushSender } from '../push/types';
-import type { DocStore } from '../store/types';
+import type { DocStore, TxOps } from '../store/types';
 import type { Clock } from '../lib/time';
 import { DAY } from '../lib/time';
 import { DEFAULT_POLICY } from '../domain/policy';
@@ -16,6 +18,10 @@ export interface Deps {
   config: AppConfig;
   store: DocStore;
   auth: AuthProvider;
+  /** Optional production SMS/OTP adapter. No adapter is configured by the current Cloudflare build. */
+  phoneVerification?: PhoneVerificationProvider;
+  /** Shared limiter backend, when the deployment platform provides one. */
+  rateLimitStore?: RateLimitStore;
   blob: BlobStore;
   push: PushSender;
   mail: Mailer;
@@ -88,6 +94,24 @@ export async function audit(
     userAgent: actor.userAgent ?? null,
     createdAt: now.toISOString(),
     expireAt: new Date(now.getTime() + 365 * DAY),
+  });
+}
+
+/** Stage an analytics row in an existing transaction (spec §25, D22). */
+export function trackInTransaction(
+  d: Deps,
+  tx: Pick<TxOps, 'set'>,
+  name: string,
+  userId: string | null,
+  props: Record<string, unknown> = {},
+): void {
+  const now = d.clock();
+  tx.set(`analytics_events/${d.store.newId()}`, {
+    name,
+    userId,
+    props,
+    ts: now.toISOString(),
+    expireAt: new Date(now.getTime() + 180 * DAY),
   });
 }
 

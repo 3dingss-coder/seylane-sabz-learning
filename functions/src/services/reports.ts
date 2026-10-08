@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { DAY, HOUR, zonedOffsetMs } from '../lib/time';
-import type { Doc } from '../store/types';
+import { userTransactionScope, type Doc } from '../store/types';
 import type { Attempt, Message, RetakeRequest, Team, User } from '../domain/types';
 import { audit, track, type Actor, type Deps } from './context';
 import { loadLearningForUsers, loadUserLearning, type PackageView } from './learning-state';
@@ -104,6 +104,10 @@ export async function teamMembers(d: Deps, manager: Doc<User>): Promise<Array<Do
   });
 }
 
+export async function activeTeamMembers(d: Deps, manager: Doc<User>): Promise<Array<Doc<User>>> {
+  return (await teamMembers(d, manager)).filter((user) => user.status === 'active');
+}
+
 export async function assertTeamMember(
   d: Deps,
   manager: Doc<User>,
@@ -119,10 +123,7 @@ export async function assertTeamMember(
 
 export async function managerDashboard(d: Deps, manager: Doc<User>) {
   const team = manager.teamId ? await d.store.get<Team>(`teams/${manager.teamId}`) : null;
-  const members = await loadMembers(
-    d,
-    (await teamMembers(d, manager)).filter((u) => u.status === 'active'),
-  );
+  const members = await loadMembers(d, await activeTeamMembers(d, manager));
   const pendingRetakes = manager.teamId
     ? await d.store.query<RetakeRequest>({
         collection: 'retake_requests',
@@ -457,7 +458,7 @@ export async function managerQuizReport(
   manager: Doc<User>,
   f: z.infer<typeof quizReportQuery>,
 ) {
-  const users = await teamMembers(d, manager);
+  const users = await activeTeamMembers(d, manager);
   const [members, attempts] = await Promise.all([
     loadMembers(d, users),
     attemptsForUsers(d, users),
@@ -483,7 +484,7 @@ export async function adminQuizReport(d: Deps, f: z.infer<typeof quizReportQuery
 }
 
 export async function managerReport(d: Deps, manager: Doc<User>, f: z.infer<typeof reportQuery>) {
-  const members = await loadMembers(d, await teamMembers(d, manager));
+  const members = await loadMembers(d, await activeTeamMembers(d, manager));
   await track(d, 'manager_report_viewed', manager.id, { filters: Object.keys(f) });
   return {
     rows: completionRows(members, f, d.clock()),
@@ -678,25 +679,30 @@ export async function reviewRetake(
   note: string | null,
 ) {
   const path = `retake_requests/${id}`;
-  const result = await d.store.runTransaction(async (tx) => {
-    const r = await tx.get<RetakeRequest>(path);
-    if (!r) throw new ApiError('NOT_FOUND', 'درخواست پیدا نشد.');
-    if (reviewer.role === 'manager' && (!reviewer.teamId || r.teamId !== reviewer.teamId))
-      throw new ApiError('FORBIDDEN', 'این درخواست مربوط به تیم شما نیست.');
-    if (reviewer.role === 'manager' && r.escalated && r.status === 'pending')
-      throw new ApiError('FORBIDDEN', 'این درخواست به مدیر سیستم ارجاع شده است.');
-    if (r.status !== 'pending') {
-      if (r.status === decision) return { r, changed: false };
-      throw new ApiError('CONFLICT', 'این درخواست قبلاً بررسی شده است.');
-    }
-    tx.update(path, {
-      status: decision,
-      reviewedBy: reviewer.id,
-      reviewNote: note,
-      reviewedAt: d.clock().toISOString(),
-    });
-    return { r: { ...r, status: decision }, changed: true };
-  });
+  const initial = await d.store.get<RetakeRequest>(path);
+  if (!initial) throw new ApiError('NOT_FOUND', 'درخواست پیدا نشد.');
+  const result = await d.store.runTransaction(
+    async (tx) => {
+      const r = await tx.get<RetakeRequest>(path);
+      if (!r || r.userId !== initial.userId) throw new ApiError('NOT_FOUND', 'درخواست پیدا نشد.');
+      if (reviewer.role === 'manager' && (!reviewer.teamId || r.teamId !== reviewer.teamId))
+        throw new ApiError('FORBIDDEN', 'این درخواست مربوط به تیم شما نیست.');
+      if (reviewer.role === 'manager' && r.escalated && r.status === 'pending')
+        throw new ApiError('FORBIDDEN', 'این درخواست به مدیر سیستم ارجاع شده است.');
+      if (r.status !== 'pending') {
+        if (r.status === decision) return { r, changed: false };
+        throw new ApiError('CONFLICT', 'این درخواست قبلاً بررسی شده است.');
+      }
+      tx.update(path, {
+        status: decision,
+        reviewedBy: reviewer.id,
+        reviewNote: note,
+        reviewedAt: d.clock().toISOString(),
+      });
+      return { r: { ...r, status: decision }, changed: true };
+    },
+    { scope: userTransactionScope(initial.userId) },
+  );
   if (result.changed) {
     const actor: Actor = { id: reviewer.id, role: reviewer.role };
     await audit(

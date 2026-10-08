@@ -7,6 +7,8 @@ export interface User {
   name: string;
   phone: string | null;
   email: string | null;
+  /** True for accounts created without a password after verified phone sign-in. */
+  passwordless?: boolean;
   /** Residence («محل سکونت»), captured at sign-up; null on accounts created before it existed. */
   province: string | null;
   city: string | null;

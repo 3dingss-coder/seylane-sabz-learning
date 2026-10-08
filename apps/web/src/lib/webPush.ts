@@ -57,7 +57,8 @@ async function subscribe(): Promise<boolean> {
 export async function enableWebPush(): Promise<WebPushState> {
   if (webPushState() === 'unavailable') return 'unavailable';
   const perm = await Notification.requestPermission();
-  if (perm === 'granted') await subscribe();
+  if (perm === 'granted' && !(await subscribe()))
+    throw new Error('ثبت دستگاه برای دریافت اعلان انجام نشد.');
   return perm;
 }
 

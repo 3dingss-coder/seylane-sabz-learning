@@ -40,7 +40,10 @@ export function usePlaybackTracker(sectionId: string, onResult: (r: ProgressResu
         });
         cb.current(r);
       } catch (e) {
-        if (e instanceof ApiError && (e.code === 'NETWORK' || e.code === 'RATE_LIMIT'))
+        if (
+          e instanceof ApiError &&
+          (e.code === 'NETWORK' || e.code === 'RATE_LIMIT' || e.code === 'UNAVAILABLE')
+        )
           enqueueBeat({ sectionId, body, key });
       }
     },

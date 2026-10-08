@@ -1,6 +1,6 @@
 // Generates functions/lib/seed-snapshot.json after `tsc -p tsconfig.build.json` so serverless
-// deployments (e.g. Netlify Functions) can cold-start with the full seeded catalog, packages,
-// quizzes, and demo accounts in milliseconds without needing raw CSV/image folders at runtime.
+// deployments can cold-start with the curated catalog, packages, and quizzes in milliseconds
+// without embedding demo identities or needing raw CSV/image folders at runtime.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,7 +23,7 @@ try {
     LOCAL_DATA_DIR: tmpDir,
   });
   const deps = buildMemoryDeps(config, { persist: true, llm: null });
-  const report = await runSeed(deps, { repoRoot, demo: true, linkLocalFiles: true });
+  const report = await runSeed(deps, { repoRoot, demo: false, linkLocalFiles: true });
   deps.store.flush();
   const dbPath = path.join(tmpDir, 'db.json');
   const outPath = path.join(libDir, 'seed-snapshot.json');

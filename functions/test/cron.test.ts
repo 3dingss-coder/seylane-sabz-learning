@@ -43,6 +43,15 @@ describe('cron wiring on the deployed worker', () => {
     expect([...declared].sort()).toEqual([...CRON_SCHEDULES].sort());
   });
 
+  it('keeps production guardrails on and the R2 migration out of scheduled jobs', () => {
+    const toml = readFileSync(WRANGLER, 'utf8');
+    expect(toml).toMatch(/^APP_ENV\s*=\s*"prod"$/m);
+    expect(toml).toMatch(/^PLAYBACK_BUDGET\s*=\s*"on"$/m);
+    expect(toml).toMatch(/^RATE_LIMIT_SCALE\s*=\s*"1"$/m);
+    expect(toml).toMatch(/^R2_MIGRATE_PURGE\s*=\s*"off"$/m);
+    expect(Object.values(CRON_JOBS).flat()).not.toContain('migrate-blobs');
+  });
+
   it('dispatches the job bound to each expression and survives an unknown one', async () => {
     const ctx = await createCtx();
     for (const [cron, names] of Object.entries(CRON_JOBS)) {

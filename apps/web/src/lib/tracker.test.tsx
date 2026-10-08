@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { session } from './session';
 import { usePlaybackTracker } from './tracker';
+import { flushBeats, pendingBeats } from './offline-queue';
 import { mockApi } from '@/test/mockApi';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -50,5 +51,29 @@ describe('usePlaybackTracker (anti-cheat, 28.2 #3)', () => {
     expect(q).toHaveLength(1);
     expect(q[0]?.body.playedDeltaSec).toBe(3);
     expect(q[0]?.key).toBeTruthy();
+  });
+
+  it('preserves beats when the API reports a temporary D1 limiter outage', async () => {
+    session.setAccess('t', 3600);
+    localStorage.removeItem('ssl.beats');
+    const { calls } = mockApi({
+      'POST /v1/me/sections/s1/progress': () => ({
+        status: 503,
+        error: { code: 'UNAVAILABLE', message: 'rate limiter temporarily unavailable' },
+      }),
+    });
+    const { result } = renderHook(() => usePlaybackTracker('s1', () => {}));
+    act(() => {
+      result.current.seeked(0);
+      for (let t = 0.5; t <= 3; t += 0.5) result.current.sample(t, true);
+    });
+    await act(async () => {
+      await result.current.flush('pause');
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(pendingBeats()).toBe(1);
+    await flushBeats();
+    expect(pendingBeats()).toBe(1);
   });
 });

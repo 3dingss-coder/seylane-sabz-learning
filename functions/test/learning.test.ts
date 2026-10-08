@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as content from '../src/services/content';
+import { ids } from '../src/lib/ids';
+import { heartbeatSchema, recordProgress } from '../src/services/learning';
+import type { User } from '../src/domain/types';
+import type { DocStore, QuerySpec } from '../src/store/types';
 import { SYSTEM } from '../src/services/context';
 import {
   buildFixture,
@@ -42,6 +46,30 @@ describe('home & catalog (PROMPT 008)', () => {
     expect((await ctx.api(m.token).get(`/v1/me/sections/${other.sections[0]?.id}`)).status).toBe(
       404,
     );
+  });
+
+  it('keeps heartbeat access for started packages and rejects an unassigned package', async () => {
+    const unassigned = await buildFixture(ctx, { assign: 'none', sections: 1 });
+    const unassignedResponse = await ctx
+      .api(m.token)
+      .post(`/v1/me/sections/${unassigned.sections[0]?.id}/progress`, {
+        positionSec: 5,
+        playedDeltaSec: 5,
+      });
+    expect(unassignedResponse.status).toBe(404);
+
+    const sectionId = fx.sections[0]?.id ?? '';
+    const first = await ctx
+      .api(m.token)
+      .post(`/v1/me/sections/${sectionId}/progress`, { positionSec: 5, playedDeltaSec: 5 });
+    expect(first.status).toBe(200);
+    await ctx.deps.store.update(`assignments/fx-${fx.packageId}`, {
+      revokedAt: ctx.deps.clock().toISOString(),
+    });
+    const continued = await ctx
+      .api(m.token)
+      .post(`/v1/me/sections/${sectionId}/progress`, { positionSec: 10, playedDeltaSec: 5 });
+    expect(continued.status).toBe(200);
   });
 });
 
@@ -108,6 +136,45 @@ describe('player & tracking (PROMPT 009)', () => {
     expect(p.body.data.lastPositionSec).toBe(103);
   });
 
+  it('authorizes a heartbeat with package-scoped progress instead of loading the full learning view', async () => {
+    const sectionId = fx.sections[0]?.id ?? '';
+    const user = await ctx.deps.store.get<User>(`users/${m.id}`);
+    if (!user) throw new Error('test marketer was not stored');
+    const path = `section_progress/${ids.progress(m.id, sectionId)}`;
+    await ctx.deps.store.set(path, {
+      userId: m.id,
+      sectionId,
+      packageId: fx.packageId,
+      playedSeconds: 1,
+      percent: 0,
+      completed: false,
+      quizPassed: false,
+      recentKeys: [],
+      startedAt: ctx.deps.clock().toISOString(),
+      updatedAt: ctx.deps.clock().toISOString(),
+    });
+
+    const store = ctx.deps.store;
+    const originalQuery = store.query.bind(store);
+    const queries: QuerySpec[] = [];
+    vi.spyOn(store, 'query').mockImplementation(((query: QuerySpec) => {
+      queries.push(query);
+      return originalQuery(query);
+    }) as DocStore['query']);
+
+    await recordProgress(
+      ctx.deps,
+      user,
+      sectionId,
+      heartbeatSchema.parse({ positionSec: 10, playedDeltaSec: 5 }),
+      'query-count-probe',
+      { skipBudget: true },
+    );
+    expect(queries.map((query) => query.collection)).toEqual(['section_progress']);
+    expect(queries[0]?.where).toContainEqual(['userId', '==', m.id]);
+    expect(queries[0]?.where).toContainEqual(['packageId', '==', fx.packageId]);
+  });
+
   it('28.2 #7 offline replay: duplicate Idempotency-Keys are counted once', async () => {
     const s = fx.sections[0]?.id ?? '';
     const batch = [1, 2, 3].map((i) => ({
@@ -124,11 +191,36 @@ describe('player & tracking (PROMPT 009)', () => {
     expect(p.body.data.percent).toBe(75);
   });
 
-  it('later section is open without finishing the previous one (no sequential lock)', async () => {
+  it('later section heartbeat is allowed without finishing the previous one (no sequential lock)', async () => {
     const s2 = fx.sections[1]?.id ?? '';
     const pkg = await ctx.api(m.token).get(`/v1/me/packages/${fx.packageId}`);
     expect(pkg.body.data.sections[1].state).not.toBe('locked');
     expect((await ctx.api(m.token).get(`/v1/me/sections/${s2}/media`)).status).not.toBe(403);
+    expect((await hb(s2, { positionSec: 5, playedDeltaSec: 5 })).status).toBe(200);
+  });
+
+  it('heartbeat matches package visibility for archived sections', async () => {
+    const startedSectionId = fx.sections[0]?.id ?? '';
+    const unstartedSectionId = fx.sections[1]?.id ?? '';
+
+    await content.updateSection(ctx.deps, SYSTEM, fx.packageId, unstartedSectionId, {
+      archived: true,
+    });
+    const hidden = await ctx.api(m.token).post(`/v1/me/sections/${unstartedSectionId}/progress`, {
+      positionSec: 5,
+      playedDeltaSec: 5,
+    });
+    expect(hidden.status).toBe(404);
+
+    expect((await hb(startedSectionId, { positionSec: 5, playedDeltaSec: 5 })).status).toBe(200);
+    await content.updateSection(ctx.deps, SYSTEM, fx.packageId, startedSectionId, {
+      archived: true,
+    });
+    const continued = await ctx.api(m.token).post(`/v1/me/sections/${startedSectionId}/progress`, {
+      positionSec: 10,
+      playedDeltaSec: 5,
+    });
+    expect(continued.status).toBe(200);
   });
 
   it('media URL is short-lived and signed for unlocked sections', async () => {
@@ -197,8 +289,24 @@ describe('quiz & sequential lock (PROMPT 010)', () => {
     ctx.limiter.reset();
     const blocked = await ctx.api(mk.token).post(`/v1/me/quizzes/${s1?.quizId}/attempts`);
     expect(blocked.status).toBe(409);
-    const req = await ctx.api(mk.token).post(`/v1/me/quizzes/${s1?.quizId}/retake-requests`);
-    expect(req.status).toBe(201);
+    const [firstRequest, duplicateRequest] = await Promise.all([
+      ctx.api(mk.token).post(`/v1/me/quizzes/${s1?.quizId}/retake-requests`),
+      ctx.api(mk.token).post(`/v1/me/quizzes/${s1?.quizId}/retake-requests`),
+    ]);
+    expect(firstRequest.status).toBe(201);
+    expect(duplicateRequest.status).toBe(201);
+    expect(duplicateRequest.body.data.id).toBe(firstRequest.body.data.id);
+    const req = firstRequest;
+    expect(
+      await ctx.deps.store.query({
+        collection: 'retake_requests',
+        where: [
+          ['userId', '==', mk.id],
+          ['quizId', '==', s1?.quizId],
+          ['status', '==', 'pending'],
+        ],
+      }),
+    ).toHaveLength(1);
     const list = await ctx.api(mgr.token).get('/v1/manager/retake-requests');
     expect(list.body.data).toHaveLength(1);
     const ok = await ctx

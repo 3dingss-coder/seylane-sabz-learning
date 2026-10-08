@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node ../scripts/build-seed-snapshot.mjs",
+    "pretypecheck": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json",
     "lint": "eslint .",
     "test": "vitest run",

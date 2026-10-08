@@ -99,14 +99,20 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'رمز عبور را وارد کنید.').max(128),
 });
 
-/** Self sign-up by phone only (no password: marketers sign in with their number). */
-export const phoneRegisterSchema = z
+/** Self sign-up by phone only (no password: marketers sign in with a verified number). */
+const phoneRegisterFields = {
+  name: text(2, 60, 'نام'),
+  phone: z.string().min(1, 'شماره موبایل را وارد کنید.').max(20),
+  // Required here: every self sign-up tells us where the marketer sells (admin/manager panels).
+  province: provinceSchema,
+  city: citySchema,
+};
+export const phoneRegisterSchema = z.object(phoneRegisterFields).superRefine(checkResidence);
+export const verifiedPhoneRegisterSchema = z
   .object({
-    name: text(2, 60, 'نام'),
-    phone: z.string().min(1, 'شماره موبایل را وارد کنید.').max(20),
-    // Required here: every self sign-up tells us where the marketer sells (admin/manager panels).
-    province: provinceSchema,
-    city: citySchema,
+    ...phoneRegisterFields,
+    challengeId: z.string().min(8).max(200),
+    code: z.string().min(4).max(12),
   })
   .superRefine(checkResidence);
 export const staffLoginSchema = z.object({
@@ -128,6 +134,19 @@ export function staffAuthEmail(username: string): string {
 export type Identifier =
   | { kind: 'phone'; phone: string; authEmail: string }
   | { kind: 'email'; email: string; authEmail: string };
+
+// These exact sample identities were shipped by legacy demo seeds. Do not import demo.ts here:
+// it contains the dev-only password. Existing rows are preserved, but production password login
+// for these well-known numbers is rejected until an owner safely replaces/remediates them.
+const LEGACY_DEMO_PHONES = new Set([
+  '09120000001',
+  '09120000002',
+  '09120000003',
+  '09120000004',
+  '09120000005',
+  '09120000006',
+  '09120000007',
+]);
 
 /** Accepts mobile (Persian/Latin digits, +98) or email. */
 export function parseIdentifier(raw: string): Identifier {
@@ -244,6 +263,8 @@ export async function login(d: Deps, input: z.infer<typeof loginSchema>) {
   } catch {
     throw new ApiError('UNAUTHENTICATED', 'رمز یا نام کاربری اشتباه است.');
   }
+  if (d.config.env === 'prod' && idf.kind === 'phone' && LEGACY_DEMO_PHONES.has(idf.phone))
+    throw new ApiError('UNAUTHENTICATED', 'رمز یا نام کاربری اشتباه است.');
   const guardKey = ids.hash(idf.authEmail);
   const guard = await loginGuard(d, guardKey);
   const r = await d.auth.signIn(idf.authEmail, input.password);

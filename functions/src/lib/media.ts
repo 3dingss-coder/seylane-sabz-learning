@@ -61,13 +61,6 @@ export const EXT: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-function toBufferLike(u8: Uint8Array): Buffer {
-  if (typeof Buffer !== 'undefined' && typeof Buffer.from === 'function') {
-    return Buffer.from(u8.buffer, u8.byteOffset, u8.byteLength);
-  }
-  return u8 as unknown as Buffer;
-}
-
 function asciiSlice(buf: Uint8Array, s: number, e: number): string {
   let out = '';
   const end = Math.min(buf.length, e);
@@ -143,7 +136,7 @@ function writeAscii(u8: Uint8Array, offset: number, str: string) {
   }
 }
 
-export function createPlaceholderMp4(isAudio = false, durationSec = 120): Buffer {
+export function createPlaceholderMp4(isAudio = false, durationSec = 120): Uint8Array {
   const brand = isAudio ? 'M4A ' : 'mp42';
   const out = new Uint8Array(24 + 8 + 108);
   const view = new DataView(out.buffer);
@@ -169,5 +162,5 @@ export function createPlaceholderMp4(isAudio = false, durationSec = 120): Buffer
   view.setUint32(32 + 28, 0x00010000, false);
   view.setUint16(32 + 32, 0x0100, false);
 
-  return toBufferLike(out);
+  return out;
 }

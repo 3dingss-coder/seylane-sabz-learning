@@ -110,6 +110,12 @@ class FakeR2 implements R2BucketLike {
     return {
       size: obj.data.byteLength,
       httpMetadata: { contentType: obj.contentType },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(data);
+          controller.close();
+        },
+      }),
       arrayBuffer: async () =>
         data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
     };
@@ -171,6 +177,24 @@ async function setup(purge: boolean) {
 }
 
 describe('D1 -> R2 media move', () => {
+  it('gives same-millisecond same-size D1 rewrites distinct purge-guard versions', async () => {
+    const db = createSqliteD1();
+    const writer = new CloudflareBlobStore('secret', { db, now: () => 123_456 });
+    await writer.put('media/audio/versioned.mp4', bytesOf(1024, 1), 'audio/mp4');
+    const first = await db
+      .prepare('SELECT updated_at FROM blobs WHERE path = ?1')
+      .bind('media/audio/versioned.mp4')
+      .first<{ updated_at: string }>();
+    await writer.put('media/audio/versioned.mp4', bytesOf(1024, 2), 'audio/mp4');
+    const second = await db
+      .prepare('SELECT updated_at FROM blobs WHERE path = ?1')
+      .bind('media/audio/versioned.mp4')
+      .first<{ updated_at: string }>();
+    expect(first?.updated_at).toContain(new Date(123_456).toISOString());
+    expect(second?.updated_at).toContain(new Date(123_456).toISOString());
+    expect(second?.updated_at).not.toBe(first?.updated_at);
+  });
+
   it('writes new files to R2 but keeps resumable-upload staging parts in D1', async () => {
     const db = createSqliteD1();
     const r2 = new FakeR2();
@@ -210,7 +234,24 @@ describe('D1 -> R2 media move', () => {
     expect(Number(left?.n)).toBe(3);
   });
 
-  it('with purge on, removes the D1 rows after verifying and files still read from R2', async () => {
+  it('never overwrites or purges D1 when a same-size R2 object contains different bytes', async () => {
+    const { db, r2, store, small } = await setup(true);
+    const corrupt = bytesOf(small.byteLength, 99);
+    await r2.put('media/audio/small.mp4', corrupt, { httpMetadata: { contentType: 'audio/mp4' } });
+
+    const res = await store.migrateToObjectStorage({ maxFiles: 1 });
+    expect(res).toMatchObject({ moved: 0, failed: 1, purged: 0, remaining: 2 });
+    expect(
+      Buffer.compare(Buffer.from(need(r2, 'media/audio/small.mp4').data), Buffer.from(corrupt)),
+    ).toBe(0);
+    const retained = await db
+      .prepare('SELECT path FROM blobs WHERE path = ?1')
+      .bind('media/audio/small.mp4')
+      .first<{ path: string }>();
+    expect(retained?.path).toBe('media/audio/small.mp4');
+  });
+
+  it('with purge on, removes the D1 rows only after byte-for-byte verification', async () => {
     const { db, r2, store, small } = await setup(true);
     const res = await store.migrateToObjectStorage({ maxFiles: 10, maxBytes: 100 * 1024 * 1024 });
     expect(res).toMatchObject({ moved: 2, purged: 2, failed: 0, remaining: 0 });
@@ -264,7 +305,7 @@ describe('D1 -> R2 media move', () => {
       .prepare('SELECT status, COUNT(*) AS n FROM blob_migration_log GROUP BY status')
       .all<{ status: string; n: number }>();
     const by = Object.fromEntries((log.results ?? []).map((r) => [r.status, Number(r.n)]));
-    expect(by.copied).toBe(2);
+    expect(by['copied-and-verified']).toBe(2);
     expect(by.run).toBe(5);
   });
 });

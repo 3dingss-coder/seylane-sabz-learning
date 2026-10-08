@@ -10,8 +10,8 @@ import type { BlobStore, UploadTicket } from './types';
 export class FirebaseBlobStore implements BlobStore {
   constructor(private readonly bucket: Bucket) {}
 
-  async put(path: string, data: Buffer, contentType: string) {
-    await this.bucket.file(path).save(data, { contentType, resumable: false });
+  async put(path: string, data: Uint8Array, contentType: string) {
+    await this.bucket.file(path).save(Buffer.from(data), { contentType, resumable: false });
   }
   async createUploadUrl(
     path: string,

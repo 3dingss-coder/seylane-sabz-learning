@@ -18,6 +18,7 @@ export function webpushLink(appUrl: string, link: string | undefined): string | 
 }
 
 export class FcmPushSender implements PushSender {
+  readonly enabled = true;
   constructor(
     private readonly messaging: Messaging,
     private readonly appUrl = '',

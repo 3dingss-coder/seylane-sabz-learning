@@ -194,6 +194,7 @@ async function sendPush(
   n: Doc<Notification>,
   type: NotificationType,
 ): Promise<Notification['pushStatus']> {
+  if (d.push.enabled === false) return 'skipped';
   const tokens = await d.store.query<DeviceToken>({
     collection: 'device_tokens',
     where: [['userId', '==', n.userId]],
@@ -229,6 +230,7 @@ export async function notifyUsers(
   const def = DEFAULT_TEMPLATES[type];
   const wantPush = opts.push ?? def.push;
   const now = d.clock();
+  const pushAvailable = d.push.enabled !== false;
   const quiet = inQuietHours(now, policy.quietHours, policy.timezone);
   const bypassQuiet = opts.priority === 'high' && !!opts.urgent;
   let created = 0;
@@ -242,7 +244,7 @@ export async function notifyUsers(
         )
           return;
         const id = d.store.newId();
-        const deferred = wantPush && quiet && !bypassQuiet;
+        const deferred = wantPush && pushAvailable && quiet && !bypassQuiet;
         const n: Notification = {
           userId,
           type,
@@ -250,7 +252,13 @@ export async function notifyUsers(
           body: content.body,
           actionRef: opts.actionRef ?? null,
           readAt: null,
-          pushStatus: wantPush ? (deferred ? 'deferred' : 'none') : 'none',
+          pushStatus: wantPush
+            ? pushAvailable
+              ? deferred
+                ? 'deferred'
+                : 'none'
+              : 'skipped'
+            : 'none',
           deliverAfter: deferred
             ? quietHoursEnd(now, policy.quietHours, policy.timezone).toISOString()
             : null,
@@ -258,7 +266,7 @@ export async function notifyUsers(
         };
         await d.store.set(`notifications/${id}`, n as unknown as Record<string, unknown>);
         created++;
-        if (wantPush && !deferred) {
+        if (wantPush && pushAvailable && !deferred) {
           const status = await sendPush(d, { ...n, id }, type);
           await d.store.update(`notifications/${id}`, { pushStatus: status });
         }
@@ -292,6 +300,7 @@ export async function notifyTemplate(
 
 /** Scheduled (every 15 min): deliver pushes deferred by quiet hours. */
 export async function flushDeferredPush(d: Deps): Promise<number> {
+  if (d.push.enabled === false) return 0;
   const due = await d.store.query<Notification>({
     collection: 'notifications',
     where: [
@@ -360,6 +369,11 @@ export const deviceSchema = z.object({
 });
 
 export async function registerDevice(d: Deps, userId: string, input: z.infer<typeof deviceSchema>) {
+  if (d.push.enabled === false)
+    throw new ApiError(
+      'UNAVAILABLE',
+      'ارسال اعلان پوش روی این سرور پیکربندی نشده است؛ اعلان‌های داخل برنامه همچنان در دسترس هستند.',
+    );
   await d.store.set(`device_tokens/${ids.hash(input.token)}`, {
     userId,
     token: input.token,

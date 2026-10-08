@@ -51,7 +51,10 @@ export async function flushBeats(): Promise<number> {
       } catch (e) {
         if (
           e instanceof ApiError &&
-          (e.code === 'NETWORK' || e.code === 'RATE_LIMIT' || e.code === 'UNAUTHENTICATED')
+          (e.code === 'NETWORK' ||
+            e.code === 'RATE_LIMIT' ||
+            e.code === 'UNAVAILABLE' ||
+            e.code === 'UNAUTHENTICATED')
         )
           break;
         // Validation/forbidden: the beat can never succeed — drop it.

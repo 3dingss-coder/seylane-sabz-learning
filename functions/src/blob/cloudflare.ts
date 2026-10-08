@@ -3,17 +3,20 @@ import {
   base64UrlToString,
   bytesToBase64,
   hmacSha256Base64Url,
+  randomBytesBase64Url,
   stringToBase64Url,
   timingSafeEqualStr,
 } from '../lib/crypto';
 import { createPlaceholderMp4 } from '../lib/media';
 import type { D1Database, D1PreparedStatement } from '../store/d1';
-import { ensureD1Schema } from '../store/d1';
+import { ensureD1Schema, withD1CallTimeout } from '../store/d1';
 import type { LocalTicket } from './local';
 import type { BlobStore, UploadTicket } from './types';
 
 export interface R2ObjectBodyLike {
   arrayBuffer(): Promise<ArrayBuffer>;
+  /** Cloudflare R2 exposes a stream, allowing bounded-memory byte-for-byte verification. */
+  body?: ReadableStream<Uint8Array> | null;
   size: number;
   httpMetadata?: { contentType?: string };
 }
@@ -65,13 +68,6 @@ export interface MigrateResult {
 /** 256 KB raw binary per row (~341 KB base64), safely under D1's 1 MB SQL statement limit. */
 const CHUNK_BYTES = 256 * 1024;
 
-function toBufferLike(u8: Uint8Array): Buffer {
-  if (typeof Buffer !== 'undefined' && typeof Buffer.from === 'function') {
-    return Buffer.from(u8.buffer, u8.byteOffset, u8.byteLength);
-  }
-  return u8 as unknown as Buffer;
-}
-
 function concatBytes(arrays: Uint8Array[]): Uint8Array {
   let total = 0;
   for (const a of arrays) total += a.byteLength;
@@ -82,6 +78,17 @@ function concatBytes(arrays: Uint8Array[]): Uint8Array {
     offset += a.byteLength;
   }
   return out;
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/** Internal blob CAS marker: the random suffix prevents same-millisecond overwrites sharing a version. */
+function blobVersionStamp(now: number): string {
+  return `${new Date(now).toISOString()}#${randomBytesBase64Url(12)}`;
 }
 
 /**
@@ -158,7 +165,7 @@ export class CloudflareBlobStore implements BlobStore {
       return;
     }
     const chunkCount = Math.max(1, Math.ceil(bytes.byteLength / CHUNK_BYTES));
-    const nowIso = new Date(this.now()).toISOString();
+    const nowIso = blobVersionStamp(this.now());
     const upsertBlob = () =>
       db
         .prepare(
@@ -254,10 +261,13 @@ export class CloudflareBlobStore implements BlobStore {
     }
     const db = await this.ensureD1();
     if (db) {
-      const row = await db
-        .prepare('SELECT size, content_type FROM blobs WHERE path = ?1')
-        .bind(p)
-        .first<{ size: number; content_type: string }>();
+      const row = await withD1CallTimeout(
+        db
+          .prepare('SELECT size, content_type FROM blobs WHERE path = ?1')
+          .bind(p)
+          .first<{ size: number; content_type: string }>(),
+        'D1 blob stat',
+      );
       if (row) {
         return { size: Number(row.size), contentType: row.content_type };
       }
@@ -285,15 +295,21 @@ export class CloudflareBlobStore implements BlobStore {
     }
     const db = await this.ensureD1();
     if (db) {
-      const meta = await db
-        .prepare('SELECT content_type FROM blobs WHERE path = ?1')
-        .bind(p)
-        .first<{ content_type: string }>();
-      if (meta) {
-        const chunks = await db
-          .prepare('SELECT data FROM blob_chunks WHERE path = ?1 ORDER BY idx ASC')
+      const meta = await withD1CallTimeout(
+        db
+          .prepare('SELECT content_type FROM blobs WHERE path = ?1')
           .bind(p)
-          .all<{ data: string }>();
+          .first<{ content_type: string }>(),
+        'D1 blob metadata read',
+      );
+      if (meta) {
+        const chunks = await withD1CallTimeout(
+          db
+            .prepare('SELECT data FROM blob_chunks WHERE path = ?1 ORDER BY idx ASC')
+            .bind(p)
+            .all<{ data: string }>(),
+          'D1 blob chunks read',
+        );
         const buffers = (chunks.results ?? []).map((c) => base64ToBytes(c.data));
         return {
           data: concatBytes(buffers),
@@ -322,12 +338,15 @@ export class CloudflareBlobStore implements BlobStore {
     const key = `${p}:${size}:${count}`;
     const hit = this.chunkSizes.get(key);
     if (hit) return hit;
-    const row = await db
-      .prepare(
-        'SELECT length(data) AS l, substr(data, -2) AS t FROM blob_chunks WHERE path = ?1 AND idx = 0',
-      )
-      .bind(p)
-      .first<{ l: number; t: string }>();
+    const row = await withD1CallTimeout(
+      db
+        .prepare(
+          'SELECT length(data) AS l, substr(data, -2) AS t FROM blob_chunks WHERE path = ?1 AND idx = 0',
+        )
+        .bind(p)
+        .first<{ l: number; t: string }>(),
+      'D1 blob chunk-size read',
+    );
     if (!row) return 0;
     const pad = row.t.endsWith('==') ? 2 : row.t.endsWith('=') ? 1 : 0;
     const decoded = (Number(row.l) / 4) * 3 - pad;
@@ -335,47 +354,56 @@ export class CloudflareBlobStore implements BlobStore {
     return decoded;
   }
 
-  async readRange(p: string, start: number, end: number): Promise<Buffer> {
+  async readRange(p: string, start: number, end: number): Promise<Uint8Array> {
     if (this.opts.r2 && this.useR2(p) && end >= start) {
       try {
         // Only the requested window is read from R2 (videos seek with Range requests).
         const obj = await this.opts.r2.get(p, {
           range: { offset: start, length: end - start + 1 },
         });
-        if (obj) return toBufferLike(new Uint8Array(await obj.arrayBuffer()));
-      } catch {
-        // fall through to the D1 copy (not migrated yet)
+        if (obj) return new Uint8Array(await obj.arrayBuffer());
+      } catch (err) {
+        console.warn(
+          '[blob] R2 range read failed; falling back to D1',
+          err instanceof Error ? err.message : String(err),
+        );
       }
     }
     const db = await this.ensureD1();
     if (db) {
-      const meta = await db
-        .prepare('SELECT size, chunk_count FROM blobs WHERE path = ?1')
-        .bind(p)
-        .first<{ size: number; chunk_count: number }>();
+      const meta = await withD1CallTimeout(
+        db
+          .prepare('SELECT size, chunk_count FROM blobs WHERE path = ?1')
+          .bind(p)
+          .first<{ size: number; chunk_count: number }>(),
+        'D1 blob range metadata read',
+      );
       if (meta) {
         const size = Number(meta.size);
         const last = Math.min(end, size - 1);
-        if (start > last) return toBufferLike(new Uint8Array(0));
+        if (start > last) return new Uint8Array(0);
         const cs = await this.chunkSizeOf(db, p, size, Number(meta.chunk_count));
         if (cs > 0) {
           const firstIdx = Math.floor(start / cs);
           const lastIdx = Math.floor(last / cs);
-          const rows = await db
-            .prepare(
-              'SELECT data FROM blob_chunks WHERE path = ?1 AND idx BETWEEN ?2 AND ?3 ORDER BY idx ASC',
-            )
-            .bind(p, firstIdx, lastIdx)
-            .all<{ data: string }>();
+          const rows = await withD1CallTimeout(
+            db
+              .prepare(
+                'SELECT data FROM blob_chunks WHERE path = ?1 AND idx BETWEEN ?2 AND ?3 ORDER BY idx ASC',
+              )
+              .bind(p, firstIdx, lastIdx)
+              .all<{ data: string }>(),
+            'D1 blob range chunks read',
+          );
           const joined = concatBytes((rows.results ?? []).map((c) => base64ToBytes(c.data)));
           const offset = start - firstIdx * cs;
-          return toBufferLike(joined.subarray(offset, offset + (last - start + 1)));
+          return joined.subarray(offset, offset + (last - start + 1));
         }
       }
     }
     const file = await this.read(p);
     if (!file) throw new Error(`Blob not found: ${p}`);
-    return toBufferLike(file.data.subarray(start, end + 1));
+    return file.data.subarray(start, end + 1);
   }
 
   private static likePrefix(prefix: string): string {
@@ -440,7 +468,7 @@ export class CloudflareBlobStore implements BlobStore {
              chunk_count = excluded.chunk_count,
              updated_at = excluded.updated_at`,
         )
-        .bind(dest, contentType, total, chunks, new Date(this.now()).toISOString()),
+        .bind(dest, contentType, total, chunks, blobVersionStamp(this.now())),
       ...parts.map((part) => db.prepare('DELETE FROM blobs WHERE path = ?1').bind(part.path)),
     ]);
     return true;
@@ -472,9 +500,80 @@ export class CloudflareBlobStore implements BlobStore {
     return `/v1/files/public/${p.split('/').map(encodeURIComponent).join('/')}`;
   }
 
+  /** Stream the R2 object and compare it byte-for-byte with bounded D1 chunk batches. */
+  private async verifyR2MatchesD1(
+    db: D1Database,
+    r2: R2BucketLike,
+    path: string,
+    size: number,
+    chunkCount: number,
+  ): Promise<boolean> {
+    const object = await r2.get(path);
+    if (!object || object.size !== size) return false;
+    const reader = object.body?.getReader();
+    // Production R2 bodies are streams. A bounded fallback supports small adapters/tests only.
+    if (!reader && size > SINGLE_PUT_MAX) return false;
+    const wholeObject = reader ? null : new Uint8Array(await object.arrayBuffer());
+    if (wholeObject && wholeObject.byteLength !== size) return false;
+
+    let streamChunk: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
+    let streamOffset = 0;
+    let wholeOffset = 0;
+    const readExpectedLength = async (length: number): Promise<Uint8Array> => {
+      if (!reader) {
+        const source = wholeObject;
+        if (!source) return new Uint8Array(0);
+        const slice = source.subarray(wholeOffset, wholeOffset + length);
+        wholeOffset += slice.byteLength;
+        return slice;
+      }
+      const out = new Uint8Array(length);
+      let written = 0;
+      while (written < length) {
+        if (streamOffset >= streamChunk.byteLength) {
+          const next = await reader.read();
+          if (next.done || !next.value) return out.subarray(0, written);
+          streamChunk = next.value;
+          streamOffset = 0;
+        }
+        const take = Math.min(length - written, streamChunk.byteLength - streamOffset);
+        out.set(streamChunk.subarray(streamOffset, streamOffset + take), written);
+        written += take;
+        streamOffset += take;
+      }
+      return out;
+    };
+
+    let total = 0;
+    let from = 0;
+    const batchSize = 8;
+    while (from < chunkCount) {
+      const rows = await db
+        .prepare(
+          'SELECT idx, data FROM blob_chunks WHERE path = ?1 ORDER BY idx ASC LIMIT ?2 OFFSET ?3',
+        )
+        .bind(path, batchSize, from)
+        .all<{ idx: number; data: string }>();
+      const chunks = rows.results ?? [];
+      if (!chunks.length) return false;
+      for (let i = 0; i < chunks.length; i++) if (Number(chunks[i]?.idx) !== from + i) return false;
+      const expected = concatBytes(chunks.map((chunk) => base64ToBytes(chunk.data)));
+      const actual = await readExpectedLength(expected.byteLength);
+      if (!sameBytes(actual, expected)) return false;
+      total += expected.byteLength;
+      from += chunks.length;
+    }
+    if (from !== chunkCount || total !== size) return false;
+
+    if (!reader) return wholeObject !== null && wholeOffset === wholeObject.byteLength;
+    if (streamOffset < streamChunk.byteLength) return false;
+    const tail = await reader.read();
+    return tail.done && !tail.value?.byteLength;
+  }
+
   /**
-   * One bounded batch of the D1 -> R2 move (run from the 15-minute cron until nothing is left).
-   * For each stored file: read it back from D1, write it to R2, verify the size, and only then —
+   * One bounded batch of the D1 -> R2 move (run manually only after reviewing storage state).
+   * For each stored file: read it back from D1, write it to R2, verify every byte, and only then —
    * when `purgeAfterMigrate` is on — delete the D1 rows. Reads already prefer R2 and fall back
    * to D1, so files keep working at every step. Staging parts (`uploads/`) are never moved.
    */
@@ -524,12 +623,18 @@ export class CloudflareBlobStore implements BlobStore {
 
     const rows = await db
       .prepare(
-        `SELECT path, content_type, size, chunk_count FROM blobs
+        `SELECT path, content_type, size, chunk_count, updated_at FROM blobs
          WHERE path NOT LIKE 'uploads/%'
            AND chunk_count = (SELECT COUNT(*) FROM blob_chunks c WHERE c.path = blobs.path)
          ORDER BY size ASC LIMIT 200`,
       )
-      .all<{ path: string; content_type: string; size: number; chunk_count: number }>();
+      .all<{
+        path: string;
+        content_type: string;
+        size: number;
+        chunk_count: number;
+        updated_at: string;
+      }>();
     const todo = rows.results ?? [];
 
     let checks = 0;
@@ -540,33 +645,98 @@ export class CloudflareBlobStore implements BlobStore {
         const contentType = row.content_type || 'application/octet-stream';
         checks++;
         const head = await r2.head(row.path);
-        if (head && head.size === size) {
-          // Already copied and size-verified earlier: does not use up this run's batch.
+        if (head) {
+          // Never overwrite an existing object during migration: it may be a newer admin upload.
+          if (head.size !== size) {
+            out.failed++;
+            await log(
+              row.path,
+              size,
+              'conflict',
+              'existing R2 size differs from D1; both copies retained',
+            );
+            continue;
+          }
+          if (!(await this.verifyR2MatchesD1(db, r2, row.path, size, Number(row.chunk_count)))) {
+            out.failed++;
+            await log(
+              row.path,
+              size,
+              'conflict',
+              'existing R2 bytes differ from D1; both copies retained',
+            );
+            continue;
+          }
           out.verified++;
         } else {
           if (out.bytes > 0 && out.bytes + size > maxBytes) continue;
           if (size <= SINGLE_PUT_MAX) {
             const chunks = await db
-              .prepare('SELECT data FROM blob_chunks WHERE path = ?1 ORDER BY idx ASC')
+              .prepare('SELECT idx, data FROM blob_chunks WHERE path = ?1 ORDER BY idx ASC')
               .bind(row.path)
-              .all<{ data: string }>();
-            const whole = concatBytes((chunks.results ?? []).map((c) => base64ToBytes(c.data)));
+              .all<{ idx: number; data: string }>();
+            const list = chunks.results ?? [];
+            if (list.length !== Number(row.chunk_count)) throw new Error('D1 chunk count mismatch');
+            for (let i = 0; i < list.length; i++)
+              if (Number(list[i]?.idx) !== i) throw new Error('D1 chunk index mismatch');
+            const whole = concatBytes(list.map((chunk) => base64ToBytes(chunk.data)));
             if (whole.byteLength !== size) throw new Error('size mismatch while reading D1');
             await r2.put(row.path, whole, { httpMetadata: { contentType } });
           } else {
             await this.copyLargeToR2(db, r2, row.path, size, Number(row.chunk_count), contentType);
           }
           const after = await r2.head(row.path);
-          if (!after || after.size !== size) throw new Error('R2 copy failed verification');
+          if (!after || after.size !== size) throw new Error('R2 copy size verification failed');
+          if (!(await this.verifyR2MatchesD1(db, r2, row.path, size, Number(row.chunk_count))))
+            throw new Error('R2 copy failed byte-for-byte verification');
           out.moved++;
           out.bytes += size;
-          await log(row.path, size, 'copied');
+          await log(row.path, size, 'copied-and-verified');
         }
         if (purge) {
-          await db.batch([
-            db.prepare('DELETE FROM blob_chunks WHERE path = ?1').bind(row.path),
-            db.prepare('DELETE FROM blobs WHERE path = ?1').bind(row.path),
+          const current = await db
+            .prepare('SELECT size, chunk_count, updated_at FROM blobs WHERE path = ?1')
+            .bind(row.path)
+            .first<{ size: number; chunk_count: number; updated_at: string }>();
+          if (
+            !current ||
+            Number(current.size) !== size ||
+            Number(current.chunk_count) !== Number(row.chunk_count) ||
+            current.updated_at !== row.updated_at
+          ) {
+            out.failed++;
+            await log(
+              row.path,
+              size,
+              'conflict',
+              'D1 source changed during verification; source retained',
+            );
+            continue;
+          }
+          const deleted = await db.batch([
+            db
+              .prepare(
+                `DELETE FROM blob_chunks WHERE path = ?1 AND EXISTS (
+                   SELECT 1 FROM blobs WHERE path = ?1 AND size = ?2 AND chunk_count = ?3 AND updated_at = ?4
+                 )`,
+              )
+              .bind(row.path, size, Number(row.chunk_count), row.updated_at),
+            db
+              .prepare(
+                'DELETE FROM blobs WHERE path = ?1 AND size = ?2 AND chunk_count = ?3 AND updated_at = ?4',
+              )
+              .bind(row.path, size, Number(row.chunk_count), row.updated_at),
           ]);
+          if (Number(deleted[1]?.meta?.changes ?? 0) !== 1) {
+            out.failed++;
+            await log(
+              row.path,
+              size,
+              'conflict',
+              'conditional D1 cleanup did not match the verified source',
+            );
+            continue;
+          }
           out.purged++;
           await log(row.path, size, 'purged');
         }

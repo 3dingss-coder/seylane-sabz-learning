@@ -109,6 +109,11 @@ export class MemoryAuthProvider implements AuthProvider {
     return { ok: true, uid: link.uid, tokens: await this.issue(link.uid) };
   }
 
+  /** Caller must first verify phone ownership with a real provider; this method never verifies OTP. */
+  async signInVerifiedPhone(email: string): Promise<SignInResult> {
+    return this.demoSignIn(email);
+  }
+
   async refresh(refreshToken: string) {
     const key = `_auth_refresh/${sha(refreshToken)}`;
     let rec: { uid: string; rotatedAt?: number; revoked?: boolean } | null = await this.store.get<{

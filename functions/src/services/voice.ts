@@ -13,6 +13,7 @@ import { evaluateBehavior } from './behavior';
 import type { ChatMessage, User } from '../domain/types';
 import type { Doc } from '../store/types';
 import { allBrands } from './catalog-cache';
+import { base64ToBytes, bytesToBase64 } from '../lib/crypto';
 import { DAY } from '../lib/time';
 
 /**
@@ -207,22 +208,27 @@ export async function synthesizeReply(
 export function wrapPcmAsWav(base64: string, mime: string): { base64: string; mime: string } {
   const rate = Number(/rate=(\d+)/.exec(mime)?.[1] ?? 24000);
   if (!/l16|pcm/i.test(mime)) return { base64, mime };
-  const pcm = Buffer.from(base64, 'base64');
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0, 'ascii');
-  header.writeUInt32LE(36 + pcm.length, 4);
-  header.write('WAVE', 8, 'ascii');
-  header.write('fmt ', 12, 'ascii');
-  header.writeUInt32LE(16, 16); // fmt chunk size
-  header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(1, 22); // mono
-  header.writeUInt32LE(rate, 24);
-  header.writeUInt32LE(rate * 2, 28); // byte rate (16-bit mono)
-  header.writeUInt16LE(2, 32); // block align
-  header.writeUInt16LE(16, 34); // bits per sample
-  header.write('data', 36, 'ascii');
-  header.writeUInt32LE(pcm.length, 40);
-  return { base64: Buffer.concat([header, pcm]).toString('base64'), mime: 'audio/wav' };
+  const pcm = base64ToBytes(base64);
+  const wav = new Uint8Array(44 + pcm.length);
+  const header = new DataView(wav.buffer);
+  const writeAscii = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i++) wav[offset + i] = value.charCodeAt(i);
+  };
+  writeAscii(0, 'RIFF');
+  header.setUint32(4, 36 + pcm.length, true);
+  writeAscii(8, 'WAVE');
+  writeAscii(12, 'fmt ');
+  header.setUint32(16, 16, true); // fmt chunk size
+  header.setUint16(20, 1, true); // PCM
+  header.setUint16(22, 1, true); // mono
+  header.setUint32(24, rate, true);
+  header.setUint32(28, rate * 2, true); // byte rate (16-bit mono)
+  header.setUint16(32, 2, true); // block align
+  header.setUint16(34, 16, true); // bits per sample
+  writeAscii(36, 'data');
+  header.setUint32(40, pcm.length, true);
+  wav.set(pcm, 44);
+  return { base64: bytesToBase64(wav), mime: 'audio/wav' };
 }
 
 /** Transport A: one voice turn end-to-end. */

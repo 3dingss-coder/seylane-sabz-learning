@@ -6,6 +6,8 @@ export interface Me {
   name: string;
   phone: string | null;
   email: string | null;
+  /** True for accounts with no password credential (for example verified phone-only sign-in). */
+  passwordless?: boolean;
   /** Residence («محل سکونت») captured at sign-up; null on accounts created before it existed. */
   province: string | null;
   city: string | null;

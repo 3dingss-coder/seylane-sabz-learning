@@ -139,6 +139,8 @@ const SEED_MEDIA_DURATIONS: Record<string, number> = {
 };
 
 export async function runSeed(d: Deps, opts: SeedOptions): Promise<SeedReport> {
+  if (opts.demo && d.config.env === 'prod')
+    throw new Error('Demo user seeding is forbidden in production.');
   const log = opts.log ?? (() => undefined);
   const link = !!opts.linkLocalFiles;
   const paths = catalogPaths(opts.repoRoot);

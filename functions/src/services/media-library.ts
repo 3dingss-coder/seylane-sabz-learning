@@ -221,13 +221,13 @@ export async function completeLibraryUpload(
     : null;
   if (composed === null || composed === undefined) {
     // Generic stores (local disk / Firebase): assemble into ONE preallocated buffer.
-    const whole = Buffer.allocUnsafe(m.declaredSize);
+    const whole = new Uint8Array(m.declaredSize);
     let offset = 0;
     for (const part of parts) {
       const bytes = await d.blob.readRange(part.path, 0, part.size - 1);
       if (bytes.length !== part.size || offset + part.size > whole.length)
         throw new ApiError('CONFLICT', 'اندازه‌ی فایل با آپلود هم‌خوانی ندارد. دوباره تلاش کنید.');
-      bytes.copy(whole, offset);
+      whole.set(bytes, offset);
       offset += part.size;
     }
     if (offset !== m.declaredSize)

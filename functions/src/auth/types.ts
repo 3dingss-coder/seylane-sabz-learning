@@ -26,6 +26,8 @@ export interface AuthProvider {
   signIn(email: string, password: string): Promise<SignInResult>;
   refresh(refreshToken: string): Promise<{ uid: string; tokens: AuthTokens } | null>;
   verify(idToken: string): Promise<{ uid: string } | null>;
+  /** Issue a session only after an external phone-verification provider has confirmed ownership. */
+  signInVerifiedPhone?(email: string): Promise<SignInResult>;
   revoke(uid: string): Promise<void>;
   setDisabled(uid: string, disabled: boolean): Promise<void>;
   setPassword(uid: string, password: string): Promise<void>;

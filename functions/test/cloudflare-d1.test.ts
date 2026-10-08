@@ -5,7 +5,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { completeLibraryUpload, startLibraryUpload } from '../src/services/media-library';
 import { fakeMp4 } from './support/ctx';
 import { D1Store, type D1Database, type D1PreparedStatement, type D1Result } from '../src/store/d1';
+import { ids } from '../src/lib/ids';
+import { heartbeatSchema, recordProgress, requestRetake } from '../src/services/learning';
+import { reviewRetake } from '../src/services/reports';
+import type { RetakeRequest, User } from '../src/domain/types';
+import type { Doc } from '../src/store/types';
 import type { Data } from '../src/store/types';
+import { RateLimiter } from '../src/http/rateLimit';
+import { D1RateLimitStore } from '../src/http/rateLimitD1';
 import { buildCloudflareDeps, createFetchHandler } from '../src/web-handler';
 
 interface SqliteStatement {
@@ -72,24 +79,30 @@ function createSqliteD1(): D1Database {
     } as unknown as D1PreparedStatement;
   };
 
+  let batchQueue: Promise<unknown> = Promise.resolve();
   return {
     prepare(query: string): D1PreparedStatement {
       return makeStmt(query);
     },
-    async batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
-      sqlite.exec('BEGIN');
-      try {
-        const out: D1Result<T>[] = [];
-        for (const s of statements) {
-          const isSelect = /^\s*select\b/i.test((s as unknown as { sql?: string }).sql ?? '');
-          out.push((isSelect ? await s.all() : await s.run()) as D1Result<T>);
+    batch<T = unknown>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]> {
+      const run = async () => {
+        sqlite.exec('BEGIN');
+        try {
+          const out: D1Result<T>[] = [];
+          for (const s of statements) {
+            const isSelect = /^\s*select\b/i.test((s as unknown as { sql?: string }).sql ?? '');
+            out.push((isSelect ? await s.all() : await s.run()) as D1Result<T>);
+          }
+          sqlite.exec('COMMIT');
+          return out;
+        } catch (e) {
+          sqlite.exec('ROLLBACK');
+          throw e;
         }
-        sqlite.exec('COMMIT');
-        return out;
-      } catch (e) {
-        sqlite.exec('ROLLBACK');
-        throw e;
-      }
+      };
+      const next = batchQueue.then(run, run);
+      batchQueue = next.catch(() => undefined);
+      return next;
     },
   };
 }
@@ -100,6 +113,234 @@ const seedSnapshot: Record<string, Record<string, Data>> | undefined = fs.exists
   : undefined;
 
 describe('Cloudflare D1 store limits', () => {
+  it('excludes demo identities and auth material from the production seed snapshot', () => {
+    if (!seedSnapshot) return;
+    for (const collection of ['users', '_auth', '_auth_email', '_auth_refresh', 'unique_keys'])
+      expect(seedSnapshot[collection]).toBeUndefined();
+    const serialized = JSON.stringify(seedSnapshot);
+    expect(serialized).not.toContain('09120000001');
+    expect(serialized).not.toContain('demo1234');
+  });
+
+  it('shares atomic rate-limit counters across limiter instances and resets on the next window', async () => {
+    const db = createSqliteD1();
+    await new D1Store(db).ensureReady();
+    let now = 1_000;
+    const first = new RateLimiter(() => now, 1, new D1RateLimitStore(db));
+    const second = new RateLimiter(() => now, 1, new D1RateLimitStore(db));
+    expect(await first.allow('login:203.0.113.7', 2, 60_000)).toBe(true);
+    expect(await second.allow('login:203.0.113.7', 2, 60_000)).toBe(true);
+    expect(await first.allow('login:203.0.113.7', 2, 60_000)).toBe(false);
+    now = 60_000;
+    expect(await second.allow('login:203.0.113.7', 2, 60_000)).toBe(true);
+    const stored = await db.prepare('SELECT key FROM rate_limits').all<{ key: string }>();
+    expect(stored.results?.[0]?.key).not.toContain('203.0.113.7');
+
+    now = 120_000;
+    const raced = await Promise.all([
+      first.allow('login:203.0.113.8', 1, 60_000),
+      second.allow('login:203.0.113.8', 1, 60_000),
+    ]);
+    expect(raced.filter(Boolean)).toHaveLength(1);
+  });
+
+  it('retries conflicting read-modify-write transactions across separate D1Store instances', async () => {
+    const db = createSqliteD1();
+    const firstStore = new D1Store(db);
+    const secondStore = new D1Store(db);
+    await firstStore.ensureReady();
+    await secondStore.ensureReady();
+    await firstStore.set('counters/shared', { count: 0 });
+
+    let entrants = 0;
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const increment = (store: D1Store) =>
+      store.runTransaction(async (tx) => {
+        const row = await tx.get<{ count: number }>('counters/shared');
+        if (entrants < 2) {
+          entrants++;
+          if (entrants === 2) release();
+          await barrier;
+        }
+        tx.set('counters/shared', { count: (row?.count ?? 0) + 1 });
+      });
+
+    await Promise.all([increment(firstStore), increment(secondStore)]);
+    expect(await firstStore.get('counters/shared')).toMatchObject({ count: 2 });
+  });
+
+  it('keeps scoped transactions for different users independent under 1–100-way contention', async () => {
+    const db = createSqliteD1();
+    const base = new D1Store(db);
+    await base.ensureReady();
+
+    for (const concurrency of [1, 5, 20, 50, 100]) {
+      const stores = Array.from({ length: concurrency }, () => new D1Store(db));
+      const wave = `wave-${concurrency}`;
+      await Promise.all(
+        stores.map((store, index) =>
+          store.runTransaction(
+            async (tx) => {
+              const path = `stress_counters/${wave}-${index}`;
+              const before = await tx.get<{ count: number }>(path);
+              tx.set(path, { count: (before?.count ?? 0) + 1, userId: `${wave}-${index}` });
+            },
+            { scope: `user:${wave}-${index}` },
+          ),
+        ),
+      );
+      const rows = await base.query<{ count: number }>({ collection: 'stress_counters' });
+      expect(rows.filter((row) => row.id.startsWith(`${wave}-`))).toHaveLength(concurrency);
+      expect(
+        rows.filter((row) => row.id.startsWith(`${wave}-`)).every((row) => row.count === 1),
+      ).toBe(true);
+    }
+  });
+
+  it('runs independent user callbacks concurrently within one D1Store isolate', async () => {
+    const db = createSqliteD1();
+    const store = new D1Store(db);
+    await store.ensureReady();
+    const scopeCount = 5;
+    let waiting = 0;
+    let maxWaiting = 0;
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await Promise.all(
+      Array.from({ length: scopeCount }, (_, index) =>
+        store.runTransaction(
+          async (tx) => {
+            waiting++;
+            maxWaiting = Math.max(maxWaiting, waiting);
+            if (waiting === scopeCount) release();
+            await Promise.race([
+              released,
+              new Promise<void>((resolve) => setTimeout(resolve, 100)),
+            ]);
+            waiting--;
+            tx.set(`scope_queue/${index}`, { count: 1 });
+          },
+          { scope: `user:parallel-${index}` },
+        ),
+      ),
+    );
+    expect(maxWaiting).toBe(scopeCount);
+  });
+
+  it('serializes one user locally and retries same-user cross-isolate conflicts without lost updates', async () => {
+    const db = createSqliteD1();
+    const store = new D1Store(db);
+    await store.set('stress_counters/same-user', { count: 0 });
+    await Promise.all(
+      Array.from({ length: 100 }, () =>
+        store.runTransaction(
+          async (tx) => {
+            const row = await tx.get<{ count: number }>('stress_counters/same-user');
+            tx.set('stress_counters/same-user', { count: (row?.count ?? 0) + 1 });
+          },
+          { scope: 'user:same-user' },
+        ),
+      ),
+    );
+    expect(await store.get('stress_counters/same-user')).toMatchObject({ count: 100 });
+
+    let arrivals = 0;
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const isolates = Array.from({ length: 5 }, () => new D1Store(db));
+    await Promise.all(
+      isolates.map((isolate) => {
+        let firstAttempt = true;
+        return isolate.runTransaction(
+          async (tx) => {
+            const row = await tx.get<{ count: number }>('stress_counters/same-user');
+            if (firstAttempt) {
+              firstAttempt = false;
+              arrivals++;
+              if (arrivals === isolates.length) release();
+              await barrier;
+            }
+            tx.set('stress_counters/same-user', { count: (row?.count ?? 0) + 1 });
+          },
+          { scope: 'user:same-user' },
+        );
+      }),
+    );
+    expect(await store.get('stress_counters/same-user')).toMatchObject({ count: 105 });
+  });
+
+  it('shares the user scope between direct user writes and scoped transactions', async () => {
+    const db = createSqliteD1();
+    const transactional = new D1Store(db);
+    const direct = new D1Store(db);
+    await transactional.set('users/user-scope', { name: 'Initial', lastActiveAt: 'before' });
+
+    let signalRead!: () => void;
+    let release!: () => void;
+    const read = new Promise<void>((resolve) => {
+      signalRead = resolve;
+    });
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let attempts = 0;
+    const pending = transactional.runTransaction(
+      async (tx) => {
+        const user = await tx.get<{ name: string; lastActiveAt: string }>('users/user-scope');
+        attempts++;
+        if (attempts === 1) {
+          signalRead();
+          await barrier;
+        }
+        tx.update('users/user-scope', { name: `${user?.name ?? ''} updated` });
+      },
+      { scope: 'user:user-scope' },
+    );
+
+    await read;
+    await direct.update('users/user-scope', { lastActiveAt: 'direct-write' });
+    release();
+    await pending;
+
+    expect(await transactional.get('users/user-scope')).toMatchObject({
+      name: 'Initial updated',
+      lastActiveAt: 'direct-write',
+    });
+    expect(attempts).toBe(2);
+  });
+
+  it('does not pre-read a plain set and reuses transaction reads when building updates', async () => {
+    const db = createSqliteD1();
+    let documentReads = 0;
+    const counted: D1Database = {
+      prepare(sql: string) {
+        if (sql === 'SELECT data FROM docs WHERE col = ?1 AND id = ?2') documentReads++;
+        return db.prepare(sql);
+      },
+      batch: (statements) => db.batch(statements),
+    };
+    const store = new D1Store(counted);
+    await store.set('write_probe/item', { count: 1 });
+    documentReads = 0;
+    await store.set('write_probe/item', { count: 2 });
+    expect(documentReads).toBe(0);
+
+    await store.runTransaction(async (tx) => {
+      const row = await tx.get<{ count: number }>('write_probe/item');
+      tx.set('write_probe/item', { count: (row?.count ?? 0) + 1 }, { merge: true });
+    });
+    expect(documentReads).toBe(1);
+    expect(await store.get('write_probe/item')).toMatchObject({ count: 3 });
+  });
+
   it('loads many documents in one query and keeps a long Persian guide', async () => {
     const db = createSqliteD1();
     let prepares = 0;
@@ -156,6 +397,71 @@ describe('Cloudflare D1 store limits', () => {
 });
 
 describe('Cloudflare D1 + Web Fetch Handler', () => {
+  it('fails closed instead of creating an in-memory production backend when D1 is missing', async () => {
+    await expect(buildCloudflareDeps({ APP_ENV: 'prod' }, seedSnapshot)).rejects.toThrow(
+      'production requires the D1 binding',
+    );
+  });
+
+  it('does not backfill a full seed snapshot into an existing production database without a recovery marker', async () => {
+    const db = createSqliteD1();
+    await new D1Store(db).ensureReady();
+    await db
+      .prepare('INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)')
+      .bind('brands', 'live-brand', 'brands', JSON.stringify({ name: 'Live data' }), 'x')
+      .run();
+    const snapshot: Record<string, Record<string, Data>> = {
+      brands: { 'snapshot-only-brand': { name: 'Must not be added to live D1' } },
+    };
+
+    await new D1Store(db, snapshot).ensureReady();
+    expect(await new D1Store(db).get('brands/live-brand')).toMatchObject({ name: 'Live data' });
+    expect(await new D1Store(db).get('brands/snapshot-only-brand')).toBeNull();
+  });
+
+  it('resumes an interrupted fresh catalog seed without overwriting existing rows', async () => {
+    const db = createSqliteD1();
+    await new D1Store(db).ensureReady();
+    await db.batch([
+      db
+        .prepare('INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)')
+        .bind('knowledge_meta', 'catalog_snapshot_seed_in_progress', 'knowledge_meta', '{}', 'x'),
+      db
+        .prepare('INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)')
+        .bind(
+          'brands',
+          'seeded-before-crash',
+          'brands',
+          JSON.stringify({ name: 'Keep this edit' }),
+          'x',
+        ),
+    ]);
+    const snapshot: Record<string, Record<string, Data>> = {
+      brands: {
+        'seeded-before-crash': { name: 'Snapshot copy must not overwrite' },
+        'missing-brand': { name: 'Recovered brand' },
+      },
+      packages: { 'missing-package': { title: 'Recovered package' } },
+    };
+
+    await new D1Store(db, snapshot).ensureReady();
+    expect(await new D1Store(db).get('brands/seeded-before-crash')).toMatchObject({
+      name: 'Keep this edit',
+    });
+    expect(await new D1Store(db).get('brands/missing-brand')).toMatchObject({
+      name: 'Recovered brand',
+    });
+    expect(await new D1Store(db).get('packages/missing-package')).toMatchObject({
+      title: 'Recovered package',
+    });
+    expect(
+      await new D1Store(db).get('knowledge_meta/catalog_snapshot_seed_version'),
+    ).not.toBeNull();
+    expect(
+      await new D1Store(db).get('knowledge_meta/catalog_snapshot_seed_in_progress'),
+    ).toBeNull();
+  });
+
   it('keeps the app starting when mentor guide seeding fails, and retries on the next start', async () => {
     const db = createSqliteD1();
     await new D1Store(db).ensureReady();
@@ -274,6 +580,195 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     ]);
   });
 
+  it('commits a D1 heartbeat, user activity, playback event and analytics in one user scope', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'prod' });
+    const userId = 'd1-progress-user';
+    const sectionId = 'd1-progress-section';
+    const user = {
+      id: userId,
+      teamId: null,
+      brandIds: [],
+      status: 'active',
+      role: 'marketer',
+    } as unknown as Doc<User>;
+
+    await deps.store.set(`users/${userId}`, user);
+    await deps.store.set(`section_index/${sectionId}`, { packageId: 'd1-progress-package' });
+    await deps.store.set(`packages/d1-progress-package/sections/${sectionId}`, {
+      durationSec: 120,
+      mediaType: 'video',
+    });
+    await deps.store.set(`packages/d1-progress-package`, {
+      status: 'published',
+      sections: [{ id: sectionId, archived: false }],
+    });
+    await deps.store.set('assignments/d1-progress-global', {
+      type: 'global',
+      targetId: null,
+      packageIds: ['d1-progress-package'],
+      revokedAt: null,
+    });
+
+    const result = await recordProgress(
+      deps,
+      user,
+      sectionId,
+      heartbeatSchema.parse({ positionSec: 12, playedDeltaSec: 10 }),
+      'd1-heartbeat-once',
+      { skipBudget: true },
+    );
+
+    expect(result).toMatchObject({ percent: 8, playedSeconds: 10, duplicate: false });
+    const progress = await deps.store.get<{ updatedAt: string }>(
+      `section_progress/${ids.progress(userId, sectionId)}`,
+    );
+    expect(progress).toMatchObject({
+      userId,
+      sectionId,
+      packageId: 'd1-progress-package',
+      playedSeconds: 10,
+    });
+    expect(await deps.store.get(`users/${userId}`)).toMatchObject({
+      lastActiveAt: progress?.updatedAt,
+    });
+    expect(
+      await deps.store.query<{ name: string }>({
+        collection: 'analytics_events',
+        where: [['userId', '==', userId]],
+      }),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'playback_heartbeat' }),
+        expect.objectContaining({ name: 'section_played' }),
+      ]),
+    );
+    expect(
+      await deps.store.query({
+        collection: 'playback_events',
+        where: [
+          ['userId', '==', userId],
+          ['sectionId', '==', sectionId],
+        ],
+      }),
+    ).toHaveLength(1);
+    const scope = await db
+      .prepare('SELECT version FROM d1_tx_scopes WHERE scope = ?1')
+      .bind(`user:${userId}`)
+      .first<{ version: number }>();
+    expect(Number(scope?.version)).toBeGreaterThan(0);
+  });
+
+  it('uses the same user scope for retake requests, reviews, and attempt allowance', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'dev' });
+    const userId = 'd1-retake-user';
+    const packageId = 'd1-retake-package';
+    const sectionId = 'd1-retake-section';
+    const quizId = 'd1-retake-quiz';
+    const now = new Date().toISOString();
+    const user = {
+      id: userId,
+      name: 'Test learner',
+      teamId: null,
+      brandIds: [],
+      status: 'active',
+      role: 'marketer',
+      createdAt: now,
+    } as unknown as Doc<User>;
+    await deps.store.set(`users/${userId}`, user);
+    await deps.store.set(`packages/${packageId}`, {
+      productId: null,
+      brandId: null,
+      title: 'D1 quiz package',
+      description: '',
+      status: 'published',
+      deadlineAt: null,
+      deadlineHours: null,
+      estimatedMinutes: 1,
+      coverUrl: null,
+      sections: [
+        {
+          id: sectionId,
+          order: 1,
+          title: 'D1 quiz section',
+          mediaType: 'video',
+          durationSec: 60,
+          quizId,
+          quizRequired: true,
+          archived: false,
+        },
+      ],
+      createdBy: 'test',
+      publishedAt: now,
+      seedTag: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await deps.store.set(`packages/${packageId}/sections/${sectionId}`, {
+      packageId,
+      quizId,
+      archived: false,
+    });
+    await deps.store.set(`section_index/${sectionId}`, { packageId });
+    await deps.store.set(`quizzes/${quizId}`, {
+      sectionId,
+      packageId,
+      maxAttempts: null,
+      passScore: null,
+    });
+    await deps.store.set('assignments/d1-retake-global', {
+      type: 'global',
+      targetId: null,
+      packageIds: [packageId],
+      revokedAt: null,
+    });
+    for (let attemptNumber = 1; attemptNumber <= 3; attemptNumber++)
+      await deps.store.set(`attempts/d1-retake-attempt-${attemptNumber}`, {
+        userId,
+        quizId,
+        packageId,
+        sectionId,
+        attemptNumber,
+        status: 'submitted',
+        passed: false,
+      });
+
+    const version = async () => {
+      const row = await db
+        .prepare('SELECT version FROM d1_tx_scopes WHERE scope = ?1')
+        .bind(`user:${userId}`)
+        .first<{ version: number }>();
+      return Number(row?.version ?? 0);
+    };
+    const beforeRequests = await version();
+    const requests = await Promise.all([
+      requestRetake(deps, user, quizId),
+      requestRetake(deps, user, quizId),
+    ]);
+    expect(requests[0]?.id).toBe(requests[1]?.id);
+    expect(
+      await deps.store.query<RetakeRequest>({
+        collection: 'retake_requests',
+        where: [
+          ['userId', '==', userId],
+          ['quizId', '==', quizId],
+          ['status', '==', 'pending'],
+        ],
+      }),
+    ).toHaveLength(1);
+    const afterRequests = await version();
+    expect(afterRequests).toBeGreaterThan(beforeRequests);
+
+    const requestId = requests[0]?.id;
+    if (!requestId) throw new Error('retake request was not created');
+    const reviewer = { id: 'd1-reviewer', role: 'admin', teamId: null } as unknown as Doc<User>;
+    await reviewRetake(deps, reviewer, requestId, 'approved', null);
+    const approved = await deps.store.get<RetakeRequest>(`retake_requests/${requestId}`);
+    expect(approved?.status).toBe('approved');
+    expect(await version()).toBeGreaterThan(afterRequests);
+  });
+
   it('auto-migrates schema, auto-seeds snapshot, and persists data & sessions across cold starts', async () => {
     const db = createSqliteD1();
 
@@ -297,16 +792,16 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: 'کاربر کلودفلر',
-          identifier: '09359998877',
+          identifier: 'cloudflare-user@example.com',
           password: 'pass1234',
         }),
       }),
     );
     expect(regRes.status).toBe(201);
     const regData = (await regRes.json()) as {
-      data: { idToken: string; refreshToken: string; user: { id: string; phone: string } };
+      data: { idToken: string; refreshToken: string; user: { id: string; email: string } };
     };
-    expect(regData.data.user.phone).toBe('09359998877');
+    expect(regData.data.user.email).toBe('cloudflare-user@example.com');
 
     // 3. Simulate a serverless cold start (new Worker isolate with the same D1 database)
     const deps2 = await buildCloudflareDeps({ DB: db, APP_ENV: 'prod' }, seedSnapshot);
@@ -332,7 +827,15 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     const meJson = (await meRes.json()) as { data: { name: string } };
     expect(meJson.data.name).toBe('کاربر کلودفلر');
 
-    // 4. Phone-only login works even when APP_ENV=prod on Cloudflare D1
+    // 4. Password login works; phone-only access fails closed without a real SMS provider.
+    const passwordLogin = await handler2(
+      new Request('https://learn.pages.dev/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: 'cloudflare-user@example.com', password: 'pass1234' }),
+      }),
+    );
+    expect(passwordLogin.status).toBe(200);
     const phoneLoginRes = await handler2(
       new Request('https://learn.pages.dev/v1/auth/phone-login', {
         method: 'POST',
@@ -340,7 +843,32 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
         body: JSON.stringify({ phone: '09359998877' }),
       }),
     );
-    expect(phoneLoginRes.status).toBe(200);
+    expect(phoneLoginRes.status).toBe(503);
+    const phoneRegisterRes = await handler2(
+      new Request('https://learn.pages.dev/v1/auth/phone-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'عضو جدید',
+          phone: '09359998878',
+          province: 'تهران',
+          city: 'تهران',
+        }),
+      }),
+    );
+    expect(phoneRegisterRes.status).toBe(503);
+    const deviceRes = await handler2(
+      new Request('https://learn.pages.dev/v1/me/devices', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${refreshed.data.idToken}`,
+        },
+        body: JSON.stringify({ token: 'fcm-device-token-123456', platform: 'web' }),
+      }),
+    );
+    expect(deviceRes.status).toBe(503);
+    expect(await deps2.store.query({ collection: 'device_tokens' })).toHaveLength(0);
   });
 
   it('stores and serves uploaded media blobs in D1 with Range support', async () => {

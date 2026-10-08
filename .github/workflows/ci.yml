@@ -29,7 +29,9 @@ jobs:
       - run: npm test
       - name: Composite index coverage (query shapes vs firestore.indexes.json)
         run: npm run check:indexes -w functions
-      - name: Verify Cloudflare Worker + Assets bundle
+      - name: Verify Cloudflare production Worker + Assets bundle (dry run)
+        env:
+          VITE_APP_ENV: prod
         run: npx --yes wrangler@4 deploy --dry-run
 
   e2e:

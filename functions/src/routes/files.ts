@@ -50,7 +50,7 @@ export function localFilesRouter(blob: LocalBlobStore): Router {
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         res.setHeader('Content-Type', isAudio ? 'audio/mp4' : 'video/mp4');
         res.setHeader('Cache-Control', 'private, max-age=3600');
-        res.status(200).send(buf);
+        res.status(200).send(Buffer.from(buf));
         return;
       }
       if (p === 'branding/holding-logo.png') {

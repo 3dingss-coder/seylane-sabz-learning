@@ -16,6 +16,15 @@ beforeAll(async () => {
 }, 120_000);
 
 describe('real catalog seed (PROMPT 003/004)', () => {
+  it('rejects demo-user seeding in production before writing any data', async () => {
+    const prod = await createCtx();
+    prod.deps.config.env = 'prod';
+    await expect(runSeed(prod.deps, { repoRoot, demo: true })).rejects.toThrow(
+      'Demo user seeding is forbidden in production.',
+    );
+    expect(await prod.deps.store.query({ collection: 'users' })).toHaveLength(0);
+  });
+
   it('seeds 12 catalog + 5 reactivated brands and every product verbatim', async () => {
     const cat = loadCatalog(catalogPaths(repoRoot));
     expect(report.brands).toBe(17);

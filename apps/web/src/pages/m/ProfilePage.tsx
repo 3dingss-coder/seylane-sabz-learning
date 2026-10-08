@@ -97,38 +97,48 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
         </form>
       </Card>
       <PushOptIn />
-      <Card>
-        <form onSubmit={changePw} className="flex flex-col gap-3">
-          <h2 className="text-base font-bold">تغییر رمز</h2>
-          <Input
-            label="رمز فعلی"
-            type="password"
-            ltr
-            autoComplete="current-password"
-            value={cur}
-            onChange={(e) => setCur(e.target.value)}
-            error={errors.currentPassword}
-          />
-          <Input
-            label="رمز جدید"
-            type="password"
-            ltr
-            autoComplete="new-password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            error={errors.newPassword}
-            hint="حداقل ۸ نویسه"
-          />
-          <Button
-            type="submit"
-            variant="secondary"
-            loading={busy === 'pw'}
-            disabled={!cur || !next}
-          >
-            تغییر رمز
-          </Button>
-        </form>
-      </Card>
+      {user.passwordless ? (
+        <Card role="status">
+          <h2 className="text-base font-bold">ورود بدون رمز</h2>
+          <p className="mt-2 text-sm leading-6 text-text-secondary">
+            برای این حساب رمزی تعریف نشده است. تغییر یا ساخت رمز تا زمانی که تأیید شمارهٔ امن فعال
+            شود در دسترس نیست؛ از مدیر سامانه دربارهٔ روش ورود حساب خود راهنمایی بگیرید.
+          </p>
+        </Card>
+      ) : (
+        <Card>
+          <form onSubmit={changePw} className="flex flex-col gap-3">
+            <h2 className="text-base font-bold">تغییر رمز</h2>
+            <Input
+              label="رمز فعلی"
+              type="password"
+              ltr
+              autoComplete="current-password"
+              value={cur}
+              onChange={(e) => setCur(e.target.value)}
+              error={errors.currentPassword}
+            />
+            <Input
+              label="رمز جدید"
+              type="password"
+              ltr
+              autoComplete="new-password"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              error={errors.newPassword}
+              hint="حداقل ۸ نویسه"
+            />
+            <Button
+              type="submit"
+              variant="secondary"
+              loading={busy === 'pw'}
+              disabled={!cur || !next}
+            >
+              تغییر رمز
+            </Button>
+          </form>
+        </Card>
+      )}
       <Button
         variant="danger"
         loading={busy === 'out'}
