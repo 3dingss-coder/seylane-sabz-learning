@@ -16,6 +16,8 @@ run_worker_first = ["/v1/*"]
 APP_ENV = "dev"
 PLAYBACK_BUDGET = "off"
 RATE_LIMIT_SCALE = "20"
+# Public site URL: used to build the absolute click-through link in web push notifications.
+APP_URL = "https://academy-seylaneh.site"
 # D1 -> R2 media move: files are copied to R2 and verified by size; the D1 copy is deleted only
 # when this is "on" (flip it after checking that images/videos play from R2).
 R2_MIGRATE_PURGE = "on"

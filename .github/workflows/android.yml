@@ -36,12 +36,20 @@ jobs:
       - run: npm ci
       - name: Firebase config (push notifications)
         env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
-        if: env.GOOGLE_SERVICES_JSON != ''
+          # Either the raw JSON (GOOGLE_SERVICES_JSON) or its base64 (GOOGLE_SERVICES_JSON_BASE64).
+          GS_RAW: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GS_B64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        if: env.GS_RAW != '' || env.GS_B64 != ''
         run: |
-          echo "$GOOGLE_SERVICES_JSON" | base64 -d > apps/web/android/app/google-services.json
-          echo "VITE_PUSH_ENABLED=true" >> "$GITHUB_ENV"
-          echo "VITE_CRASHLYTICS_ENABLED=true" >> "$GITHUB_ENV"
+          OUT=apps/web/android/app/google-services.json
+          if [ -n "$GS_RAW" ]; then printf '%s' "$GS_RAW" > "$OUT"; else echo "$GS_B64" | base64 -d > "$OUT"; fi
+          if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$OUT"; then
+            echo "VITE_PUSH_ENABLED=true" >> "$GITHUB_ENV"
+            echo "VITE_CRASHLYTICS_ENABLED=true" >> "$GITHUB_ENV"
+          else
+            rm -f "$OUT"
+            echo "::warning::google-services.json secret is not valid JSON; building without push."
+          fi
       - run: npm run build -w apps/web
       - run: npx cap sync android
         working-directory: apps/web
