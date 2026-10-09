@@ -301,6 +301,8 @@ export interface Notification {
   title: string;
   body: string;
   actionRef: string | null;
+  /** Optional rich-push image; absent on legacy notifications. */
+  imageUrl?: string | null;
   readAt: string | null;
   pushStatus: 'none' | 'sent' | 'deferred' | 'skipped' | 'failed';
   deliverAfter: string | null;
