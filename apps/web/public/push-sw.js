@@ -1,5 +1,5 @@
 /* Web Push handler, imported into the Workbox service worker (vite.config.ts → importScripts).
- * FCM delivers `{ notification: {title, body}, data: {link, notificationId, type}, fcmOptions }`. */
+ * Data-only FCM payloads are displayed here so FCM and the worker cannot show duplicates. */
 self.addEventListener('push', (event) => {
   let p = {};
   try {
