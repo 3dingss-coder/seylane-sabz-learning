@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Bell } from 'lucide-react';
 import { Button, Card, useToast } from '@/components/ui';
-import { enableWebPush, webPushState, type WebPushState } from '@/lib/webPush';
+import { enableWebPush, retryWebPush, webPushState, type WebPushState } from '@/lib/webPush';
 
 /** Browser/PWA notification opt-in. Hidden when Web Push isn't configured or supported. */
 export function PushOptIn() {
@@ -18,8 +18,34 @@ export function PushOptIn() {
       </h2>
       {state === 'granted' && (
         <p className="text-sm text-text-secondary">
-          فعال است. مهلت‌ها و آموزش‌های جدید را خبر می‌دهیم.
+          اجازه اعلان در مرورگر داده شده است؛ این به‌تنهایی تحویل اعلان را تضمین نمی‌کند. اگر
+          اعلان‌ها نمی‌رسند، ثبت دستگاه را دوباره امتحان کنید.
         </p>
+      )}
+      {state === 'granted' && (
+        <Button
+          variant="secondary"
+          loading={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await retryWebPush();
+              toast.show({
+                type: 'success',
+                message: 'ثبت دستگاه برای دریافت اعلان انجام شد.',
+              });
+            } catch {
+              toast.show({
+                type: 'error',
+                message: 'ثبت دستگاه انجام نشد. اتصال اینترنت و تنظیمات Firebase را بررسی کنید.',
+              });
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          تلاش دوباره برای فعال‌سازی
+        </Button>
       )}
       {state === 'denied' && (
         <p className="text-sm text-text-secondary">

@@ -61,4 +61,12 @@ describe('web push', () => {
     expect(await enableWebPush()).toBe('denied');
     expect(post).not.toHaveBeenCalled();
   });
+
+  it('rejects opt-in when the server fails to save the FCM token', async () => {
+    for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
+    browserPush('default', 'granted');
+    post.mockRejectedValueOnce(new Error('API unavailable'));
+    const { enableWebPush } = await import('./webPush');
+    await expect(enableWebPush()).rejects.toThrow('API unavailable');
+  });
 });
