@@ -6,6 +6,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
+import type { Firestore as ModularFirestore } from 'firebase/firestore';
 import {
   doc,
   getDoc,
@@ -31,7 +32,10 @@ beforeAll(async () => {
   });
   await env.clearFirestore();
   await env.withSecurityRulesDisabled(async (c) => {
-    const db = c.firestore();
+    // rules-unit-testing currently exposes a compat Firestore type, while this suite deliberately
+    // uses the modular firebase/firestore API. The emulator context supplies the same test DB;
+    // narrow the type at this boundary without changing runtime behavior.
+    const db = c.firestore() as unknown as ModularFirestore;
     const u = (id: string, role: string, teamId: string | null, status = 'active') =>
       setDoc(doc(db, `users/${id}`), { name: id, role, teamId, status });
     await u('mA', 'manager', 'tA');
@@ -58,7 +62,7 @@ beforeAll(async () => {
 afterAll(async () => env?.cleanup());
 
 const as = (uid: string | null) =>
-  uid ? env.authenticatedContext(uid).firestore() : env.unauthenticatedContext().firestore();
+  (uid ? env.authenticatedContext(uid).firestore() : env.unauthenticatedContext().firestore()) as unknown as ModularFirestore;
 
 describe('firestore rules', () => {
   it('deny-by-default: unauthenticated reads fail', async () => {
