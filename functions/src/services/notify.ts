@@ -205,9 +205,14 @@ async function sendPush(
     const res = await d.push.send(
       tokens.map((t) => t.token),
       {
-        title: g?.title ?? n.title,
-        body: g?.body ?? n.body,
-        data: { notificationId: n.id, link: n.actionRef ?? '/messages', type, ...(n.imageUrl ? { imageUrl: n.imageUrl } : {}) },
+        title: type === 'manual' ? n.title : g?.title ?? n.title,
+        body: type === 'manual' ? n.body : g?.body ?? n.body,
+        data: {
+          notificationId: n.id,
+          link: n.actionRef ?? '/messages',
+          type,
+          ...(n.imageUrl ? { imageUrl: n.imageUrl } : {}),
+        },
         imageUrl: n.imageUrl ?? undefined,
       },
     );
