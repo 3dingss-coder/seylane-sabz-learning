@@ -659,8 +659,14 @@ async function runBatch(
         await d.store.update(`notifications/${notifId}`, { pushStatus: 'failed' });
       }
     }
+    // A batch with no eligible device tokens did not send a Push, even though its
+    // in-app notification records were created. Do not report that as a successful Push batch.
     const batchStatus: PushBatchStatus =
-      counts.failed === 0 ? 'sent' : counts.accepted === 0 ? 'failed' : 'sent_with_errors';
+      counts.failed === 0 && counts.noDevice === 0
+        ? 'sent'
+        : counts.accepted === 0
+          ? 'failed'
+          : 'sent_with_errors';
     if (counts.failed > 0 && !lastError)
       lastError = 'بخشی از درخواست‌ها توسط سرویس ارسال پذیرفته نشد.';
     await d.store.update(batchPath, {
@@ -749,9 +755,14 @@ async function finalize(d: Deps, id: string): Promise<void> {
   // Provider rejected every request → failed. Anything partial, failed or interrupted → with errors.
   const nothingAccepted = summary.accepted === 0;
   const status: PushCampaignStatus =
-    nothingAccepted && !summary.interrupted && (summary.attempted > 0 || failingBatches > 0)
+    nothingAccepted &&
+    !summary.interrupted &&
+    (summary.attempted > 0 || failingBatches > 0 || summary.noDevice > 0)
       ? 'failed'
-      : summary.failed > 0 || failingBatches > 0 || summary.interrupted > 0
+      : summary.failed > 0 ||
+          summary.noDevice > 0 ||
+          failingBatches > 0 ||
+          summary.interrupted > 0
         ? 'sent_with_errors'
         : 'sent';
   const hasFailure = status !== 'sent';
