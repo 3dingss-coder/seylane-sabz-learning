@@ -63,6 +63,48 @@ jobs:
       - if: steps.cf.outputs.configured == 'true'
         run: npm ci
 
+      - name: Validate push notification configuration
+        if: steps.cf.outputs.configured == 'true'
+        env:
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -e
+          missing=""
+          for name in VITE_FIREBASE_API_KEY VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID VITE_FIREBASE_VAPID_KEY FCM_SERVICE_ACCOUNT_JSON; do
+            if [ -z "${!name}" ]; then
+              missing="$missing $name"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Push notifications are not configured. Missing GitHub Actions values:$missing"
+            {
+              echo "### Push notification deployment blocked"
+              echo "Add the following missing values under Settings → Secrets and variables → Actions. Firebase web config values belong in **Variables**; service account JSON belongs in **Secrets**."
+              echo "`$missing`"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          printf '%s' "$FCM_SERVICE_ACCOUNT_JSON" | node -e '
+            let raw = "";
+            process.stdin.setEncoding("utf8");
+            process.stdin.on("data", chunk => raw += chunk);
+            process.stdin.on("end", () => {
+              try {
+                const account = JSON.parse(raw);
+                if (!account.project_id || !account.client_email || !account.private_key) throw new Error();
+              } catch {
+                console.error("::error::FCM_SERVICE_ACCOUNT_JSON is not valid service-account JSON or is missing project_id/client_email/private_key.");
+                process.exit(1);
+              }
+            });
+          '
+          echo "Push notification configuration presence and service-account structure validated."
+
       - name: Build Functions + Seed Snapshot + Web PWA
         if: steps.cf.outputs.configured == 'true'
         env:
