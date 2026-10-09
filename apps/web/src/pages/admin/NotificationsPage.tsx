@@ -385,7 +385,7 @@ function PushCampaigns() {
         ].map(([label, value]) => (
           <Card key={String(label)} className="flex flex-col gap-1">
             <p className="text-xs text-text-secondary">{label}</p>
-            <p className="text-xl font-bold">{value === undefined ? '—' : toPersianDigits(value)}</p>
+            <p className="text-xl font-bold">{value === undefined ? '—' : toPersianDigits(Number(value))}</p>
           </Card>
         ))}
       </div>
@@ -415,7 +415,7 @@ function PushCampaigns() {
             </Select>
           )}
         </div>
-        <Input label="زمان ارسال (اختیاری؛ خالی = پیش‌نویس)" inputType="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} error={errors.scheduledAt} />
+        <Input label="زمان ارسال (اختیاری؛ خالی = پیش‌نویس)" type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} error={errors.scheduledAt} />
         <div className="rounded-card border border-border bg-background p-4" dir="rtl">
           <p className="mb-2 text-xs font-bold text-text-secondary">پیش‌نمایش زنده</p>
           <div className="rounded-xl border border-border bg-surface p-3">
