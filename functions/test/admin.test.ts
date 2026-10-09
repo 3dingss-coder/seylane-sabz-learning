@@ -234,6 +234,17 @@ describe('admin push provider status', () => {
     expect(JSON.stringify(response.body)).not.toContain('private_key');
   });
 
+  it('reports false for an FCM sender with an invalid signing key', async () => {
+    ctx.deps.push = new FcmHttpPushSender({
+      project_id: 'test-project',
+      client_email: 'test@example.invalid',
+      private_key: 'not-a-real-key',
+    });
+    const response = await ctx.api(admin.token).get('/v1/admin/push-provider-status');
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({ configured: false });
+  });
+
   it('reports configured only when the sender signing key can be imported', async () => {
     const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     ctx.deps.push = new FcmHttpPushSender({
