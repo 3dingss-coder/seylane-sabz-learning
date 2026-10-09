@@ -22,7 +22,7 @@ export function parseServiceAccount(raw: string | undefined): ServiceAccount | n
   try {
     const j = JSON.parse(raw) as Partial<ServiceAccount>;
     const privateKey =
-      typeof j.private_key === 'string' ? j.private_key.replace(/\\\\n/g, '\\n').trim() : '';
+      typeof j.private_key === 'string' ? j.private_key.replace(/\\n/g, '\n').trim() : '';
     const pemLooksValid =
       privateKey.startsWith('-----BEGIN PRIVATE KEY-----') &&
       privateKey.includes('-----END PRIVATE KEY-----');
