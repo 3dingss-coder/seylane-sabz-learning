@@ -116,7 +116,8 @@ export async function listCampaigns(d: Deps) {
       ),
       failed: items.filter(
         (c) =>
-          c.status === 'failed' || (c.status === 'partial' && (c.pushFailed ?? 0) > 0),
+          c.status === 'failed' ||
+          (c.status === 'partial' && (c.pushFailed ?? 0) > 0),
       ).length,
     },
   };
