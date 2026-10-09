@@ -114,7 +114,9 @@ export async function listCampaigns(d: Deps) {
         (total, c) => total + (c.pushNoDevice ?? c.pushSkipped ?? 0),
         0,
       ),
-      failed: items.filter((c) => c.status === 'failed' || c.status === 'partial').length,
+      failed: items.filter(
+        (c) => c.status === 'failed' || (c.status === 'partial' && (c.pushFailed ?? 0) > 0),
+      ).length,
     },
   };
 }
