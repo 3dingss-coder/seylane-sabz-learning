@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { text, } from '../http/validate';
 import type { User } from '../domain/types';
+import { StoreConflictError } from '../store/types';
 import { audit, type Actor, type Deps } from './context';
 import { notifyUsers } from './notify';
 
@@ -139,18 +140,29 @@ export async function sendCampaign(d: Deps, actor: Actor, id: string) {
 async function executeCampaign(d: Deps, id: string, actor?: Actor) {
   const path = `push_campaigns/${id}`;
   const now = d.clock().toISOString();
-  const claimed = await d.store.runTransaction(async (tx) => {
-    const current = await tx.get<Campaign>(path);
-    if (!current) throw new ApiError('NOT_FOUND', 'کمپین پیدا نشد.');
-    if (!['draft', 'scheduled'].includes(current.status)) {
-      throw new ApiError('CONFLICT', 'این کمپین قبلاً شروع شده یا وضعیت آن اجازه ارسال نمی‌دهد.');
+  const current = await d.store.get<Campaign>(path);
+  if (!current) throw new ApiError('NOT_FOUND', 'کمپین پیدا نشد.');
+  if (!['draft', 'scheduled'].includes(current.status)) {
+    throw new ApiError('CONFLICT', 'این کمپین قبلاً شروع شده یا وضعیت آن اجازه ارسال نمی‌دهد.');
+  }
+  if (current.scheduledAt && Date.parse(current.scheduledAt) > Date.parse(now)) {
+    throw new ApiError('VALIDATION', 'زمان ارسال این کمپین هنوز نرسیده است.');
+  }
+  // A unique persistent claim is safe across separate Worker isolates; DocStore transactions
+  // are not guaranteed to be cross-isolate atomic on every adapter.
+  try {
+    await d.store.create(`push_campaign_claims/${id}`, {
+      claimedAt: now,
+      actorId: actor?.id ?? null,
+    });
+  } catch (error) {
+    if (error instanceof StoreConflictError) {
+      throw new ApiError('CONFLICT', 'ارسال این کمپین قبلاً آغاز شده است.');
     }
-    if (current.scheduledAt && Date.parse(current.scheduledAt) > Date.parse(now)) {
-      throw new ApiError('VALIDATION', 'زمان ارسال این کمپین هنوز نرسیده است.');
-    }
-    tx.update(path, { status: 'sending', startedAt: now, updatedAt: now, lastError: null });
-    return current;
-  });
+    throw error;
+  }
+  await d.store.update(path, { status: 'sending', startedAt: now, updatedAt: now, lastError: null });
+  const claimed = current;
   try {
     const users = await resolveUsers(d, claimed.audience, claimed.targetId);
     const createdNotifications = await notifyUsers(
