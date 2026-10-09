@@ -205,8 +205,8 @@ async function sendPush(
     const res = await d.push.send(
       tokens.map((t) => t.token),
       {
-        title: type === 'manual' ? n.title : g?.title ?? n.title,
-        body: type === 'manual' ? n.body : g?.body ?? n.body,
+        title: type === 'manual' ? n.title : (g?.title ?? n.title),
+        body: type === 'manual' ? n.body : (g?.body ?? n.body),
         data: {
           notificationId: n.id,
           link: n.actionRef ?? '/messages',
