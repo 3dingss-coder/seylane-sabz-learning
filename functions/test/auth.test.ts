@@ -1,139 +1,130 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createCtx, type TestCtx } from './support/ctx';
-import { ensureUser, staffAuthEmail } from '../src/services/users';
 
 let ctx: TestCtx;
 beforeEach(async () => {
   ctx = await createCtx();
 });
 
-describe('auth (PROMPT 002)', () => {
-  it('blocks legacy demo phone identities in production without mutating their records', async () => {
-    ctx.deps.config.env = 'prod';
-    const user = await ensureUser(ctx.deps, {
-      name: 'مدیر نمونه',
-      identifier: '09120000001',
-      password: 'demo1234',
-      role: 'superadmin',
-    });
-    const before = await ctx.deps.store.get(`users/${user.id}`);
-    const login = await ctx.api().post('/v1/auth/login', {
-      identifier: '09120000001',
-      password: 'demo1234',
-    });
-    expect(login.status).toBe(401);
-    expect(await ctx.deps.store.get(`users/${user.id}`)).toEqual(before);
+const signup = (phone = '09361112233', name = 'نیلوفر') =>
+  ctx.api().post('/v1/auth/phone-register', {
+    name,
+    phone,
+    province: 'خراسان رضوی',
+    city: 'مشهد',
   });
 
-  it('fails closed for production phone claims when no real verification provider is configured', async () => {
-    const prod = await createCtx({ env: 'prod' });
-    const body = {
-      name: 'ثبت‌نام تولیدی',
-      phone: '09367778899',
-      province: 'تهران',
-      city: 'تهران',
-    };
-    expect((await prod.api().post('/v1/auth/phone-register', body)).status).toBe(503);
-    expect((await prod.api().post('/v1/auth/phone-login', { phone: body.phone })).status).toBe(503);
-    expect(
-      (
-        await prod.api().post('/v1/auth/register', {
-          name: body.name,
-          identifier: body.phone,
-          password: 'longtest123',
-        })
-      ).status,
-    ).toBe(503);
-    expect(
-      await prod.deps.store.query({ collection: 'users', where: [['phone', '==', body.phone]] }),
-    ).toHaveLength(0);
-  });
+describe('phone-only auth boundary', () => {
+  it('returns the same generic login failure for existing and unknown numbers without issuing sessions', async () => {
+    const existing = await ctx.user('marketer');
+    await ctx.user('admin');
+    const refreshBefore = await ctx.deps.store.query({ collection: '_auth_refresh' });
 
-  it('allows phone-only login only in the disposable memory MVP', async () => {
-    const created = await ctx.api().post('/v1/auth/register', {
-      name: 'آزمایشی',
-      identifier: '09351234567',
-      password: 'abc12345',
-    });
-    expect(created.status).toBe(201);
-    const login = await ctx.api().post('/v1/auth/phone-login', { phone: '۰۹۳۵۱۲۳۴۵۶۷' });
-    expect(login.status).toBe(200);
-    expect(login.body.data.user.phone).toBe('09351234567');
-    expect((await ctx.api(login.body.data.idToken).get('/v1/me')).status).toBe(200);
-    expect(
-      (await ctx.api().post('/v1/auth/phone-login', { phone: 'unknown@example.com' })).status,
-    ).toBe(400);
-  });
+    const known = await ctx.api().post('/v1/auth/phone-login', { phone: existing.phone });
+    const unknown = await ctx.api().post('/v1/auth/phone-login', { phone: '09990000000' });
 
-  it('phone login for an unregistered number says to sign up first (404 NOT_REGISTERED)', async () => {
-    const res = await ctx.api().post('/v1/auth/phone-login', { phone: '09361112233' });
-    expect(res.status).toBe(404);
-    expect(res.body.error.details).toEqual({ reason: 'NOT_REGISTERED' });
-  });
-
-  it('staff login: username + password per panel; wrong panel or password is rejected', async () => {
-    await ensureUser(ctx.deps, {
-      name: 'ادمین',
-      identifier: staffAuthEmail('Test Admin'),
-      password: 'long-test-pass-1',
-      role: 'admin',
-    });
-    const ok = await ctx.api().post('/v1/auth/staff-login', {
-      username: 'Test Admin',
-      password: 'long-test-pass-1',
-      panel: 'admin',
-    });
-    expect(ok.status).toBe(200);
-    expect(ok.body.data.user.role).toBe('admin');
-    const wrongPanel = await ctx.api().post('/v1/auth/staff-login', {
-      username: 'Test Admin',
-      password: 'long-test-pass-1',
-      panel: 'manager',
-    });
-    expect(wrongPanel.status).toBe(401);
-    const wrongPass = await ctx
-      .api()
-      .post('/v1/auth/staff-login', { username: 'Test Admin', password: 'nope', panel: 'admin' });
-    expect(wrongPass.status).toBe(401);
-    // staff can never use the marketer phone route
-    expect((await ctx.api().post('/v1/auth/phone-login', { phone: 'Test Admin' })).status).toBe(
-      400,
+    expect(known.status).toBe(401);
+    expect(unknown.status).toBe(401);
+    expect(known.body).toEqual(unknown.body);
+    expect(known.body.data).toBeUndefined();
+    expect(JSON.stringify(known.body)).not.toContain(existing.id);
+    expect(await ctx.deps.store.query({ collection: '_auth_refresh' })).toHaveLength(
+      refreshBefore.length,
     );
   });
 
-  it('phone-register signs the new marketer in directly, then phone login works', async () => {
-    const reg = await ctx.api().post('/v1/auth/phone-register', {
+  it('validates and normalizes phone syntax without querying account state', async () => {
+    const invalid = await ctx.api().post('/v1/auth/phone-login', { phone: 'not-a-phone' });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error.code).toBe('VALIDATION');
+    const valid = await ctx.api().post('/v1/auth/phone-login', { phone: '+98 (936) 111-2233' });
+    expect(valid.status).toBe(401);
+    expect(valid.body.error.message).toMatch(/به‌تنهایی/);
+  });
+
+  it('returns an identical acknowledgement for a new number and an existing account', async () => {
+    const existing = await ctx.user('superadmin');
+    const refreshBefore = await ctx.deps.store.query({ collection: '_auth_refresh' });
+    const fresh = await signup('۰۹۳۶۱۱۱۲۲۳۳');
+    const duplicate = await signup(existing.phone, 'نام دیگر');
+
+    expect(fresh.status).toBe(202);
+    expect(duplicate.status).toBe(fresh.status);
+    expect(duplicate.body).toEqual(fresh.body);
+    expect(fresh.body.data).toMatchObject({ accepted: true });
+    expect(fresh.body.data.user).toBeUndefined();
+    expect(fresh.body.data.idToken).toBeUndefined();
+    expect(fresh.body.data.refreshToken).toBeUndefined();
+    expect(JSON.stringify(duplicate.body)).not.toContain(existing.id);
+    expect(JSON.stringify(duplicate.body)).not.toContain('superadmin');
+
+    const pending = await ctx.deps.store.query<{
+      name: string;
+      phone: string;
+      role: string;
+      status: string;
+      phoneVerifiedAt: string | null;
+      province: string;
+      city: string;
+    }>({ collection: 'users', where: [['phone', '==', '09361112233']] });
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
       name: 'نیلوفر',
-      phone: '۰۹۳۶۱۱۱۲۲۳۳',
+      phone: '09361112233',
+      role: 'marketer',
+      status: 'inactive',
+      phoneVerifiedAt: null,
       province: 'خراسان رضوی',
       city: 'مشهد',
     });
-    expect(reg.status).toBe(201);
-    expect(reg.body.data.user.role).toBe('marketer');
-    expect(reg.body.data.user.phone).toBe('09361112233');
-    expect(reg.body.data.user.province).toBe('خراسان رضوی');
-    expect(reg.body.data.user.city).toBe('مشهد');
-    expect((await ctx.api(reg.body.data.idToken).get('/v1/me')).status).toBe(200);
-    expect((await ctx.api(reg.body.data.idToken).get('/v1/me')).body.data.city).toBe('مشهد');
-    expect((await ctx.api().post('/v1/auth/phone-login', { phone: '09361112233' })).status).toBe(
-      200,
-    );
     expect(
-      (
-        await ctx.api().post('/v1/auth/phone-register', {
-          name: 'دوباره',
-          phone: '09361112233',
-          province: 'خراسان رضوی',
-          city: 'مشهد',
-        })
-      ).status,
-    ).toBe(409);
+      await ctx.deps.store.query({ collection: 'users', where: [['phone', '==', existing.phone]] }),
+    ).toHaveLength(1);
+    expect(await ctx.deps.store.query({ collection: '_auth_refresh' })).toHaveLength(
+      refreshBefore.length,
+    );
+    expect((await ctx.api().get('/v1/me')).status).toBe(401);
+
+    const newPhoneLogin = await ctx.api().post('/v1/auth/phone-login', { phone: '09361112233' });
+    const unknownPhoneLogin = await ctx
+      .api()
+      .post('/v1/auth/phone-login', { phone: '09990000000' });
+    expect(newPhoneLogin.body).toEqual(unknownPhoneLogin.body);
+    expect(newPhoneLogin.status).toBe(401);
   });
 
-  it('phone-register requires the residence and rejects a city outside the province', async () => {
-    const missing = await ctx
-      .api()
-      .post('/v1/auth/phone-register', { name: 'بی‌استان', phone: '09361112244' });
+  it('blocks public role, status, user-ID, password, and OTP field selection', async () => {
+    const res = await ctx.api().post('/v1/auth/phone-register', {
+      name: 'کاربر عادی',
+      phone: '09361112244',
+      province: 'تهران',
+      city: 'تهران',
+      role: 'superadmin',
+      status: 'active',
+      id: 'chosen-admin-id',
+      firebaseUid: 'chosen-admin-id',
+      code: '123456',
+      password: 'not-accepted',
+    });
+    expect(res.status).toBe(400);
+    expect(
+      await ctx.deps.store.query({ collection: 'users', where: [['phone', '==', '09361112244']] }),
+    ).toHaveLength(0);
+  });
+
+  it('requires a valid Iranian mobile and the residence fields for registration', async () => {
+    const badPhone = await ctx.api().post('/v1/auth/phone-register', {
+      name: 'شماره نامعتبر',
+      phone: '12345',
+      province: 'تهران',
+      city: 'تهران',
+    });
+    expect(badPhone.status).toBe(400);
+
+    const missing = await ctx.api().post('/v1/auth/phone-register', {
+      name: 'بی‌استان',
+      phone: '09361112244',
+    });
     expect(missing.status).toBe(400);
     expect(missing.body.error.details.map((d: { field: string }) => d.field)).toContain('province');
 
@@ -147,209 +138,182 @@ describe('auth (PROMPT 002)', () => {
     const detail = wrongCity.body.error.details.find((d: { field: string }) => d.field === 'city');
     expect(detail?.message).toContain('مشهد');
     expect(detail?.message).toContain('یزد');
-
-    const unknownProvince = await ctx.api().post('/v1/auth/phone-register', {
-      name: 'استان ناشناس',
-      phone: '09361112266',
-      province: 'تهران بزرگ',
-      city: 'تهران',
-    });
-    expect(unknownProvince.status).toBe(400);
-    expect(unknownProvince.body.error.details.map((d: { field: string }) => d.field)).toContain(
-      'province',
-    );
   });
 
-  it('stores the canonical residence names, not the spelling the client sent', async () => {
-    const reg = await ctx.api().post('/v1/auth/phone-register', {
+  it('stores only canonical phone and residence spellings and marks the phone unverified', async () => {
+    const res = await ctx.api().post('/v1/auth/phone-register', {
       name: 'فاطمه',
-      phone: '09361112277',
-      // The post-office spelling of this province has no space before «و»; the picker shows the
-      // fixed one, and that is what must land in the database.
+      phone: '۰۹۳۶۱۱۱۲۲۷۷',
       province: 'سیستان وبلوچستان',
       city: 'زاهدان',
     });
-    expect(reg.status).toBe(201);
-    expect(reg.body.data.user.province).toBe('سیستان و بلوچستان');
-    const stored = await ctx.deps.store.get<{ province: string; city: string }>(
-      `users/${reg.body.data.user.id}`,
-    );
-    expect(stored?.province).toBe('سیستان و بلوچستان');
-    expect(stored?.city).toBe('زاهدان');
-  });
-
-  it('registers with phone (Persian digits) → marketer + tokens, then logs in', async () => {
-    const res = await ctx
-      .api()
-      .post('/v1/auth/register', { name: 'سارا', identifier: '۰۹۳۵۱۲۳۴۵۶۷', password: 'abc12345' });
-    expect(res.status).toBe(201);
-    expect(res.body.data.user.role).toBe('marketer');
-    expect(res.body.data.user.phone).toBe('09351234567');
-    expect(res.body.data.idToken).toBeTruthy();
-    const login = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: '09351234567', password: 'abc12345' });
-    expect(login.status).toBe(200);
-    const me = await ctx.api(login.body.data.idToken).get('/v1/me');
-    expect(me.body.data.name).toBe('سارا');
-    // F1: welcome notification in the in-app center.
-    const inbox = await ctx.api(login.body.data.idToken).get('/v1/me/notifications');
-    expect(JSON.stringify(inbox.body.data)).toContain('خوش آمدی');
-  });
-
-  it('duplicate registration → 409 with clear Persian message (28.2 #12)', async () => {
-    await ctx
-      .api()
-      .post('/v1/auth/register', { name: 'سارا', identifier: '09351234567', password: 'abc12345' });
-    ctx.limiter.reset();
-    const dup = await ctx.api().post('/v1/auth/register', {
-      name: 'دیگری',
-      identifier: '+989351234567',
-      password: 'xyz12345',
+    expect(res.status).toBe(202);
+    const stored = await ctx.deps.store.query<{
+      phone: string;
+      phoneVerifiedAt: string | null;
+      province: string;
+      city: string;
+      status: string;
+    }>({ collection: 'users', where: [['phone', '==', '09361112277']] });
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      phone: '09361112277',
+      phoneVerifiedAt: null,
+      province: 'سیستان و بلوچستان',
+      city: 'زاهدان',
+      status: 'inactive',
     });
-    expect(dup.status).toBe(409);
-    expect(dup.body.error.message).toBe('این شماره قبلاً ثبت شده است. وارد شوید.');
-    expect(JSON.stringify(dup.body)).not.toContain('سارا');
   });
 
-  it('concurrent duplicate sign-ups create exactly one user', async () => {
-    const body = { name: 'همزمان', identifier: 'same@example.com', password: 'abc12345' };
-    const results = await Promise.all([
-      ctx.api().post('/v1/auth/register', body),
-      ctx.api().post('/v1/auth/register', body),
+  it('concurrent normalized duplicate registrations return the same response and create at most one record', async () => {
+    const [first, second] = await Promise.all([
+      signup('+989361112288', 'همزمان'),
+      signup('۰۹۳۶۱۱۱۲۲۸۸', 'همزمان'),
     ]);
-    expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
-    const users = await ctx.deps.store.query({
-      collection: 'users',
-      where: [['email', '==', 'same@example.com']],
+    expect(first.status).toBe(202);
+    expect(second.status).toBe(202);
+    expect(first.body).toEqual(second.body);
+    expect(
+      await ctx.deps.store.query({ collection: 'users', where: [['phone', '==', '09361112288']] }),
+    ).toHaveLength(1);
+  });
+
+  it('never creates a second account or grants a session for an existing privileged account', async () => {
+    const seeded = await ctx.user('superadmin');
+    const before = await ctx.deps.store.get(`users/${seeded.id}`);
+    const login = await ctx.api().post('/v1/auth/phone-login', { phone: seeded.phone });
+    const duplicate = await signup(seeded.phone, 'مدیر ارشد دوم');
+    const newRequest = await signup('09369998877', 'بازاریاب تازه');
+
+    expect(login.status).toBe(401);
+    expect(login.body.data).toBeUndefined();
+    expect(duplicate.status).toBe(202);
+    expect(duplicate.body).toEqual(newRequest.body);
+    expect(JSON.stringify(duplicate.body)).not.toContain(seeded.id);
+    expect(JSON.stringify(duplicate.body)).not.toContain('مدیر ارشد');
+    expect(await ctx.deps.store.get(`users/${seeded.id}`)).toEqual(before);
+  });
+
+  it('fails closed in production without durable D1 and rate-limit storage', async () => {
+    const prod = await createCtx({ env: 'prod' });
+    const known = await prod.user('admin');
+    const body = {
+      name: 'ثبت‌نام تولیدی',
+      phone: '09367778899',
+      province: 'تهران',
+      city: 'تهران',
+    };
+    const existingRequest = await prod.api().post('/v1/auth/phone-register', {
+      ...body,
+      phone: known.phone,
     });
-    expect(users).toHaveLength(1);
+    const newRequest = await prod.api().post('/v1/auth/phone-register', body);
+    expect(existingRequest.status).toBe(503);
+    expect(existingRequest.body).toEqual(newRequest.body);
+    expect(
+      await prod.deps.store.query({ collection: 'users', where: [['phone', '==', body.phone]] }),
+    ).toHaveLength(0);
   });
 
-  it('validates input in Persian', async () => {
-    const res = await ctx
-      .api()
-      .post('/v1/auth/register', { name: 'ا', identifier: '123', password: 'short' });
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toMatch(/[\u0600-\u06FF]/);
-  });
-
-  it('wrong password → generic 401; 5 failures lock for 15 minutes', async () => {
-    const u = await ctx.user('marketer');
-    for (let i = 0; i < 4; i++) {
-      const r = await ctx
-        .api()
-        .post('/v1/auth/login', { identifier: u.phone, password: 'wrong1234' });
-      expect(r.status).toBe(401);
-      expect(r.body.error.message).toBe('رمز یا نام کاربری اشتباه است.');
+  it('legacy password, staff-login, reset, and password-change endpoints are removed', async () => {
+    for (const path of [
+      '/v1/auth/login',
+      '/v1/auth/register',
+      '/v1/auth/staff-login',
+      '/v1/auth/password-reset',
+      '/v1/auth/phone/request',
+    ]) {
+      expect((await ctx.api().post(path, { identifier: 'x', password: 'anything' })).status).toBe(
+        404,
+      );
     }
-    const fifth = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: u.phone, password: 'wrong1234' });
-    expect(fifth.status).toBe(429);
-    const locked = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: u.phone, password: 'pass1234' });
-    expect(locked.status).toBe(429);
-    ctx.advance(16 * 60_000);
-    ctx.limiter.reset();
-    const ok = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: u.phone, password: 'pass1234' });
-    expect(ok.status).toBe(200);
+    const marketer = await ctx.user('marketer');
+    expect(
+      (
+        await ctx
+          .api(marketer.token)
+          .post('/v1/me/password', { currentPassword: 'x', newPassword: 'y' })
+      ).status,
+    ).toBe(404);
+    const admin = await ctx.user('admin');
+    expect(
+      (await ctx.api(admin.token).post(`/v1/admin/users/${marketer.id}/reset-password`)).status,
+    ).toBe(404);
   });
+});
 
-  it('unknown account gets the same 401 (no enumeration)', async () => {
-    const r = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: '09990000000', password: 'whatever1' });
-    expect(r.status).toBe(401);
-    expect(r.body.error.message).toBe('رمز یا نام کاربری اشتباه است.');
-  });
-
+describe('session lifecycle and access control', () => {
   it('refresh rotates tokens; logout revokes the session', async () => {
-    const u = await ctx.user('marketer');
-    const login = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: u.phone, password: 'pass1234' });
-    const rt = login.body.data.refreshToken as string;
+    const user = await ctx.user('marketer');
+    const initial = await ctx.issueTestSession(user.id);
+    const rt = initial.refreshToken;
     ctx.advance(1000);
-    const r1 = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
-    expect(r1.status).toBe(200);
-    // A retry within the grace window (interrupted request) still works…
+    const first = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
+    expect(first.status).toBe(200);
     const retry = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
     expect(retry.status).toBe(200);
-    // …but the rotated token is dead afterwards.
     ctx.advance(31_000);
-    const reuse = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
-    expect(reuse.status).toBe(401);
-    const token = r1.body.data.idToken as string;
-    expect((await ctx.api(token).post('/v1/auth/logout')).status).toBe(204);
+    expect((await ctx.api().post('/v1/auth/refresh', { refreshToken: rt })).status).toBe(401);
+
+    const accessToken = first.body.data.idToken as string;
+    expect((await ctx.api(accessToken).post('/v1/auth/logout')).status).toBe(204);
     ctx.advance(1000);
-    expect((await ctx.api(token).get('/v1/me')).status).toBe(401);
+    expect((await ctx.api(accessToken).get('/v1/me')).status).toBe(401);
   });
 
-  it('deactivated account is blocked immediately', async () => {
+  it('deactivated accounts are blocked immediately and phone-login remains non-authenticating', async () => {
     const admin = await ctx.user('admin');
-    const u = await ctx.user('marketer');
-    const r = await ctx.api(admin.token).patch(`/v1/admin/users/${u.id}`, { status: 'inactive' });
-    expect(r.status).toBe(200);
-    expect((await ctx.api(u.token).get('/v1/me')).status).toBe(401);
-    const login = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: u.phone, password: 'pass1234' });
-    expect(login.status).toBe(403);
+    const user = await ctx.user('marketer');
+    expect(
+      (await ctx.api(admin.token).patch(`/v1/admin/users/${user.id}`, { status: 'inactive' }))
+        .status,
+    ).toBe(200);
+    expect((await ctx.api(user.token).get('/v1/me')).status).toBe(401);
+    const login = await ctx.api().post('/v1/auth/phone-login', { phone: user.phone });
+    expect(login.status).toBe(401);
+    expect(login.body.data).toBeUndefined();
   });
 
-  it('password reset is always 202', async () => {
-    const r = await ctx.api().post('/v1/auth/password-reset', { identifier: '09990000000' });
-    expect(r.status).toBe(202);
-  });
-
-  it('registration is rate limited to 5/min/IP', async () => {
+  it('registration is rate limited to 5/min/IP before body validation', async () => {
     const statuses: number[] = [];
     for (let i = 0; i < 6; i++)
-      statuses.push((await ctx.api().post('/v1/auth/register', { name: 'x' })).status);
+      statuses.push((await ctx.api().post('/v1/auth/phone-register', { name: 'x' })).status);
     expect(statuses[5]).toBe(429);
   });
 
-  it('a spoofed X-Forwarded-For cannot bypass the per-IP limit (trust proxy = 1 hop)', async () => {
+  it('a spoofed X-Forwarded-For cannot bypass the per-IP limit', async () => {
+    ctx.limiter.reset();
     const statuses: number[] = [];
     for (let i = 0; i < 6; i++)
       statuses.push(
         (
           await ctx
             .api()
-            .post('/v1/auth/register', { name: 'x' })
+            .post('/v1/auth/phone-register', { name: 'x' })
             .set('X-Forwarded-For', `10.0.0.${i}, 203.0.113.7`)
         ).status,
       );
     expect(statuses[5]).toBe(429);
   });
 
-  it('marketer can change own name only (mass-assignment safe)', async () => {
-    const u = await ctx.user('marketer');
-    const r = await ctx.api(u.token).patch('/v1/me', { name: 'نام جدید', role: 'admin' });
-    expect(r.status).toBe(200);
-    expect(r.body.data.role).toBe('marketer');
-    expect(r.body.data.name).toBe('نام جدید');
+  it('marketer can change own name only; request role is ignored', async () => {
+    const user = await ctx.user('marketer');
+    const res = await ctx.api(user.token).patch('/v1/me', { name: 'نام جدید', role: 'admin' });
+    expect(res.status).toBe(200);
+    expect(res.body.data.role).toBe('marketer');
+    expect(res.body.data.name).toBe('نام جدید');
   });
 
-  it('stateless signed refresh token survives cold-start store reset until revoked', async () => {
-    const u = await ctx.user('marketer');
-    const login = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: u.phone, password: 'pass1234' });
-    const rt = login.body.data.refreshToken as string;
-    // Simulate a serverless cold start where in-memory _auth_refresh docs are absent
+  it('existing session refresh survives cold-start store reset until revoked', async () => {
+    const user = await ctx.user('marketer');
+    const initial = await ctx.issueTestSession(user.id);
+    const rt = initial.refreshToken;
     const list = await ctx.deps.store.query({ collection: '_auth_refresh' });
-    for (const d of list) await ctx.deps.store.delete(`_auth_refresh/${d.id}`);
+    for (const doc of list) await ctx.deps.store.delete(`_auth_refresh/${doc.id}`);
     const refreshed = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
     expect(refreshed.status).toBe(200);
-    // Revocation (logout) increments validAfter so old signed refresh tokens are rejected
-    const token = refreshed.body.data.idToken as string;
-    expect((await ctx.api(token).post('/v1/auth/logout')).status).toBe(204);
-    const afterLogout = await ctx.api().post('/v1/auth/refresh', { refreshToken: rt });
-    expect(afterLogout.status).toBe(401);
+    const accessToken = refreshed.body.data.idToken as string;
+    expect((await ctx.api(accessToken).post('/v1/auth/logout')).status).toBe(204);
+    expect((await ctx.api().post('/v1/auth/refresh', { refreshToken: rt })).status).toBe(401);
   });
 });

@@ -5,8 +5,10 @@ export interface Me {
   id: string;
   name: string;
   phone: string | null;
+  /** Null or absent means no approved identity provider has verified this number. */
+  phoneVerifiedAt?: string | null;
   email: string | null;
-  /** True for accounts with no password credential (for example verified phone-only sign-in). */
+  /** Legacy metadata only; it does not establish identity or grant a session. */
   passwordless?: boolean;
   /** Residence («محل سکونت») captured at sign-up; null on accounts created before it existed. */
   province: string | null;

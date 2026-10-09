@@ -101,6 +101,9 @@ const GENERIC_PUSH: Partial<Record<NotificationType, { title: string; body: stri
   retake_request: { title: 'درخواست تلاش مجدد', body: 'یک درخواست تلاش مجدد منتظر بررسی است.' },
 };
 
+/** Bound each 15-minute flush so large deferred queues make progress across scheduled runs. */
+const DEFERRED_PUSH_BATCH_LIMIT = 20;
+
 export function render(tpl: string, vars: Record<string, string | number>): string {
   return tpl.replace(/\{(\w+)\}/g, (_m, k: string) =>
     vars[k] !== undefined ? String(vars[k]) : '',
@@ -189,11 +192,13 @@ async function throttled(d: Deps, userId: string, key: string, windowMs: number)
   });
 }
 
+type PushDeliveryStatus = Exclude<Notification['pushStatus'], 'none' | 'deferred'>;
+
 async function sendPush(
   d: Deps,
   n: Doc<Notification>,
   type: NotificationType,
-): Promise<Notification['pushStatus']> {
+): Promise<PushDeliveryStatus> {
   if (d.push.enabled === false) return 'skipped';
   const tokens = await d.store.query<DeviceToken>({
     collection: 'device_tokens',
@@ -201,8 +206,9 @@ async function sendPush(
   });
   if (!tokens.length) return 'skipped';
   const g = GENERIC_PUSH[type];
+  let result: Awaited<ReturnType<Deps['push']['send']>>;
   try {
-    const res = await d.push.send(
+    result = await d.push.send(
       tokens.map((t) => t.token),
       {
         title: g?.title ?? n.title,
@@ -210,12 +216,29 @@ async function sendPush(
         data: { notificationId: n.id, link: n.actionRef ?? '/messages', type },
       },
     );
-    for (const bad of res.invalidTokens) await d.store.delete(`device_tokens/${ids.hash(bad)}`);
-    return res.sent > 0 ? 'sent' : 'failed';
-  } catch (e) {
-    console.warn('push failed', (e as Error).message);
-    return 'failed'; // In-App remains (fallback) and deferred retry picks up 'failed' once.
+  } catch (err) {
+    console.warn(
+      '[push] delivery outcome unknown',
+      err instanceof Error ? err.message : String(err),
+    );
+    return 'unknown';
   }
+
+  for (const bad of result.invalidTokens) {
+    try {
+      await d.store.delete(`device_tokens/${ids.hash(bad)}`);
+    } catch (err) {
+      console.warn(
+        '[push] failed to remove an invalid token',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+  const uncertain = result.unknownTokens?.length ?? 0;
+  const failed = result.failedTokens?.length ?? 0;
+  if (result.sent > 0) return uncertain || failed ? 'partial' : 'sent';
+  if (uncertain) return 'unknown';
+  return 'failed';
 }
 
 /** Creates In-App notifications (always) and Push (per type, quiet-hours aware). Batched. */
@@ -256,7 +279,7 @@ export async function notifyUsers(
             ? pushAvailable
               ? deferred
                 ? 'deferred'
-                : 'none'
+                : 'unknown'
               : 'skipped'
             : 'none',
           deliverAfter: deferred
@@ -298,22 +321,67 @@ export async function notifyTemplate(
   );
 }
 
-/** Scheduled (every 15 min): deliver pushes deferred by quiet hours. */
-export async function flushDeferredPush(d: Deps): Promise<number> {
-  if (d.push.enabled === false) return 0;
+export interface PushFlushSummary {
+  selected: number;
+  processed: number;
+  backlogPossible: boolean;
+  sent: number;
+  partial: number;
+  failed: number;
+  unknown: number;
+  skipped: number;
+}
+
+/** Scheduled: claim and attempt due quiet-hour pushes once; uncertain outcomes are not retried. */
+export async function flushDeferredPush(d: Deps): Promise<PushFlushSummary> {
+  const summary: PushFlushSummary = {
+    selected: 0,
+    processed: 0,
+    backlogPossible: false,
+    sent: 0,
+    partial: 0,
+    failed: 0,
+    unknown: 0,
+    skipped: 0,
+  };
+  if (d.push.enabled === false) return summary;
+  const now = d.clock();
   const due = await d.store.query<Notification>({
     collection: 'notifications',
     where: [
       ['pushStatus', '==', 'deferred'],
-      ['deliverAfter', '<=', d.clock().toISOString()],
+      ['deliverAfter', '<=', now.toISOString()],
     ],
-    limit: 500,
+    limit: DEFERRED_PUSH_BATCH_LIMIT,
   });
+  summary.selected = due.length;
+  summary.backlogPossible = due.length === DEFERRED_PUSH_BATCH_LIMIT;
   for (const n of due) {
+    // Durable claim prevents two isolates from delivering the same deferred notification. Unknown
+    // is written before the external side effect, so a crash cannot silently turn into a retry.
+    const claimed = await d.store.runTransaction(async (tx) => {
+      const current = await tx.get<Notification>(`notifications/${n.id}`);
+      if (!current || current.pushStatus !== 'deferred') return false;
+      if (current.deliverAfter && Date.parse(current.deliverAfter) > now.getTime()) return false;
+      tx.update(`notifications/${n.id}`, { pushStatus: 'unknown' });
+      return true;
+    });
+    if (!claimed) continue;
+
+    summary.processed++;
     const status = await sendPush(d, n, n.type);
-    await d.store.update(`notifications/${n.id}`, { pushStatus: status });
+    try {
+      await d.store.update(`notifications/${n.id}`, { pushStatus: status });
+      summary[status]++;
+    } catch (err) {
+      // FCM may already have accepted the request; retain the pre-send unknown claim, do not retry.
+      summary.unknown++;
+      console.error(
+        `[push] outcome status write failed for ${n.id}; retained unknown claim: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
-  return due.length;
+  return summary;
 }
 
 // ─── Marketer inbox ─────────────────────────────────────────────────────────

@@ -205,34 +205,43 @@ export async function completeLibraryUpload(
   const m = await ownedPending(d, actor, mediaId);
   if (m.status === 'ready') return toItem(d, m, await usageIndex(d));
   if (m.status !== 'pending') throw new ApiError('CONFLICT', 'این آپلود دیگر فعال نیست.');
-  const received = await receivedParts(d, m);
+  // `composeParts` or the final status write may have committed before a caller timed out. A
+  // complete destination is therefore the idempotency signal for retry; do not require parts that
+  // the successful atomic compose may already have removed.
   const total = m.totalParts ?? 0;
-  if (received.length !== total) {
-    const have = new Set(received);
-    const missing = Array.from({ length: total }, (_, i) => i).filter((i) => !have.has(i));
-    throw new ApiError('CONFLICT', 'بعضی بخش‌های فایل هنوز آپلود نشده‌اند.', { missing });
-  }
-  const parts = Array.from({ length: total }, (_, i) => ({
-    path: partPath(mediaId, i),
-    size: expectedPartSize(m, i),
-  }));
-  const composed = d.blob.composeParts
-    ? await d.blob.composeParts(parts, m.path, m.declaredMime)
-    : null;
-  if (composed === null || composed === undefined) {
-    // Generic stores (local disk / Firebase): assemble into ONE preallocated buffer.
-    const whole = new Uint8Array(m.declaredSize);
-    let offset = 0;
-    for (const part of parts) {
-      const bytes = await d.blob.readRange(part.path, 0, part.size - 1);
-      if (bytes.length !== part.size || offset + part.size > whole.length)
-        throw new ApiError('CONFLICT', 'اندازه‌ی فایل با آپلود هم‌خوانی ندارد. دوباره تلاش کنید.');
-      whole.set(bytes, offset);
-      offset += part.size;
+  const existing = await d.blob.stat(m.path);
+  if (!existing || existing.size !== m.declaredSize) {
+    const received = await receivedParts(d, m);
+    if (received.length !== total) {
+      const have = new Set(received);
+      const missing = Array.from({ length: total }, (_, i) => i).filter((i) => !have.has(i));
+      throw new ApiError('CONFLICT', 'بعضی بخش‌های فایل هنوز آپلود نشده‌اند.', { missing });
     }
-    if (offset !== m.declaredSize)
-      throw new ApiError('CONFLICT', 'اندازه‌ی فایل با آپلود هم‌خوانی ندارد. دوباره تلاش کنید.');
-    await d.blob.put(m.path, whole, m.declaredMime);
+    const parts = Array.from({ length: total }, (_, i) => ({
+      path: partPath(mediaId, i),
+      size: expectedPartSize(m, i),
+    }));
+    const composed = d.blob.composeParts
+      ? await d.blob.composeParts(parts, m.path, m.declaredMime)
+      : null;
+    if (composed === null || composed === undefined) {
+      // Generic stores (local disk / Firebase): assemble into ONE preallocated buffer.
+      const whole = new Uint8Array(m.declaredSize);
+      let offset = 0;
+      for (const part of parts) {
+        const bytes = await d.blob.readRange(part.path, 0, part.size - 1);
+        if (bytes.length !== part.size || offset + part.size > whole.length)
+          throw new ApiError(
+            'CONFLICT',
+            'اندازه‌ی فایل با آپلود هم‌خوانی ندارد. دوباره تلاش کنید.',
+          );
+        whole.set(bytes, offset);
+        offset += part.size;
+      }
+      if (offset !== m.declaredSize)
+        throw new ApiError('CONFLICT', 'اندازه‌ی فایل با آپلود هم‌خوانی ندارد. دوباره تلاش کنید.');
+      await d.blob.put(m.path, whole, m.declaredMime);
+    }
   }
   await finalizeMedia(
     d,
@@ -249,12 +258,19 @@ export async function completeLibraryUpload(
 export async function abortLibraryUpload(d: Deps, actor: Actor, mediaId: string) {
   const m = await ownedPending(d, actor, mediaId);
   if (m.status === 'ready') throw new ApiError('CONFLICT', 'این فایل قبلاً آپلود شده است.');
-  await deleteParts(d, mediaId, m.totalParts ?? 0);
-  await d.store.update(`media/${mediaId}`, {
-    status: 'rejected',
-    rejectReason: 'آپلود لغو شد.',
-    archived: true,
+  await d.store.runTransaction(async (tx) => {
+    const current = await tx.get<MediaAsset>(`media/${mediaId}`);
+    if (!current || !current.library) throw notFound('آپلود');
+    if (current.createdBy !== actor.id) throw new ApiError('FORBIDDEN');
+    if (current.status !== 'pending') throw new ApiError('CONFLICT', 'این آپلود دیگر فعال نیست.');
+    tx.update(`media/${mediaId}`, {
+      status: 'rejected',
+      rejectReason: 'آپلود لغو شد.',
+      archived: true,
+    });
   });
+  // Mark terminal state before cleanup, so a concurrent complete cannot change it back to ready.
+  await deleteParts(d, mediaId, m.totalParts ?? 0);
   return { ok: true };
 }
 

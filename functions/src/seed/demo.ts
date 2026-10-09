@@ -4,11 +4,7 @@ import { recordProgress } from '../services/learning';
 import { ensureUser } from '../services/users';
 import type { Doc } from '../store/types';
 
-/**
- * Demo users/teams for dev + E2E only (never run on prod unless `--demo`).
- * Credentials are documented in README (dev only).
- */
-export const DEMO_PASSWORD = 'demo1234';
+/** Demo users/teams for dev + E2E data fixtures only (never run on prod unless `--demo`). */
 export const DEMO_USERS = [
   {
     key: 'superadmin',
@@ -78,12 +74,11 @@ export async function seedDemo(d: Deps) {
         updatedAt: iso,
       });
   }
-  const out: Array<{ role: string; name: string; phone: string; password: string }> = [];
+  const out: Array<{ role: string; name: string; phone: string }> = [];
   for (const u of DEMO_USERS) {
     const user = await ensureUser(d, {
       name: u.name,
-      identifier: u.phone,
-      password: DEMO_PASSWORD,
+      phone: u.phone,
       role: u.role,
       teamId: u.team,
       province: u.province ?? null,
@@ -91,7 +86,7 @@ export async function seedDemo(d: Deps) {
     });
     if (u.role === 'manager' && u.team)
       await d.store.update(`teams/${u.team}`, { managerId: user.id });
-    out.push({ role: u.role, name: u.name, phone: u.phone, password: DEMO_PASSWORD });
+    out.push({ role: u.role, name: u.name, phone: u.phone });
     if (u.key === 'marketer2') await seedDemoProgress(d, user.id);
   }
 

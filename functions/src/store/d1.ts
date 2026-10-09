@@ -1,3 +1,4 @@
+import { createGate, DeadlineError, waitSettled, withTimeout } from '../lib/bounded';
 import { randomBytesBase64Url } from '../lib/crypto';
 import { applyUpdate, cmp, deepMerge, getField, matches, splitPath } from './helpers';
 import {
@@ -91,18 +92,23 @@ function markSchemaReady(db: D1Database): void {
 
 /** DDL batch, run at most once per D1 binding per isolate (shared by the store and blob store). */
 export function ensureD1Schema(db: D1Database): Promise<void> {
-  let p = schemaReady.get(db);
-  if (!p) {
-    p = db
-      .batch(D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)))
-      .then(() => undefined)
-      .catch((err) => {
-        schemaReady.delete(db);
-        throw err;
-      });
-    schemaReady.set(db, p);
+  let shared = schemaReady.get(db);
+  if (!shared) {
+    const work = withD1CallTimeout(
+      db.batch(D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql))).then(() => undefined),
+      'D1 schema',
+    );
+    shared = work.catch((err) => {
+      if (schemaReady.get(db) === shared) schemaReady.delete(db);
+      throw err;
+    });
+    schemaReady.set(db, shared);
   }
-  return p;
+  const waiter = shared;
+  return withTimeout(waiter, D1_CALL_TIMEOUT_MS, 'D1 schema wait').catch((err) => {
+    if (schemaReady.get(db) === waiter) schemaReady.delete(db);
+    throw err;
+  });
 }
 
 function toPlainData(v: Input): Data {
@@ -149,23 +155,14 @@ function mentorGuideSnapshotVersion(snapshot: Record<string, Data>): string {
  */
 const MAX_ROW_JSON = 1_800_000;
 
-/**
- * Upper bound for one D1 call / the one-time init. A stalled call must fail fast: the queue and
- * the init promise are shared by every request in an isolate, so one call that never settles would
- * otherwise freeze them all until the runtime cancels the Worker ("code had hung").
- */
+/** Existing hard deadline for one D1 operation. Time spent queued is charged against this cap. */
 export const D1_CALL_TIMEOUT_MS = 15_000;
+/** Bounded courtesy wait before proceeding past a stuck per-store SQL predecessor. */
+export const D1_QUEUE_WAIT_MS = 5_000;
+/** Per-scope transaction wait; expiry permits CAS-protected overlap, not an unsafe write. */
+export const D1_TX_QUEUE_WAIT_MS = 10_000;
+export const D1_INIT_TIMEOUT_MS = D1_CALL_TIMEOUT_MS * 2;
 const GLOBAL_TRANSACTION_QUEUE = 'global';
-
-function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([work, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
 
 /** Bound direct D1 calls from adapters that sit beside D1Store (for example blob range reads). */
 export function withD1CallTimeout<T>(work: Promise<T>, label: string): Promise<T> {
@@ -180,7 +177,7 @@ export class D1Store implements DocStore {
   private initPromise: Promise<void> | null = null;
   private readonly transactionQueues = new Map<string, Promise<unknown>>();
   private readonly ensuredScopes = new Set<string>();
-  /** D1 allows 6 connections per invocation and runs one query at a time. Serialize SQL. */
+  /** Bounded isolate-local SQL gate; atomic D1 guards remain the cross-isolate correctness boundary. */
   private io: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -190,20 +187,27 @@ export class D1Store implements DocStore {
 
   async ensureReady(): Promise<void> {
     if (!this.initPromise) {
-      this.initPromise = withTimeout(this.initialize(), D1_CALL_TIMEOUT_MS * 2, 'D1 init').catch(
-        (err) => {
-          this.initPromise = null;
-          throw err;
-        },
-      );
+      const init = this.initialize();
+      this.initPromise = init;
+      void init.catch(() => {
+        if (this.initPromise === init) this.initPromise = null;
+      });
     }
-    return this.initPromise;
+    const init = this.initPromise;
+    try {
+      // Each caller has its own timer. If a starter is abandoned, a later request can time out
+      // independently and clear only the exact stale promise it waited on.
+      await withTimeout(init, D1_INIT_TIMEOUT_MS, 'D1 init wait');
+    } catch (err) {
+      if (this.initPromise === init) this.initPromise = null;
+      throw err;
+    }
   }
 
   private async initialize(): Promise<void> {
     const ddl = D1_SCHEMA_STATEMENTS.map((sql) => this.db.prepare(sql));
     if (!this.seedSnapshot) {
-      await this.db.batch(ddl);
+      await this.enqueue(() => this.db.batch(ddl), 'schema-init');
       markSchemaReady(this.db);
       return;
     }
@@ -219,10 +223,10 @@ export class D1Store implements DocStore {
         .prepare('SELECT id FROM docs WHERE col = ?1 AND id = ?2')
         .bind('knowledge_meta', 'catalog_snapshot_seed_in_progress'),
     ];
-    const res = await this.db.batch<{ col?: string; id?: string; data?: string }>([
-      ...ddl,
-      ...probes,
-    ]);
+    const res = await this.enqueue(
+      () => this.db.batch<{ col?: string; id?: string; data?: string }>([...ddl, ...probes]),
+      'schema-probe',
+    );
     markSchemaReady(this.db);
     const anyData = res[ddl.length]?.results?.[0];
     const guideMarker = res[ddl.length + 1]?.results?.[0];
@@ -251,13 +255,17 @@ export class D1Store implements DocStore {
   private async seedCatalogSnapshot(): Promise<void> {
     const now = new Date().toISOString();
     const progress = JSON.stringify({ startedAt: now });
-    await this.db
-      .prepare(
-        `INSERT OR IGNORE INTO docs (col, id, grp, data, updated_at)
-         VALUES ('knowledge_meta', 'catalog_snapshot_seed_in_progress', 'knowledge_meta', ?1, ?2)`,
-      )
-      .bind(progress, now)
-      .run();
+    await this.enqueue(
+      () =>
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO docs (col, id, grp, data, updated_at)
+             VALUES ('knowledge_meta', 'catalog_snapshot_seed_in_progress', 'knowledge_meta', ?1, ?2)`,
+          )
+          .bind(progress, now)
+          .run(),
+      'catalog-seed-start',
+    );
 
     const stmts: D1PreparedStatement[] = [];
     for (const [col, docs] of Object.entries(this.seedSnapshot ?? {})) {
@@ -277,51 +285,74 @@ export class D1Store implements DocStore {
     }
     const CHUNK = 80;
     for (let i = 0; i < stmts.length; i += CHUNK) {
-      await this.db.batch(stmts.slice(i, i + CHUNK));
+      const batch = stmts.slice(i, i + CHUNK);
+      await this.enqueue(() => this.db.batch(batch), 'catalog-seed-chunk');
     }
 
     // Commit the completion marker only after every snapshot chunk has succeeded.
-    await this.db.batch([
-      this.db
-        .prepare(
-          `INSERT INTO docs (col, id, grp, data, updated_at) VALUES ('knowledge_meta', 'catalog_snapshot_seed_version', 'knowledge_meta', ?1, ?2)
-           ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-        )
-        .bind(JSON.stringify({ completedAt: now }), now),
-      this.db
-        .prepare('DELETE FROM docs WHERE col = ?1 AND id = ?2')
-        .bind('knowledge_meta', 'catalog_snapshot_seed_in_progress'),
-    ]);
+    await this.enqueue(
+      () =>
+        this.db.batch([
+          this.db
+            .prepare(
+              `INSERT INTO docs (col, id, grp, data, updated_at) VALUES ('knowledge_meta', 'catalog_snapshot_seed_version', 'knowledge_meta', ?1, ?2)
+               ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+            )
+            .bind(JSON.stringify({ completedAt: now }), now),
+          this.db
+            .prepare('DELETE FROM docs WHERE col = ?1 AND id = ?2')
+            .bind('knowledge_meta', 'catalog_snapshot_seed_in_progress'),
+        ]),
+      'catalog-seed-complete',
+    );
   }
 
-  /** Run one D1 call at a time; its deadline includes time spent waiting behind earlier SQL. */
-  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    let timedOut = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        timedOut = true;
-        reject(new Error(`D1 call timed out after ${D1_CALL_TIMEOUT_MS}ms`));
-      }, D1_CALL_TIMEOUT_MS);
-    });
-    const work = this.io.then(
-      () => {
-        if (timedOut) throw new Error('D1 call timed out while queued');
-        return fn();
-      },
-      () => {
-        if (timedOut) throw new Error('D1 call timed out while queued');
-        return fn();
-      },
-    );
-    const run = Promise.race([work, timeout]).finally(() => {
-      if (timer) clearTimeout(timer);
-    });
-    this.io = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+  /**
+   * Best-effort per-store SQL gate. The wait and operation are bounded by the existing 15s call
+   * budget; after a stuck predecessor's 5s courtesy window, proceed because every mutating D1
+   * batch is guarded atomically. Timing out a batch does not cancel a late commit.
+   */
+  private enqueue<T>(fn: () => Promise<T>, operation = 'call'): Promise<T> {
+    const previous = this.io;
+    const gate = createGate();
+    this.io = gate.promise;
+    const started = Date.now();
+
+    return (async () => {
+      try {
+        const wait = await waitSettled(previous, D1_QUEUE_WAIT_MS);
+        if (wait.timedOut) {
+          console.warn(
+            JSON.stringify({
+              level: 'warn',
+              msg: 'd1-store',
+              event: 'queue_wait_timeout',
+              operation,
+              waitedMs: wait.waitedMs,
+            }),
+          );
+        }
+        const remainingMs = D1_CALL_TIMEOUT_MS - (Date.now() - started);
+        if (remainingMs <= 0) throw new DeadlineError(`D1 ${operation}`, D1_CALL_TIMEOUT_MS);
+        return await withTimeout(Promise.resolve().then(fn), remainingMs, `D1 ${operation}`);
+      } catch (err) {
+        if (err instanceof DeadlineError) {
+          console.error(
+            JSON.stringify({
+              level: 'error',
+              msg: 'd1-store',
+              event: 'call_timeout',
+              operation,
+              ms: D1_CALL_TIMEOUT_MS,
+            }),
+          );
+        }
+        throw err;
+      } finally {
+        gate.release();
+        if (this.io === gate.promise) this.io = Promise.resolve();
+      }
+    })();
   }
 
   private async ensureScope(scope: string): Promise<void> {
@@ -425,10 +456,14 @@ export class D1Store implements DocStore {
         ? appliedData === null
           ? null
           : { data: appliedData }
-        : await this.db
-            .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
-            .bind('knowledge_meta', 'mentor_guides_seed_version')
-            .first<{ data: string }>();
+        : await this.enqueue(
+            () =>
+              this.db
+                .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
+                .bind('knowledge_meta', 'mentor_guides_seed_version')
+                .first<{ data: string }>(),
+            'guides-marker-read',
+          );
     if (applied) {
       try {
         if ((JSON.parse(applied.data) as { version?: string }).version === version) return;
@@ -438,13 +473,21 @@ export class D1Store implements DocStore {
     }
 
     const [brandResult, guideResult] = await Promise.all([
-      this.db.prepare('SELECT id, data FROM docs WHERE col = ?1').bind('brands').all<{
-        id: string;
-        data: string;
-      }>(),
-      this.db.prepare('SELECT id FROM docs WHERE col = ?1').bind('mentor_guides').all<{
-        id: string;
-      }>(),
+      this.enqueue(
+        () =>
+          this.db.prepare('SELECT id, data FROM docs WHERE col = ?1').bind('brands').all<{
+            id: string;
+            data: string;
+          }>(),
+        'guides-brand-scan',
+      ),
+      this.enqueue(
+        () =>
+          this.db.prepare('SELECT id FROM docs WHERE col = ?1').bind('mentor_guides').all<{
+            id: string;
+          }>(),
+        'guides-existing-scan',
+      ),
     ]);
     const liveBrands = (brandResult.results ?? []).map((row) => ({
       id: row.id,
@@ -486,29 +529,39 @@ export class D1Store implements DocStore {
       statements.push(this.mentorGuideInsert(docId, { ...guide, kind, targetId }, now));
     }
 
-    const results = statements.length ? await this.db.batch(statements) : [];
+    const results = statements.length
+      ? await this.enqueue(() => this.db.batch(statements), 'guides-seed')
+      : [];
     const inserted = results.some((result) => (result.meta?.changes ?? 0) > 0);
     if (inserted) {
       // Guide changes need an incremental knowledge-index rebuild before retrieval.
       const dirty = JSON.stringify({ at: now });
-      await this.db
-        .prepare(
-          `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-           ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-        )
-        .bind('knowledge_meta', 'dirty', 'knowledge_meta', dirty, now)
-        .run();
+      await this.enqueue(
+        () =>
+          this.db
+            .prepare(
+              `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+               ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+            )
+            .bind('knowledge_meta', 'dirty', 'knowledge_meta', dirty, now)
+            .run(),
+        'guides-dirty-marker',
+      );
     }
 
     // One small persistent version marker prevents scanning the catalog on every isolate.
     const marker = JSON.stringify({ version });
-    await this.db
-      .prepare(
-        `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-         ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
-      )
-      .bind('knowledge_meta', 'mentor_guides_seed_version', 'knowledge_meta', marker, now)
-      .run();
+    await this.enqueue(
+      () =>
+        this.db
+          .prepare(
+            `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+          )
+          .bind('knowledge_meta', 'mentor_guides_seed_version', 'knowledge_meta', marker, now)
+          .run(),
+      'guides-version-marker',
+    );
   }
 
   private matchLiveBrandId(
@@ -650,18 +703,27 @@ export class D1Store implements DocStore {
   private async runQuery<T>(q: QuerySpec): Promise<Doc<T>[]> {
     const binds: unknown[] = [q.collection];
     const extra: string[] = [];
+    const comparableOps = new Set(['==', '<', '<=', '>', '>=']);
     for (const [field, op, value] of q.where ?? []) {
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)) continue;
-      if (op === '==' && typeof value === 'string') {
-        binds.push(value);
-        extra.push(`json_extract(data, '$.${field}') = ?${binds.length}`);
-      } else if (op === '==' && value === null) {
+      if (op === '==' && value === null) {
         extra.push(`(json_extract(data, '$.${field}') IS NULL)`);
+      } else if (
+        comparableOps.has(op) &&
+        (typeof value === 'string' || typeof value === 'number')
+      ) {
+        binds.push(value);
+        extra.push(`json_extract(data, '$.${field}') ${op} ?${binds.length}`);
       }
     }
     const tail = extra.length ? ` AND ${extra.join(' AND ')}` : '';
     const pushedAll = (q.where ?? []).every(
-      (w) => w[1] === '==' && (typeof w[2] === 'string' || w[2] === null),
+      ([field, op, value]) =>
+        /^[A-Za-z_][A-Za-z0-9_]*$/.test(field) &&
+        ((op === '==' &&
+          (typeof value === 'string' || typeof value === 'number' || value === null)) ||
+          (['<', '<=', '>', '>='].includes(op) &&
+            (typeof value === 'string' || typeof value === 'number'))),
     );
     const order = q.orderBy ?? [];
     const limit =
@@ -670,7 +732,8 @@ export class D1Store implements DocStore {
       pushedAll && order.length === 1 && order[0]?.[0] === 'createdAt'
         ? ` ORDER BY json_extract(data, '$.createdAt') ${order[0][1] === 'asc' ? 'ASC' : 'DESC'}`
         : '';
-    const limitSql = limit !== null && orderSql ? ` LIMIT ${limit}` : '';
+    const limitSql =
+      limit !== null && (!order.length || orderSql.length > 0) ? ` LIMIT ${limit}` : '';
     const sql = q.group
       ? `SELECT id, data FROM docs WHERE grp = ?1 AND col LIKE '%/%'${tail}${orderSql}${limitSql}`
       : `SELECT id, data FROM docs WHERE col = ?1${tail}${orderSql}${limitSql}`;
@@ -934,16 +997,28 @@ export class D1Store implements DocStore {
     };
     const queueKey = scope === undefined ? GLOBAL_TRANSACTION_QUEUE : `scope:${scope}`;
     const previous = this.transactionQueues.get(queueKey) ?? Promise.resolve();
-    const next = previous.then(run, run);
-    const completed = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.transactionQueues.set(queueKey, completed);
-    void completed.then(() => {
-      if (this.transactionQueues.get(queueKey) === completed)
-        this.transactionQueues.delete(queueKey);
-    });
-    return next;
+    const gate = createGate();
+    this.transactionQueues.set(queueKey, gate.promise);
+    return (async () => {
+      const wait = await waitSettled(previous, D1_TX_QUEUE_WAIT_MS);
+      if (wait.timedOut) {
+        console.warn(
+          JSON.stringify({
+            level: 'warn',
+            msg: 'd1-store',
+            event: 'transaction_queue_timeout',
+            waitedMs: wait.waitedMs,
+          }),
+        );
+      }
+      try {
+        // If the predecessor was abandoned, CAS remains the correctness boundary when we proceed.
+        return await run();
+      } finally {
+        gate.release();
+        if (this.transactionQueues.get(queueKey) === gate.promise)
+          this.transactionQueues.delete(queueKey);
+      }
+    })();
   }
 }

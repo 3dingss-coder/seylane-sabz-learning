@@ -27,93 +27,37 @@ const loggedIn = () => {
 };
 
 describe('M1 login → M3 home', () => {
-  it('logs in with phone, stores refresh token and shows «کار بعدی»', async () => {
+  it('submits a normalized phone but never creates a session for phone-only login', async () => {
+    const generic =
+      'شمارهٔ تلفن به‌تنهایی هویت را ثابت نمی‌کند. ورود به حساب‌های موجود از این مسیر ممکن نیست.';
     const { calls } = mockApi({
       'POST /v1/auth/phone-login': () => ({
-        data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
+        status: 401,
+        error: { code: 'UNAUTHENTICATED', message: generic },
       }),
-      'GET /v1/me/home': () => ({ data: home }),
-      'GET /v1/me/notifications': () => ({ data: { unread: 2, items: [] } }),
-      'GET /v1/me/mentor/nudges': () => ({ data: [] }),
     });
     renderApp('/login');
     fireEvent.change(await screen.findByLabelText('شماره موبایل'), {
       target: { value: '۰۹۱۲۰۰۰۰۰۰۴' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
-    expect(await screen.findByTestId('next-item')).toHaveTextContent('معرفی کلی محصول فورمی');
-    expect(screen.getByRole('button', { name: /ادامه/ })).toBeInTheDocument();
-    // Persian digits are normalised before sending
-    expect(calls.find((c) => c.key === 'POST /v1/auth/phone-login')?.body).toEqual({
+    expect(await screen.findByRole('alert')).toHaveTextContent(generic);
+    expect(calls.find((call) => call.key === 'POST /v1/auth/phone-login')?.body).toEqual({
       phone: '09120000004',
     });
-    expect(localStorage.getItem('ssl.refresh')).toBe('r1');
-    // real product image, not a placeholder
-    expect(screen.getAllByRole('img', { name: 'آموزش کیت درمانی فورمی' })[0]).toHaveAttribute(
-      'src',
-      '/catalog/products/sb-310350101/main.jpg',
-    );
+    expect(calls.some((call) => call.key === 'POST /v1/auth/phone/request')).toBe(false);
+    expect(localStorage.getItem('ssl.refresh')).toBeNull();
+    expect(screen.getByRole('button', { name: 'ورود' })).toBeInTheDocument();
   });
 
-  it('requires a real OTP challenge before production phone login', async () => {
-    vi.stubEnv('VITE_APP_ENV', 'prod');
+  it('never requests an OTP, including in a production build', async () => {
+    vi.stubEnv('PROD', true);
     const { calls } = mockApi({
-      'POST /v1/auth/phone/request': () => ({
-        data: { accepted: true, challengeId: 'sms-challenge-123', expiresInSec: 300 },
-      }),
       'POST /v1/auth/phone-login': () => ({
-        data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
-      }),
-      'GET /v1/me/home': () => ({ data: home }),
-      'GET /v1/me/notifications': () => ({ data: { unread: 0, items: [] } }),
-      'GET /v1/me/mentor/nudges': () => ({ data: [] }),
-    });
-    renderApp('/login');
-    fireEvent.change(await screen.findByLabelText('شماره موبایل'), {
-      target: { value: '۰۹۱۲۰۰۰۰۰۰۴' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'دریافت کد تأیید' }));
-    expect(await screen.findByLabelText('کد تأیید پیامکی')).toBeInTheDocument();
-    expect(calls.find((call) => call.key === 'POST /v1/auth/phone/request')?.body).toEqual({
-      phone: '09120000004',
-    });
-    expect(calls.find((call) => call.key === 'POST /v1/auth/phone-login')).toBeUndefined();
-
-    fireEvent.change(screen.getByLabelText('کد تأیید پیامکی'), { target: { value: '123456' } });
-    fireEvent.click(screen.getByRole('button', { name: 'تأیید کد و ورود' }));
-    await waitFor(() =>
-      expect(calls.find((call) => call.key === 'POST /v1/auth/phone-login')?.body).toEqual({
-        phone: '09120000004',
-        challengeId: 'sms-challenge-123',
-        code: '123456',
-      }),
-    );
-  });
-
-  it('shows production phone verification unavailability without falling back to passwordless login', async () => {
-    vi.stubEnv('VITE_APP_ENV', 'prod');
-    const { calls } = mockApi({
-      'POST /v1/auth/phone/request': () => ({
-        status: 503,
-        error: { code: 'UNAVAILABLE', message: 'سرویس تأیید شماره فعال نیست.' },
-      }),
-    });
-    renderApp('/login');
-    fireEvent.change(await screen.findByLabelText('شماره موبایل'), {
-      target: { value: '09120000004' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'دریافت کد تأیید' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('سرویس تأیید شماره فعال نیست.');
-    expect(calls.find((call) => call.key === 'POST /v1/auth/phone-login')).toBeUndefined();
-  });
-
-  it('unknown phone moves to sign-up with the number kept', async () => {
-    mockApi({
-      'POST /v1/auth/phone-login': () => ({
-        status: 404,
+        status: 401,
         error: {
-          code: 'NOT_FOUND',
-          message: 'این شماره هنوز ثبت‌نام نکرده است. ابتدا ثبت‌نام کنید.',
+          code: 'UNAUTHENTICATED',
+          message: 'شمارهٔ تلفن به‌تنهایی هویت را ثابت نمی‌کند.',
         },
       }),
     });
@@ -122,20 +66,50 @@ describe('M1 login → M3 home', () => {
       target: { value: '09120000004' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
-    expect(await screen.findByRole('button', { name: 'ثبت‌نام و ورود' })).toBeInTheDocument();
-    expect(screen.getByLabelText('شماره موبایل')).toHaveValue('09120000004');
-    expect(screen.getByLabelText('نام و نام خانوادگی')).toBeInTheDocument();
-    expect(screen.getByLabelText('انتخاب محل فعالیت شما')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('هویت را ثابت نمی‌کند');
+    expect(calls.some((call) => call.key === 'POST /v1/auth/phone/request')).toBe(false);
+    expect(screen.queryByLabelText('کد تأیید پیامکی')).toBeNull();
   });
 
-  it('signs up with name, phone and محل فعالیت (province → city) in one step', async () => {
+  it('profile and admin UI expose no password or reset controls, even for legacy passwordless metadata', async () => {
+    const routes = loggedIn();
+    routes['GET /v1/me'] = () => ({ data: { ...marketer, passwordless: true } });
+    mockApi(routes);
+    renderApp('/profile');
+    expect(await screen.findByLabelText('نام و نام خانوادگی')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/رمز/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /بازتنظیم رمز/ })).toBeNull();
+  });
+
+  it('a phone login failure does not reveal account state or auto-switch into registration', async () => {
+    mockApi({
+      'POST /v1/auth/phone-login': () => ({
+        status: 401,
+        error: {
+          code: 'UNAUTHENTICATED',
+          message: 'شمارهٔ تلفن به‌تنهایی هویت را ثابت نمی‌کند.',
+        },
+      }),
+    });
+    renderApp('/login');
+    fireEvent.change(await screen.findByLabelText('شماره موبایل'), {
+      target: { value: '09120000004' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('هویت را ثابت نمی‌کند');
+    expect(screen.queryByLabelText('نام و نام خانوادگی')).toBeNull();
+    expect(screen.queryByLabelText('انتخاب محل فعالیت شما')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'حساب تازه می‌خواهید؟ ثبت‌نام کنید' }));
+    expect(await screen.findByLabelText('نام و نام خانوادگی')).toBeInTheDocument();
+    expect(screen.getByLabelText('شماره موبایل')).toHaveValue('09120000004');
+  });
+
+  it('submits a marketer registration request without creating a session', async () => {
     const { calls } = mockApi({
       'POST /v1/auth/phone-register': () => ({
-        data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
+        status: 202,
+        data: { accepted: true },
       }),
-      'GET /v1/me/home': () => ({ data: home }),
-      'GET /v1/me/notifications': () => ({ data: { unread: 0, items: [] } }),
-      'GET /v1/me/mentor/nudges': () => ({ data: [] }),
     });
     renderApp('/register');
     fireEvent.change(await screen.findByLabelText('نام و نام خانوادگی'), {
@@ -164,8 +138,12 @@ describe('M1 login → M3 home', () => {
     });
     fireEvent.click(within(cities).getByRole('option', { name: 'سبزوار' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'ثبت‌نام و ورود' }));
-    expect(await screen.findByTestId('next-item')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ارسال درخواست ثبت‌نام' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'این پاسخ وجود یا نبود حساب فعلی را نشان نمی‌دهد',
+    );
+    expect(screen.queryByTestId('next-item')).not.toBeInTheDocument();
+    expect(localStorage.getItem('ssl.refresh')).toBeNull();
     expect(calls.find((c) => c.key === 'POST /v1/auth/phone-register')?.body).toEqual({
       name: 'نگار محمدی',
       phone: '09120000111',
@@ -181,7 +159,7 @@ describe('M1 login → M3 home', () => {
       target: { value: 'نگار محمدی' },
     });
     fireEvent.change(screen.getByLabelText('شماره موبایل'), { target: { value: '09120000111' } });
-    fireEvent.click(screen.getByRole('button', { name: 'ثبت‌نام و ورود' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ارسال درخواست ثبت‌نام' }));
     expect(await screen.findByText('استان محل فعالیت خود را انتخاب کنید.')).toBeInTheDocument();
     expect(calls.some((c) => c.key === 'POST /v1/auth/phone-register')).toBe(false);
   });
@@ -201,7 +179,7 @@ describe('M1 login → M3 home', () => {
     // No admin UI — an explanation instead, with a way back to the marketer home.
     expect(await screen.findByRole('heading', { name: 'پنل ادمین' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: /ادمین/ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /بازگشت به اپ بازاریاب/ }));
+    fireEvent.click(screen.getByRole('button', { name: /بازگشت به پنل خود/ }));
     expect(await screen.findByTestId('next-item')).toBeInTheDocument();
   });
 
@@ -369,12 +347,12 @@ describe('F14 mentor nudge on Home', () => {
 });
 
 describe('panels live in the same app under /admin', () => {
-  it('a marketer opening /admin gets an explanation and can switch to an admin account', async () => {
+  it('a marketer opening /admin sees the role boundary and cannot switch by phone alone', async () => {
     mockApi({ ...loggedIn(), 'POST /v1/auth/logout': () => ({ data: null }) });
     renderApp('/admin');
     expect(await screen.findByRole('heading', { name: 'پنل ادمین' })).toBeInTheDocument();
-    expect(screen.getByText(/با حساب «بازاریاب» وارد شده‌اید/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'ورود با حساب ادمین' }));
+    expect(screen.getByText(/حساب فعلی شما «بازاریاب» است/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'خروج و بازگشت به صفحهٔ ورود' }));
     expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
     expect(localStorage.getItem('ssl.refresh')).toBeNull();
   });

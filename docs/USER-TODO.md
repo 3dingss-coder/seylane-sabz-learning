@@ -3,23 +3,24 @@
 > این فهرست همه مواردی است که من در محیط توسعه نمی‌توانستم انجام دهم (نیاز به حساب، کلید، دستگاه واقعی یا تصمیم شما).
 > راهنمای فنی قدم‌به‌قدم: [`docs/RELEASE.md`](./RELEASE.md).
 
-## ۱. راه‌اندازی زیرساخت (ضروری برای استقرار)
+## ۱. وضعیت زیرساخت و کارهای مالک
 
-- [ ] ساخت دو پروژه Firebase (dev و prod) با **طرح Blaze** (نیاز به کارت بین‌المللی — ریسک R1)
-- [ ] فعال کردن Authentication → Email/Password، ساخت Firestore (Native) و Storage
-- [ ] ساخت Service Account برای هر پروژه با نقش‌های: Firebase Admin، Cloud Functions Admin، Service Account User، **Service Account Token Creator**، و برای بکاپ: **Datastore Import Export Admin**
-- [ ] ثبت Secretها در GitHub (Settings → Secrets and variables → Actions):
-  - `FIREBASE_SERVICE_ACCOUNT_DEV`، `FIREBASE_SERVICE_ACCOUNT_PROD`، `FIREBASE_PROJECT_DEV`، `FIREBASE_PROJECT_PROD`
-  - `FIREBASE_WEB_API_KEY`
-  - `GEMINI_API_KEY` (اختیاری؛ بدون آن منتور فقط از قواعد پاسخ می‌دهد)
-  - `BACKUP_BUCKET` (اختیاری؛ باکت `gs://` برای بکاپ روزانه)
-  - `CLOUDFLARE_API_TOKEN`، `CLOUDFLARE_ACCOUNT_ID`، `CLOUDFLARE_PAGES_PROJECT`
-- [ ] ثبت Variableها: `VITE_API_BASE` (آدرس API)، `ALLOWED_ORIGINS` (دامنه وب + `https://localhost` برای اپ اندروید)، `APP_URL` (آدرس عمومی وب — برای لینک ایمیل و Push وب)، `VITE_SENTRY_DSN` (اختیاری)، `TRUST_PROXY_HOPS` (اختیاری؛ پیش‌فرض ۱ — اگر API را پشت Cloudflare Proxy گذاشتید ۲)
-- [ ] ایمیل گزارش هفتگی مدیر (اختیاری): Secret `SMTP_URL` به شکل `smtps://user:pass@smtp.example.com:465` و `MAIL_FROM` (مثلاً `آکادمی سیلانه <no-reply@دامنه‌شما>`). سرویس رایگان مثل Brevo (۳۰۰ ایمیل/روز) کافی است. مدیرانی که ایمیل دارند شنبه‌ها گزارش افراد عقب‌مانده را می‌گیرند؛ بدون SMTP فقط نوتیف داخل اپ ارسال می‌شود
-- [ ] اولین استقرار: `firebase deploy --only functions,firestore,storage` (به‌صورت خودکار بعد از merge به main انجام می‌شود)
-- [ ] پس از اولین استقرار روی Cloudflare: `wrangler deployments status` / `npm run deploy -w functions` (اگر با CLI می‌کنید)؛ سپس با `POST /v1/admin/jobs/deadline-sweep` اجرای دستی را امتحان کنید. (تأیید `[triggers] crons` در صفحه Triggers فقط بعد از باز کردن کامنت این بلوک — بند §۴ را ببینید)
-- [ ] اجرای Seed روی پروژه واقعی با ساخت حساب مدیر ارشد (دستور در RELEASE.md §2) — **بدون `--demo`**
-- [ ] اصلاح CSS‌به‌عمل CI (اختیاری، ولی چک main را سبز می‌کند): در `.github/workflows/ci.yml` خط `- run: npm run build` را بالای `- run: npm run typecheck` بیاورید. دلیل قرمزی فعلی: `functions/src/cloudflare-worker.ts` فایل تولیدیِ `functions/lib/seed-snapshot.json` را import می‌کند که فقط با build ساخته می‌شود (`TS2307`)؛ این ایراد از قبل روی `main` وجود داشت و ربطی به ممیزی ادمین ندارد. در این محیط workflow قابل تغییر نبود (توکن App اجازهٔ نوشتن روی `.github/workflows/*` ندارد)
+- [ ] فایل [`CLOUDFLARE_CONFIGURATION_REPORT.md`](../CLOUDFLARE_CONFIGURATION_REPORT.md) را برای مقادیر تأییدشده از مخزن، شناسه‌های اعلام‌شده در سورس، موانع و checklist داشبورد بخوانید. هیچ مقدار این فایل به‌تنهایی وضعیت زندهٔ Cloudflare را ثابت نمی‌کند.
+- [ ] در داشبورد Cloudflare، Worker، حساب، دیتابیس D1، باکت R2، دامنه‌ها، Cron Triggers، متغیرها/secretها، deploymentهای فعلی، مصرف/محدودیت منابع و نسخهٔ تنظیمات Workers Builds را با گزارش تطبیق دهید. شناسهٔ D1 را تغییر ندهید و دیتابیس تازه نسازید.
+- [ ] وضعیت GitHub Actions secrets/variables و اتصال خودکار Workers Builds را بررسی کنید؛ secretها را در issue، chat، گزارش یا Git commit قرار ندهید. Worker Build جدا از build محلی است.
+- [ ] پیش از هر release مالک باید صریحاً identity provider و session model موردتأیید را انتخاب و فراهم کند. شمارهٔ تلفن به‌تنهایی اثبات هویت نیست و در مخزن provider یا credential پیامکی/OTP پیکربندی نشده است.
+- [ ] تا حل blocker هویت، ورود تازهٔ بازاریاب/مدیر/ادمین از شماره ممکن نیست. ثبت‌نام عمومی پاسخ یکسان `202` می‌دهد؛ فقط برای شماره‌ای که از قبل به حساب وصل نیست، ممکن است رکورد غیرفعال با نقش `marketer` ساخته شود. هیچ session، user ID یا اطلاعاتی برگردانده نمی‌شود؛ پاسخ وجود/نبود حساب را اعلام نمی‌کند. رکورد غیرفعال قابل استفاده نیست.
+- [ ] شماره‌های seed/fixture credential نیستند. `--superadmin-phone` در محیط owner مورداعتماد ممکن است برای شمارهٔ تازه رکورد فعال `superadmin` بسازد؛ شماره verify نمی‌شود و password/OTP/login/session ایجاد نمی‌شود. اگر شماره از قبل یک حساب داشته باشد، `ensureUser` همان رکورد را بدون تغییر role برمی‌گرداند. پیش از هر seed روی پروژهٔ زنده، approval و مقصد را دوباره بررسی کنید.
+- [ ] endpointهای login با رمز، staff login، reset/change password و درخواست کد عمداً حذف شده‌اند. session معتبرِ از قبل صادرشده فقط از مسیر refresh می‌تواند ادامه پیدا کند؛ Firebase Web API key حذف نشده چون در refresh قدیمی Firebase مصرف می‌شود و خودش اثبات هویت نیست.
+- [ ] production در نبود D1 و rate limiter پایدار fail-closed می‌شود. مهاجرت افزایشی D1 در workflow فقط پس از owner review و اجرای release موردتأیید انجام شود؛ در این تغییر هیچ migration یا deploy تولیدی اجرا نشده است.
+- [ ] R2 migration/purge در `wrangler.toml` خاموش است. پیش از فعال‌سازی، owner باید inventory زنده، پشتیبان، objectها، byte verification، شرط‌های نوشتن اتمیک و امکان rollback را جداگانه بررسی کند.
+
+## ۱.۱. مواردی که فعلاً نباید انجام شوند
+
+- رمز مدیر، OTP آزمایشی، credential جعلی، token یا کلید API به مخزن/گزارش اضافه نکنید.
+- با phone-only session حساب‌های موجود را باز نکنید؛ duplicate phoneها را merge یا overwrite نکنید.
+- از branch فعلی production deploy، اجرای production migration، تغییر production data/R2 objects یا secretها انجام ندهید.
+- نتیجهٔ `npm run build` محلی را موفقیت Workers Builds یا تأیید تنظیمات زنده تلقی نکنید.
 
 ## ۲. اپ اندروید و انتشار
 
@@ -39,35 +40,30 @@
 - [ ] زیرنویس (VTT) رسانه‌ها — V1
 - [ ] YouTube در ایران نیاز به VPN دارد (D17/D23 پذیرفته‌شده)؛ جایگزین: آپلود مستقیم فایل ویدیو
 
-## ۳.۵ کلیدهای هوش مصنوعی منتور — **چه چیزی باید تهیه شود**
+## ۳.۵ پیکربندی اختیاری هوش مصنوعی منتور
 
-> معماری کامل: [`docs/MENTOR-AI.md`](./MENTOR-AI.md). منتور بدون هیچ کلیدی هم کار می‌کند (حالت استخراجی/قاعده‌محور)، ولی برای «پاسخ باکیفیت به هر سؤال، با تصویر و صدا»، این دو کلید لازم است. **هر دو طرح رایگان دارند و برای MVP کافی‌اند.**
+> این فهرست از `functions/src/config.ts`, `functions/src/ai/hub.ts` و `.github/workflows/deploy.yml` تطبیق داده شده است. کلیدها اختیاری‌اند و هیچ مقدار secret در مخزن قرار ندارد. این سند دربارهٔ رایگان‌بودن، quota یا قیمت فعلی ارائه‌دهنده وعده نمی‌دهد؛ پیش از مصرف، شرایط جاری همان ارائه‌دهنده را مالک بررسی کند.
 
-| اولویت | کلید | برای چه کاری | طرح رایگان | اگر تهیه نشود |
-|---|---|---|---|---|
-| **۱ (ضروری)** | `GEMINI_API_KEY` از [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | چت مستند فارسی، درک تصویر/PDF/ویدیو/صوت، ایمبدینگ دانشنامه، صدای منتور (TTS)، تماس Live | Flash و Flash-Lite رایگان با سقف روزانه؛ ایمبدینگ رایگان؛ TTS پیش‌نمایش سقف کم | منتور فقط از قواعد و متن آماده پاسخ می‌دهد؛ فایل‌های رسانه‌ای خوانده نمی‌شوند؛ صدای سرور نداریم (فقط صدای خود دستگاه) |
-| **۲ (بسیار توصیه‌شده)** | `GROQ_API_KEY` از [console.groq.com/keys](https://console.groq.com/keys) | تبدیل گفتار فارسی به متن (Whisper) + پاسخ‌های کوتاه و سریع در تماس صوتی | Whisper: ۲۰ درخواست/دقیقه، ۲۰۰۰ درخواست و ۲۸٬۸۰۰ ثانیه صدا در روز — عملاً بی‌نهایت برای یک تیم | تماس صوتی فقط با تایپ کار می‌کند (ضبط صدا ترنسکریپت نمی‌شود) |
+| کلید | قابلیت‌هایی که در سورس route می‌شوند | اگر پیکربندی نشود |
+|---|---|---|
+| `GEMINI_API_KEY` | Gemini برای chat/vision/embedding/TTS و در صورت فعال بودن، realtime؛ مدل‌ها از طریق `GEMINI_CHAT_MODEL`, `GEMINI_VISION_MODEL`, `GEMINI_EMBED_MODEL`, `GEMINI_TTS_MODEL`, `GEMINI_LIVE_MODEL` قابل تنظیم‌اند. | مسیر Gemini غیرفعال می‌شود؛ Groq/legacy/local فقط قابلیت‌های اعلام‌شدهٔ خود را دارند؛ نباید نتیجهٔ multimodal یا TTS تضمین شود. |
+| `GROQ_API_KEY` | Groq برای chat/classification/transcription؛ `GROQ_CHAT_MODEL`, `GROQ_FAST_MODEL`, `GROQ_STT_MODEL` مدل‌ها را تنظیم می‌کنند. | این مسیر provider غیرفعال است؛ Gemini یا fallbackهای موجود ممکن است برای بعضی taskها استفاده شوند. |
+| `FCM_SERVICE_ACCOUNT_JSON` | فقط ارسال Push واقعی FCM در Worker، اگر credential معتبر باشد. | `DisabledPushSender` انتخاب می‌شود؛ fake delivery یا موفقیت جعلی نداریم. |
 
-نکاتی که موقع تهیه‌ی کلید باید بدانید:
+**نکتهٔ deployment:** `.github/workflows/deploy.yml` در سورس فعلی Secretهای `GEMINI_API_KEY` و `FCM_SERVICE_ACCOUNT_JSON` را به Worker sync می‌کند؛ `GROQ_API_KEY` و override مدل‌ها در همان workflow نگاشت نشده‌اند. مالک باید در Cloudflare Variables/Secrets وضعیت واقعی را بررسی کند یا wiring امن را جداگانه تصویب کند. هیچ کلید یا service-account را در گزارش، Issue، chat یا Git قرار ندهید.
 
-- [ ] **یک API key برای Gemini بسازید و در Secret `GEMINI_API_KEY` بگذارید** (همان Secret موجود در بند ۱). مدل‌ها با Variableهای `GEMINI_CHAT_MODEL` (پیش‌فرض `gemini-2.5-flash`)، `GEMINI_VISION_MODEL`، `GEMINI_TTS_MODEL`، `GEMINI_EMBED_MODEL` و `GEMINI_LIVE_MODEL` قابل تغییرند. اگر مدلی در پروژه‌ی شما هنوز در دسترس نبود، فقط همان Variable را عوض کنید؛ کد خودش failover می‌کند.
-- [ ] **کلید Groq را در Secret `GROQ_API_KEY` بگذارید.** محدودیت‌ها در سطح «سازمان» اعمال می‌شود؛ ساختن چند کلید سهمیه را بیشتر نمی‌کند.
-- [ ] **صدای فارسی را فقط از Gemini بخواهید.** Groq صدای فارسی ندارد (فقط انگلیسی/عربی) و Grok/xAI هم فارسی را پوشش نمی‌دهد — این موضوع در کد به‌صورت صریح مدیریت شده (درخواست TTS به Groq هرگز فرستاده نمی‌شود).
-- [ ] **سقف TTS پیش‌نمایش Gemini کم است**؛ برای تماس‌های طولانی سه راه دارید: (۱) کلاینت به‌صورت خودکار با صدای دستگاه ادامه می‌دهد (همین حالا پیاده‌سازی شده، هزینه صفر)، (۲) فعال‌کردن صورتحساب Gemini (پولی، مصرف کم)، (۳) افزودن ارائه‌دهنده‌ی فارسی دیگر (Azure `fa-IR` یا ElevenLabs `fas`) — کد آماده‌ی افزودن ارائه‌دهنده است و منطق کسب‌وکار تغییر نمی‌کند.
-- [ ] **اگر می‌خواهید سقف‌ها را سخت‌گیرانه ببندید:** `/admin/policies` → «منتور هوشمند» و «تماس صوتی» (سقف پیام روزانه، دقیقه‌ی صوتی هر کاربر و کل سیستم). این‌ها را قبل از تحویل به تیم واقعی تنظیم کنید.
+## ۴. محدودیت‌ها و blockerهای باقی‌مانده
 
-## ۴. محدودیت‌ها و موارد V1 (آگاهانه در MVP انجام نشده)
+- [ ] **هویت و نشست**: ورود با شمارهٔ تنها غیرفعال است؛ برای شمارهٔ موجود، session یا داده برگردانده نمی‌شود. ثبت‌نام فقط درخواست عمومی می‌پذیرد و در صورت جدیدبودن شماره ممکن است رکورد غیرفعال `marketer` بسازد؛ هیچ نشست یا دسترسی صادر نمی‌شود. پاسخ ثبت‌نام برای شمارهٔ موجود/جدید یکسان است.
+- [ ] **ادمین و مدیر**: مسیر login تازه وجود ندارد. تا انتخاب و پیکربندی روش هویت/session موردتأیید، Cloudflare نمی‌تواند login مدیریتی امن پشتیبانی کند؛ شمارهٔ seed‌شدهٔ superadmin هویت مدیر را ثابت نمی‌کند.
+- [ ] **رمز و کد پیامکی**: login/reset/change-password، OTP/SMS و hidden verification نداریم. provider واقعی پیامک یا هویت وصل نشده؛ هیچ fake provider ساخته نشده است.
+- [ ] Rate limiter در Cloudflare باید با D1 binding پایدار کار کند؛ production بدون D1/rate storage fail-closed است. limit محلی فقط برای dev/test است.
+- [ ] Cloudflare cron در سورس تعریف شده است؛ schedule زنده را فقط owner در dashboard تأیید می‌کند.
+- [ ] مدیریت دستی jobها و گزارش کیفیت منتور را owner با checklist گزارش تنظیمات بررسی کند.
 
-- [ ] کد دعوت (V1) — ثبت‌نام فعلاً باز است (D18)
-- [ ] Rate limiter درون‌حافظه‌ای است (به‌ازای هر instance)؛ برای مقیاس بالا → Redis/Firestore counter (V1)
-- [ ] بازیابی رمز با شماره موبایل: از طریق «بازنشانی رمز» توسط ادمین (ارسال SMS هزینه دارد)
-- [x] **Cron Triggers روی Cloudflare فعال شد** (یادآوری‌ها، هشدار مهلت‌ها، خلاصهٔ هفتگی، flush Push): بلوک `[triggers] crons` در `wrangler.toml` باز است و `functions/src/services/cron.ts` چهار schedule را dispatch می‌کند؛ تست `functions/test/cron.test.ts` هم‌سانی لیست را نگهبانی می‌کند. پس از هر استقرار، در Workers → Settings → Triggers باید چهار schedule دیده شود. اجرای دستی هر کار: `POST /v1/admin/jobs/<name>`.
-- [ ] صفحه مدیریت Jobها در پنل ادمین ساخته نشده (اجرای دستی: `POST /v1/admin/jobs/:name`؛ همان جدولی که cron از آن استفاده می‌کند)
-- [ ] `mentor_chat_opened` و رویدادهای صوتی در `analytics_events` ثبت می‌شوند؛ مصرف آن‌ها در «گزارش‌ها → کیفیت منتور» دیده می‌شود (داشبورد تحلیلی جداگانه ساخته نشده)
+## ۵. بررسی‌ها و تأیید نهایی
 
-## ۵. تست‌هایی که فقط در CI اجرا می‌شوند
-
-محیط توسعه من به Maven/Google Storage/مرورگر Playwright دسترسی نداشت؛ بنابراین این‌ها فقط در GitHub Actions اجرا و سبز شده‌اند:
-Emulator (Rules + API روی Firestore + آداپتور Storage)، E2E (Playwright با Seed واقعی روی Chromium و WebKit)، بررسی دسترس‌پذیری axe، Lighthouse CI، ساخت APK (Gradle).
-آدرس‌های امضاشده (Signed URL) آپلود Storage نیاز به Service Account واقعی دارند و فقط بعد از استقرار قابل تست‌اند (یک آپلود لوگو از پنل ادمین کافی است).
-Push واقعی (اندروید و وب)، ایمیل SMTP و Crashlytics هم فقط با پروژه Firebase و کلیدهای شما قابل تست نهایی‌اند.
+- [ ] نتایج دقیق unit/API/UI/E2E، typecheck، build، lint و audit در pull request و گزارش نهایی این تغییر بررسی شوند؛ status قدیمی CI/Workers Build قابل تعمیم به commit جدید نیست.
+- [ ] Workers Builds یک check خارجی است. داشبورد owner باید build image/runtime version، build command، package manager، lockfile discovery، D1/R2 bindings، environment variables/secrets، cron و deployed commit را نشان دهد. build محلی موفق به‌تنهایی آن check را سبز نمی‌کند.
+- [ ] تست login واقعی، refresh session قدیمی، Android/Web Push، ایمیل و Crashlytics فقط پس از فراهم‌شدن credentialهای موردتأیید و در محیط آزمایشی امن انجام شود.
+- [ ] لاگ‌های Cloudflare و D1 باید timeout/operation outcome را به‌عنوان «نامعلوم» بررسی کنند؛ timeout درخواست، underlying write را لغو نمی‌کند.

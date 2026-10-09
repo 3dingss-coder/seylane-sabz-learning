@@ -1,7 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { CRON_JOBS, CRON_SCHEDULES, runCron } from '../src/services/cron';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  CRON_JOBS,
+  CRON_SCHEDULES,
+  CRON_WAIT_TIMEOUT_MS,
+  JOBS,
+  runCron,
+} from '../src/services/cron';
 import { createCtx } from './support/ctx';
 
 /** Walks up from the test's cwd — avoids `import.meta` (the functions project compiles to CJS). */
@@ -60,5 +66,30 @@ describe('cron wiring on the deployed worker', () => {
       for (const n of names) expect(r.jobs[n]?.ok, `${n} failed: ${r.jobs[n]?.error}`).toBe(true);
     }
     expect((await runCron(ctx.deps, '0 0 1 1 *')).jobs).toEqual({});
+  });
+
+  it('bounds the caller wait and does not start later jobs after a hung job', async () => {
+    const ctx = await createCtx();
+    const originalDeadlineSweep = JOBS['deadline-sweep'];
+    const originalWeeklyDigest = JOBS['weekly-digest'];
+    let laterJobStarted = false;
+    JOBS['deadline-sweep'] = async () => new Promise<never>(() => {});
+    JOBS['weekly-digest'] = async () => {
+      laterJobStarted = true;
+      return {};
+    };
+
+    vi.useFakeTimers();
+    try {
+      const running = runCron(ctx.deps, '0 * * * *');
+      const timedOut = expect(running).rejects.toThrow('timed out');
+      await vi.advanceTimersByTimeAsync(CRON_WAIT_TIMEOUT_MS);
+      await timedOut;
+      expect(laterJobStarted).toBe(false);
+    } finally {
+      JOBS['deadline-sweep'] = originalDeadlineSweep;
+      JOBS['weekly-digest'] = originalWeeklyDigest;
+      vi.useRealTimers();
+    }
   });
 });

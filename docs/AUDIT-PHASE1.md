@@ -1,5 +1,7 @@
 # Phase 1 — Whole-Project Audit (seylane-sabz-learning)
 
+> **Historical auth notes only:** this audit predates the current phone-auth changes. Its password/demo login, reset, and runtime claims do not describe the current checkout. Seed phones are data fixtures, not credentials; public phone-only login never issues a session. See `docs/USER-TODO.md` and `CLOUDFLARE_CONFIGURATION_REPORT.md` for current limits.
+
 Date: 2026-09-29 · Branch audited: `main` @ `7eb0114` (PR #8, CI green) · **Report only — no code changed.**
 
 ---
@@ -15,7 +17,7 @@ Date: 2026-09-29 · Branch audited: `main` @ `7eb0114` (PR #8, CI green) · **Re
 
 **Not verifiable here (flagged, not silent):** Playwright browsers could not be downloaded in this sandbox (CDN blocked), so Playwright e2e / axe / Lighthouse were **not re-run locally** — they are green in CI on main (run `36491323143`, 2026-09-29). Production Firebase-mode runtime (Firestore/Storage/FCM/Blaze) cannot be exercised in this environment; findings about it are from code + rules review and are labeled accordingly.
 
-Live demo for manual verification: API `http://0.0.0.0:5001/v1/health`, web `http://0.0.0.0:5199` (demo logins documented in README; e.g. marketer `09120000004`, manager `09120000003`, admin `09120000002`, superadmin `09120000001`, password `demo1234`).
+Historical local demo note (2026-09-29 only): manual checks once used role-based demo credentials, now retired and deliberately omitted from this record. Local seed phones in the current checkout are fixtures only and cannot authenticate.
 
 ---
 

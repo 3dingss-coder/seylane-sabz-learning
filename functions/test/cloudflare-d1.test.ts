@@ -2,9 +2,21 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { completeLibraryUpload, startLibraryUpload } from '../src/services/media-library';
+import { MemoryAuthProvider } from '../src/auth/memory';
+import {
+  completeLibraryUpload,
+  libraryPartUrls,
+  startLibraryUpload,
+} from '../src/services/media-library';
+import { register } from '../src/services/users';
 import { fakeMp4 } from './support/ctx';
-import { D1Store, type D1Database, type D1PreparedStatement, type D1Result } from '../src/store/d1';
+import {
+  D1Store,
+  D1_CALL_TIMEOUT_MS,
+  type D1Database,
+  type D1PreparedStatement,
+  type D1Result,
+} from '../src/store/d1';
 import { ids } from '../src/lib/ids';
 import { heartbeatSchema, recordProgress, requestRetake } from '../src/services/learning';
 import { reviewRetake } from '../src/services/reports';
@@ -13,7 +25,8 @@ import type { Doc } from '../src/store/types';
 import type { Data } from '../src/store/types';
 import { RateLimiter } from '../src/http/rateLimit';
 import { D1RateLimitStore } from '../src/http/rateLimitD1';
-import { buildCloudflareDeps, createFetchHandler } from '../src/web-handler';
+import { buildCloudflareDeps, createFetchHandler, resolveSigningSecret } from '../src/web-handler';
+import { InMemoryStore } from '../src/store/helpers';
 
 interface SqliteStatement {
   get(...params: Array<string | number | null>): Record<string, unknown> | undefined;
@@ -142,6 +155,16 @@ describe('Cloudflare D1 store limits', () => {
       second.allow('login:203.0.113.8', 1, 60_000),
     ]);
     expect(raced.filter(Boolean)).toHaveLength(1);
+
+    for (const concurrency of [1, 5, 20, 50, 100]) {
+      const limit = Math.max(1, Math.floor(concurrency / 2));
+      const outcomes = await Promise.all(
+        Array.from({ length: concurrency }, (_, index) =>
+          new D1RateLimitStore(db).hit(`burst:${concurrency}`, limit, 60_000, 1_000_000 + index),
+        ),
+      );
+      expect(outcomes.filter(Boolean)).toHaveLength(Math.min(concurrency, limit));
+    }
   });
 
   it('retries conflicting read-modify-write transactions across separate D1Store instances', async () => {
@@ -170,6 +193,71 @@ describe('Cloudflare D1 store limits', () => {
 
     await Promise.all([increment(firstStore), increment(secondStore)]);
     expect(await firstStore.get('counters/shared')).toMatchObject({ count: 2 });
+  });
+
+  it('prevents an abandoned D1 batch from overwriting a newer cross-isolate commit when it completes late', async () => {
+    vi.useFakeTimers();
+    try {
+      const db = createSqliteD1();
+      const realBatch = db.batch.bind(db);
+      let holdNextCommit = false;
+      let signalIntercepted!: () => void;
+      const intercepted = new Promise<void>((resolve) => {
+        signalIntercepted = resolve;
+      });
+      let releaseLateBatch!: () => Promise<void>;
+      const lateDb: D1Database = {
+        prepare: (sql) => db.prepare(sql),
+        batch: (statements) => {
+          const sql = statements.map((statement) => (statement as { sql?: string }).sql ?? '');
+          if (
+            holdNextCommit &&
+            sql.some((query) => query.includes('UPDATE d1_tx_scopes')) &&
+            sql.some((query) => query.includes('INSERT INTO docs'))
+          ) {
+            holdNextCommit = false;
+            return new Promise((resolve, reject) => {
+              releaseLateBatch = async () => {
+                try {
+                  resolve(await realBatch(statements));
+                } catch (err) {
+                  reject(err);
+                }
+              };
+              signalIntercepted();
+            });
+          }
+          return realBatch(statements);
+        },
+      };
+      const firstStore = new D1Store(lateDb);
+      const secondStore = new D1Store(lateDb);
+      await firstStore.set('users/late-commit', { count: 0 });
+      holdNextCommit = true;
+
+      const abandoned = firstStore.runTransaction(
+        async (tx) => {
+          const row = await tx.get<{ count: number }>('users/late-commit');
+          tx.set('users/late-commit', { count: (row?.count ?? 0) + 1 });
+        },
+        { scope: 'user:late-commit' },
+      );
+      await intercepted;
+      const abandonedResult = expect(abandoned).rejects.toThrow(/timed out/);
+      await vi.advanceTimersByTimeAsync(D1_CALL_TIMEOUT_MS + 1);
+      await abandonedResult;
+
+      await secondStore.runTransaction(
+        async (tx) => {
+          tx.set('users/late-commit', { count: 20 });
+        },
+        { scope: 'user:late-commit' },
+      );
+      await releaseLateBatch();
+      expect(await firstStore.get('users/late-commit')).toMatchObject({ count: 20 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps scoped transactions for different users independent under 1–100-way contention', async () => {
@@ -397,6 +485,23 @@ describe('Cloudflare D1 store limits', () => {
 });
 
 describe('Cloudflare D1 + Web Fetch Handler', () => {
+  it('does not generate an isolate-local signing secret when storage is unavailable', async () => {
+    const store = new InMemoryStore();
+    const read = vi.spyOn(store, 'get').mockRejectedValue(new Error('D1 read failed'));
+    const create = vi.spyOn(store, 'create');
+    await expect(resolveSigningSecret(store)).rejects.toThrow('D1 read failed');
+    expect(create).not.toHaveBeenCalled();
+    read.mockRestore();
+    create.mockRestore();
+  });
+
+  it('does not use a generated signing secret after an ambiguous create failure', async () => {
+    const store = new InMemoryStore();
+    vi.spyOn(store, 'create').mockRejectedValue(new Error('D1 write outcome unknown'));
+    await expect(resolveSigningSecret(store)).rejects.toThrow('D1 write outcome unknown');
+    expect(await store.get('_system/auth_secret')).toBeNull();
+  });
+
   it('fails closed instead of creating an in-memory production backend when D1 is missing', async () => {
     await expect(buildCloudflareDeps({ APP_ENV: 'prod' }, seedSnapshot)).rejects.toThrow(
       'production requires the D1 binding',
@@ -659,6 +764,66 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     expect(Number(scope?.version)).toBeGreaterThan(0);
   });
 
+  it('keeps offline replay idempotency keys across the client queue horizon', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'prod' });
+    const userId = 'd1-late-replay-user';
+    const sectionId = 'd1-late-replay-section';
+    const packageId = 'd1-late-replay-package';
+    const user = {
+      id: userId,
+      teamId: null,
+      brandIds: [],
+      status: 'active',
+      role: 'marketer',
+    } as unknown as Doc<User>;
+    const now = deps.clock().toISOString();
+
+    await deps.store.set(`users/${userId}`, user);
+    await deps.store.set(`section_index/${sectionId}`, { packageId });
+    await deps.store.set(`packages/${packageId}/sections/${sectionId}`, { durationSec: 120 });
+    await deps.store.set(`packages/${packageId}`, {
+      status: 'published',
+      sections: [{ id: sectionId, archived: false }],
+    });
+    await deps.store.set('assignments/d1-late-replay-global', {
+      type: 'global',
+      targetId: null,
+      packageIds: [packageId],
+      revokedAt: null,
+    });
+    await deps.store.set(`section_progress/${ids.progress(userId, sectionId)}`, {
+      userId,
+      sectionId,
+      packageId,
+      playedSeconds: 30,
+      percent: 25,
+      completed: false,
+      completedAt: null,
+      lastPositionSec: 30,
+      quizPassed: false,
+      quizPassedAt: null,
+      recentKeys: Array.from({ length: 31 }, (_, index) => `offline-${index}`),
+      startedAt: now,
+      updatedAt: now,
+    });
+
+    const replay = await recordProgress(
+      deps,
+      user,
+      sectionId,
+      heartbeatSchema.parse({ positionSec: 30, playedDeltaSec: 30 }),
+      'offline-0',
+      { skipBudget: true },
+    );
+    expect(replay).toMatchObject({ duplicate: true, playedSeconds: 30 });
+    expect(
+      await deps.store.get(`section_progress/${ids.progress(userId, sectionId)}`),
+    ).toMatchObject({
+      playedSeconds: 30,
+    });
+  });
+
   it('uses the same user scope for retake requests, reviews, and attempt allowance', async () => {
     const db = createSqliteD1();
     const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'dev' });
@@ -785,34 +950,68 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     expect(healthJson.data.status).toBe('ok');
     expect(healthJson.data.backend).toBe('d1');
 
-    // 2. Register a new user in D1
+    // 2. Public registration returns the same generic acknowledgement and creates no session.
     const regRes = await handler1(
-      new Request('https://learn.pages.dev/v1/auth/register', {
+      new Request('https://learn.pages.dev/v1/auth/phone-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: 'کاربر کلودفلر',
-          identifier: 'cloudflare-user@example.com',
-          password: 'pass1234',
+          phone: '09359998877',
+          province: 'تهران',
+          city: 'تهران',
         }),
       }),
     );
-    expect(regRes.status).toBe(201);
-    const regData = (await regRes.json()) as {
-      data: { idToken: string; refreshToken: string; user: { id: string; email: string } };
+    expect(regRes.status).toBe(202);
+    const regJson = (await regRes.json()) as {
+      data: {
+        accepted: boolean;
+        message: string;
+        user?: unknown;
+        idToken?: unknown;
+        refreshToken?: unknown;
+      };
     };
-    expect(regData.data.user.email).toBe('cloudflare-user@example.com');
+    expect(regJson.data.accepted).toBe(true);
+    expect(regJson.data.user).toBeUndefined();
+    expect(regJson.data.idToken).toBeUndefined();
+    expect(regJson.data.refreshToken).toBeUndefined();
+    const pendingUsers = await deps1.store.query<{
+      name: string;
+      phone: string;
+      role: string;
+      status: string;
+      phoneVerifiedAt: string | null;
+    }>({ collection: 'users', where: [['phone', '==', '09359998877']] });
+    expect(pendingUsers).toHaveLength(1);
+    expect(pendingUsers[0]).toMatchObject({
+      name: 'کاربر کلودفلر',
+      phone: '09359998877',
+      role: 'marketer',
+      status: 'inactive',
+      phoneVerifiedAt: null,
+    });
+    expect(await deps1.store.query({ collection: '_auth_refresh' })).toHaveLength(0);
+
+    // Test-only trusted provisioning creates a session for an active user; the public API cannot.
+    const active = await register(
+      deps1,
+      { name: 'کاربر نشست آزمایشی', phone: '09350000001' },
+      'marketer',
+    );
+    const issued = await (deps1.auth as MemoryAuthProvider).issueTestSession(active.id);
 
     // 3. Simulate a serverless cold start (new Worker isolate with the same D1 database)
     const deps2 = await buildCloudflareDeps({ DB: db, APP_ENV: 'prod' }, seedSnapshot);
     const handler2 = createFetchHandler(deps2);
 
-    // Refresh token issued by Instance 1 works on Instance 2 because signing secret & user live in D1
+    // A trusted test-fixture refresh survives a cold start because signing state and users live in D1.
     const refreshRes = await handler2(
       new Request('https://learn.pages.dev/v1/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: regData.data.refreshToken }),
+        body: JSON.stringify({ refreshToken: issued.refreshToken }),
       }),
     );
     expect(refreshRes.status).toBe(200);
@@ -825,17 +1024,10 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     );
     expect(meRes.status).toBe(200);
     const meJson = (await meRes.json()) as { data: { name: string } };
-    expect(meJson.data.name).toBe('کاربر کلودفلر');
+    expect(meJson.data.name).toBe('کاربر نشست آزمایشی');
 
-    // 4. Password login works; phone-only access fails closed without a real SMS provider.
-    const passwordLogin = await handler2(
-      new Request('https://learn.pages.dev/v1/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: 'cloudflare-user@example.com', password: 'pass1234' }),
-      }),
-    );
-    expect(passwordLogin.status).toBe(200);
+    // 4. The refresh credential works across cold starts, but phone-only login never restores
+    // any existing account and password endpoints are gone.
     const phoneLoginRes = await handler2(
       new Request('https://learn.pages.dev/v1/auth/phone-login', {
         method: 'POST',
@@ -843,20 +1035,39 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
         body: JSON.stringify({ phone: '09359998877' }),
       }),
     );
-    expect(phoneLoginRes.status).toBe(503);
-    const phoneRegisterRes = await handler2(
+    const unknownPhoneLoginRes = await handler2(
+      new Request('https://learn.pages.dev/v1/auth/phone-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: '09359998879' }),
+      }),
+    );
+    expect(phoneLoginRes.status).toBe(401);
+    expect(unknownPhoneLoginRes.status).toBe(401);
+    expect(await phoneLoginRes.json()).toEqual(await unknownPhoneLoginRes.json());
+
+    const duplicateSignup = await handler2(
       new Request('https://learn.pages.dev/v1/auth/phone-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: 'عضو جدید',
-          phone: '09359998878',
+          name: 'کاربر تکراری',
+          phone: '+989359998877',
           province: 'تهران',
           city: 'تهران',
         }),
       }),
     );
-    expect(phoneRegisterRes.status).toBe(503);
+    expect(duplicateSignup.status).toBe(202);
+    expect(await duplicateSignup.json()).toEqual(regJson);
+    const passwordLogin = await handler2(
+      new Request('https://learn.pages.dev/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: '09359998877', password: 'pass1234' }),
+      }),
+    );
+    expect(passwordLogin.status).toBe(404);
     const deviceRes = await handler2(
       new Request('https://learn.pages.dev/v1/me/devices', {
         method: 'POST',
@@ -869,6 +1080,36 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     );
     expect(deviceRes.status).toBe(503);
     expect(await deps2.store.query({ collection: 'device_tokens' })).toHaveLength(0);
+  });
+
+  it('requires an exact CORS allowlist for production preview-host origins', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps(
+      { DB: db, APP_ENV: 'prod', ALLOWED_ORIGINS: 'https://trusted.pages.dev' },
+      seedSnapshot,
+    );
+    const handler = createFetchHandler(deps);
+    const denied = await handler(
+      new Request('https://api.example.test/v1/health', {
+        headers: { Origin: 'https://attacker.pages.dev' },
+      }),
+    );
+    expect(denied.status).toBe(200);
+    expect(denied.headers.get('Access-Control-Allow-Origin')).toBeNull();
+
+    const trusted = await handler(
+      new Request('https://api.example.test/v1/health', {
+        headers: { Origin: 'https://trusted.pages.dev' },
+      }),
+    );
+    expect(trusted.headers.get('Access-Control-Allow-Origin')).toBe('https://trusted.pages.dev');
+
+    const sameOrigin = await handler(
+      new Request('https://api.example.test/v1/health', {
+        headers: { Origin: 'https://api.example.test' },
+      }),
+    );
+    expect(sameOrigin.headers.get('Access-Control-Allow-Origin')).toBe('https://api.example.test');
   });
 
   it('stores and serves uploaded media blobs in D1 with Range support', async () => {
@@ -985,7 +1226,7 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
     const edge = await deps.blob.readRange('media/video/m1.mp4', MB - 5, MB + 5);
     expect(Buffer.compare(edge, data.subarray(MB - 5, MB + 6))).toBe(0);
 
-    // part rows were re-keyed, not copied: nothing is left under uploads/m1, other uploads untouched
+    // The atomic destination swap cleans only this upload's parts; other uploads stay untouched.
     expect((await deps.blob.listStored?.('uploads/m1/'))?.length).toBe(0);
     expect((await deps.blob.listStored?.('uploads/other/'))?.length).toBe(1);
     expect(await deps.blob.deletePrefix?.('uploads/other/')).toBe(true);
@@ -1004,6 +1245,80 @@ describe('Cloudflare D1 + Web Fetch Handler', () => {
         'video/mp4',
       ),
     ).rejects.toThrow();
+  });
+
+  it('makes concurrent D1 composition idempotent and retries a committed compose before finalize', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'dev' }, seedSnapshot);
+    const actor = { id: 'u-compose-admin', role: 'admin' as const };
+    const MB = 1024 * 1024;
+    const header = fakeMp4(451);
+    const body = Buffer.alloc(MB + header.length, 7);
+    header.copy(body);
+
+    const { mediaId, totalParts } = await startLibraryUpload(deps, actor, {
+      kind: 'video',
+      fileName: 'retry.mp4',
+      mime: 'video/mp4',
+      sizeBytes: body.length,
+    });
+    expect(totalParts).toBe(2);
+    const parts = [
+      { path: `uploads/${mediaId}/0`, size: MB },
+      { path: `uploads/${mediaId}/1`, size: body.length - MB },
+    ];
+    const [firstPart, secondPart] = parts;
+    if (!firstPart || !secondPart) throw new Error('multipart upload parts were not created');
+    await deps.blob.put(firstPart.path, body.subarray(0, MB), 'application/octet-stream');
+    await deps.blob.put(secondPart.path, body.subarray(MB), 'application/octet-stream');
+
+    const destination = `media/video/${mediaId}.mp4`;
+    const results = await Promise.all([
+      deps.blob.composeParts?.(parts, destination, 'video/mp4'),
+      deps.blob.composeParts?.(parts, destination, 'video/mp4'),
+    ]);
+    expect(results).toEqual([true, true]);
+    expect((await deps.blob.stat(destination))?.size).toBe(body.length);
+    expect((await deps.blob.listStored?.(`uploads/${mediaId}/`))?.length).toBe(0);
+
+    // Simulates a caller that timed out after the final D1 batch committed but before media status
+    // was finalized. The retry must use the complete destination rather than require deleted parts.
+    const item = await completeLibraryUpload(deps, actor, mediaId, { durationSec: 451 });
+    expect(item).toMatchObject({ id: mediaId, sizeBytes: body.length });
+    expect(await deps.store.get<{ status: string }>(`media/${mediaId}`)).toMatchObject({
+      status: 'ready',
+    });
+    expect(Buffer.compare(await deps.blob.readRange(destination, 0, body.length - 1), body)).toBe(
+      0,
+    );
+  });
+
+  it('rejects signed D1 part uploads after a media record becomes terminal', async () => {
+    const db = createSqliteD1();
+    const deps = await buildCloudflareDeps({ DB: db, APP_ENV: 'dev' }, seedSnapshot);
+    const handler = createFetchHandler(deps);
+    const actor = { id: 'u-late-part-admin', role: 'admin' as const };
+    const body = fakeMp4(451);
+    const { mediaId } = await startLibraryUpload(deps, actor, {
+      kind: 'video',
+      fileName: 'late.mp4',
+      mime: 'video/mp4',
+      sizeBytes: body.length,
+    });
+    const { urls } = await libraryPartUrls(deps, actor, mediaId, { indexes: [0] });
+    const ticket = urls[0]?.upload;
+    if (!ticket) throw new Error('upload ticket was not created');
+    const request = () =>
+      new Request(new URL(ticket.url, 'https://api.example.test'), {
+        method: 'PUT',
+        headers: { 'Content-Type': ticket.headers['Content-Type'] ?? 'application/octet-stream' },
+        body,
+      });
+    expect((await handler(request())).status).toBe(200);
+
+    await completeLibraryUpload(deps, actor, mediaId, { durationSec: 451 });
+    expect((await handler(request())).status).toBe(409);
+    expect((await deps.blob.listStored?.(`uploads/${mediaId}/`))?.length).toBe(0);
   });
 
   it('uploads a 38 MB video through the library flow within the free-plan call budget', async () => {

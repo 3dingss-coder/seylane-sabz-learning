@@ -1,3 +1,5 @@
+import { DeadlineError, withTimeout } from './lib/bounded';
+import { D1_INIT_TIMEOUT_MS, type D1Database } from './store/d1';
 import { buildCloudflareDeps, createFetchHandler, type CloudflareEnv } from './web-handler';
 import { runCron } from './services/cron';
 import type { Deps } from './services/context';
@@ -19,19 +21,34 @@ interface ExecutionContextLike {
 }
 
 let cachedDeps: Promise<Deps> | null = null;
-let cachedHasD1: boolean | null = null;
+let cachedDb: D1Database | undefined;
+
+function clearDepsIfCurrent(work: Promise<Deps>): void {
+  if (cachedDeps !== work) return;
+  cachedDeps = null;
+  cachedDb = undefined;
+  if (cachedHandler?.deps === work) cachedHandler = null;
+}
 
 /** Deps (store + services) are built once per isolate and reused by the fetch and cron entrypoints. */
-function getDeps(env: CloudflareEnv): Promise<Deps> {
-  const hasD1 = Boolean(env.DB && typeof env.DB.prepare === 'function');
-  if (!cachedDeps || cachedHasD1 !== hasD1) {
-    cachedHasD1 = hasD1;
-    cachedDeps = buildCloudflareDeps(env, seedSnapshot).catch((err) => {
-      cachedDeps = null;
-      throw err;
-    });
+function getDepsWork(env: CloudflareEnv): Promise<Deps> {
+  const db = env.DB && typeof env.DB.prepare === 'function' ? env.DB : undefined;
+  if (!cachedDeps || cachedDb !== db) {
+    const work = buildCloudflareDeps(env, seedSnapshot);
+    cachedDb = db;
+    cachedDeps = work;
+    void work.catch(() => clearDepsIfCurrent(work));
   }
   return cachedDeps;
+}
+
+/** Each request owns its startup deadline; timing out one waiter does not cancel shared startup. */
+function getDeps(env: CloudflareEnv): Promise<Deps> {
+  const work = getDepsWork(env);
+  return withTimeout(work, D1_INIT_TIMEOUT_MS, 'Cloudflare Worker startup').catch((err) => {
+    if (err instanceof DeadlineError) clearDepsIfCurrent(work);
+    throw err;
+  });
 }
 
 type FetchHandler = (request: Request) => Promise<Response>;
@@ -42,16 +59,25 @@ let cachedHandler: { deps: Promise<Deps>; handler: Promise<FetchHandler> } | nul
  * is not repeated and the in-memory rate limits actually accumulate across requests.
  */
 function getHandler(env: CloudflareEnv): Promise<FetchHandler> {
-  const deps = getDeps(env);
+  const deps = getDepsWork(env);
   if (!cachedHandler || cachedHandler.deps !== deps) {
     const handler = deps.then((d) => createFetchHandler(d));
     cachedHandler = { deps, handler };
-    handler.catch(() => {
+    void handler.catch(() => {
       if (cachedHandler?.handler === handler) cachedHandler = null;
-      cachedDeps = null;
+      clearDepsIfCurrent(deps);
     });
   }
-  return cachedHandler.handler;
+  const handler = cachedHandler.handler;
+  return withTimeout(handler, D1_INIT_TIMEOUT_MS, 'Cloudflare Worker handler startup').catch(
+    (err) => {
+      if (err instanceof DeadlineError) {
+        if (cachedHandler?.handler === handler) cachedHandler = null;
+        clearDepsIfCurrent(deps);
+      }
+      throw err;
+    },
+  );
 }
 
 function unavailable(): Response {

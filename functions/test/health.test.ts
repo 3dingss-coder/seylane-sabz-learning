@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Express } from 'express';
 import { createCtx } from './support/ctx';
 
@@ -14,6 +14,29 @@ describe('GET /v1/health', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.status).toBe('ok');
     expect(res.body.data.env).toBe('test');
+  });
+
+  it('bounds the optional external Gemini health probe', async () => {
+    const ctx = await createCtx();
+    ctx.deps.config.geminiApiKey = 'test-probe-key';
+    const fetchMock = vi.fn(
+      async (_input: unknown, _init?: RequestInit) =>
+        new Response(JSON.stringify({ models: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const res = await request(ctx.app).get('/v1/health?probe=1');
+      expect(res.status).toBe(200);
+      expect(res.body.data.ai.geminiProbe.ok).toBe(true);
+      const init = fetchMock.mock.calls[0]?.[1];
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      expect((init?.signal as AbortSignal).aborted).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('sets security headers', async () => {
@@ -42,7 +65,7 @@ describe('error envelope', () => {
 
   it('rejects payloads over 1MB', async () => {
     const res = await request(app)
-      .post('/v1/auth/login')
+      .post('/v1/auth/phone-login')
       .send({ x: 'a'.repeat(1024 * 1024 + 10) });
     expect(res.status).toBe(413);
     expect(res.body.error.code).toBe('VALIDATION');
@@ -50,7 +73,7 @@ describe('error envelope', () => {
 
   it('handles malformed JSON with VALIDATION', async () => {
     const res = await request(app)
-      .post('/v1/auth/login')
+      .post('/v1/auth/phone-login')
       .set('Content-Type', 'application/json')
       .send('{bad json');
     expect(res.status).toBe(400);

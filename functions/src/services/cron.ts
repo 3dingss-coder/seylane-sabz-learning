@@ -1,3 +1,4 @@
+import { DeadlineError, withTimeout } from '../lib/bounded';
 import { runDeadlineSweep, runDailyReminders, runWeeklyDigest } from './jobs';
 import { runMentorDaily } from './mentor-rules';
 import { runBehaviorSweep } from './behavior';
@@ -6,6 +7,9 @@ import { extractPendingMedia } from './media-ingest';
 import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
 import type { Deps } from './context';
+
+/** The shortest configured trigger is 15 minutes; leave one minute for runtime handoff. */
+export const CRON_WAIT_TIMEOUT_MS = 14 * 60_000;
 
 export type JobName =
   | 'flush-push'
@@ -23,7 +27,7 @@ export interface JobOptions {
 
 /** The one job table: cron triggers and `POST /admin/jobs/:name` both run through it. */
 export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>> = {
-  'flush-push': (d) => flushDeferredPush(d).then((sent) => ({ sent })),
+  'flush-push': (d) => flushDeferredPush(d),
   'deadline-sweep': (d) => runDeadlineSweep(d),
   'weekly-digest': (d, o) => runWeeklyDigest(d, Boolean(o?.force)),
   'daily-reminders': (d) => runDailyReminders(d),
@@ -95,14 +99,31 @@ export function describeError(e: unknown): string {
 /** Runs every job bound to a cron expression. One failing job never blocks the others. */
 export async function runCron(d: Deps, cron: string): Promise<CronResult> {
   const names = CRON_JOBS[cron] ?? [];
-  const jobs: CronResult['jobs'] = {};
-  for (const name of names) {
-    try {
-      jobs[name] = { ok: true, result: await runJob(d, name) };
-    } catch (e) {
-      jobs[name] = { ok: false, error: (e as Error).message?.slice(0, 300) ?? 'failed' };
-      console.error(`[cron:${name}] failed ${describeError(e)}`);
+  const deadlineAt = Date.now() + CRON_WAIT_TIMEOUT_MS;
+  const work = (async (): Promise<CronResult> => {
+    const jobs: CronResult['jobs'] = {};
+    for (const name of names) {
+      if (Date.now() >= deadlineAt) break;
+      try {
+        jobs[name] = { ok: true, result: await runJob(d, name) };
+      } catch (e) {
+        jobs[name] = { ok: false, error: (e as Error).message?.slice(0, 300) ?? 'failed' };
+        console.error(`[cron:${name}] failed ${describeError(e)}`);
+      }
     }
+    return { cron, jobs };
+  })();
+
+  try {
+    return await withTimeout(work, CRON_WAIT_TIMEOUT_MS, `Cron ${cron}`);
+  } catch (err) {
+    if (err instanceof DeadlineError) {
+      // The deadline bounds this caller's wait, not active code or D1/R2 operations. A current job
+      // can still complete or commit later; do not blindly retry uncertain delivery side effects.
+      console.error(
+        `[cron] caller deadline reached for ${cron}; active work was not cancelled and may still commit`,
+      );
+    }
+    throw err;
   }
-  return { cron, jobs };
 }

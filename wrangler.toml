@@ -13,9 +13,12 @@ not_found_handling = "single-page-application"
 run_worker_first = ["/v1/*"]
 
 [vars]
+# Production mode keeps phone auth fail-closed and applies production rate / playback protections.
 APP_ENV = "prod"
 PLAYBACK_BUDGET = "on"
 RATE_LIMIT_SCALE = "1"
+# Public site URL: used to build the absolute click-through link in web push notifications.
+APP_URL = "https://academy-seylaneh.site"
 # Storage migration is intentionally paused: the owner must verify the live D1/R2 inventory first.
 # Even when manually triggered, D1 cleanup stays disabled until byte-for-byte verification is reviewed.
 R2_MIGRATE_PURGE = "off"

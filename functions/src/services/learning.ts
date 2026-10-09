@@ -31,6 +31,8 @@ import { notifyTemplate } from './notify';
 import { awardPoints, evaluateBadges } from './rewards';
 
 const LOCKED = 'این قسمت هنوز قفل است. ابتدا قسمت قبل را کامل کنید و در آزمون آن قبول شوید.';
+// Keep enough keys to cover the browser's bounded 500-beat offline replay queue after a late response.
+const MAX_RECENT_PROGRESS_KEYS = 500;
 
 // ─── Home / catalog (PROMPT 008) ────────────────────────────────────────────
 export async function home(d: Deps, user: Doc<User>) {
@@ -379,7 +381,7 @@ export async function recordProgress(
         policy.completionThreshold,
       );
       const recentKeys = key
-        ? [...(prev?.recentKeys ?? []), key].slice(-30)
+        ? [...(prev?.recentKeys ?? []), key].slice(-MAX_RECENT_PROGRESS_KEYS)
         : (prev?.recentKeys ?? []);
       const doc: SectionProgress = {
         userId: user.id,

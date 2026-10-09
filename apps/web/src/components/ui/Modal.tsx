@@ -17,8 +17,7 @@ export interface ModalProps {
 const SIZES = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' } as const;
 
 // Every open modal registers here; only the topmost one closes on Escape. A confirm dialog nested
-// inside a form dialog (e.g. «بازنشانی رمز» in UsersPage) used to close both at once, discarding
-// data the outer dialog was still holding.
+// inside a form dialog used to close both at once, discarding data the outer dialog was still holding.
 const openStack: symbol[] = [];
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';

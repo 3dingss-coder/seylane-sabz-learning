@@ -290,16 +290,33 @@ export async function finalizeMedia(
   const asset = await d.store.get<MediaAsset>(`media/${mediaId}`);
   if (!asset) throw notFound('فایل');
   if (asset.status === 'ready') return publicMedia(asset);
+  if (asset.status !== 'pending')
+    throw new ApiError('CONFLICT', 'این فایل دیگر قابل نهایی‌سازی نیست.');
   const stat = await d.blob.stat(asset.path);
   if (!stat) throw new ApiError('CONFLICT', 'فایل هنوز آپلود نشده است. دوباره تلاش کنید.');
   const rule = MEDIA_RULES[asset.kind];
-  const reject = async (reason: string) => {
-    await d.store.update(`media/${mediaId}`, { status: 'rejected', rejectReason: reason });
+  const reject = async (reason: string): Promise<never> => {
+    // Claim the terminal state before deleting bytes. A concurrent finalizer must not resurrect a
+    // rejected upload, and an abort that won the race must not have its decision overwritten.
+    await d.store.runTransaction(async (tx) => {
+      const current = await tx.get<MediaAsset>(`media/${mediaId}`);
+      if (!current) throw notFound('فایل');
+      if (
+        current.status !== 'pending' ||
+        current.path !== asset.path ||
+        current.declaredSize !== asset.declaredSize
+      ) {
+        throw new ApiError('CONFLICT', 'وضعیت فایل هم‌زمان تغییر کرده است.');
+      }
+      tx.update(`media/${mediaId}`, { status: 'rejected', rejectReason: reason });
+    });
     await d.blob.delete(asset.path);
     throw new ApiError('VALIDATION', reason);
   };
   if (stat.size > rule.maxBytes) await reject(`حجم فایل ${rule.label} بیش از حد مجاز است.`);
   if (stat.size === 0) await reject('فایل خالی است.');
+  if (stat.size !== asset.declaredSize)
+    await reject('اندازه‌ی فایل با اطلاعات آپلود مطابقت ندارد. دوباره تلاش کنید.');
   const head = await d.blob.readRange(asset.path, 0, 63);
   const detected = sniff(head);
   if (!detected || !detected.kinds.includes(asset.kind))
@@ -327,14 +344,28 @@ export async function finalizeMedia(
       ? 'audio/mp4'
       : (detected?.mime ?? asset.declaredMime);
   const patch = { status: 'ready' as const, mime, sizeBytes: stat.size, durationSec: duration };
-  await d.store.update(`media/${mediaId}`, patch);
+  const committed = await d.store.runTransaction(async (tx) => {
+    const current = await tx.get<MediaAsset>(`media/${mediaId}`);
+    if (!current) throw notFound('فایل');
+    if (current.status === 'ready') return { asset: current, changed: false };
+    if (
+      current.status !== 'pending' ||
+      current.path !== asset.path ||
+      current.declaredSize !== asset.declaredSize
+    ) {
+      throw new ApiError('CONFLICT', 'وضعیت فایل هم‌زمان تغییر کرده است.');
+    }
+    tx.update(`media/${mediaId}`, patch);
+    return { asset: { ...current, ...patch }, changed: true };
+  });
+  if (!committed.changed) return publicMedia(committed.asset);
   await audit(d, actor, 'media.uploaded', 'media', mediaId, null, {
     kind: asset.kind,
     mime,
     size: stat.size,
   });
   await track(d, 'admin_media_uploaded', actor.id, { type: asset.kind });
-  return publicMedia({ ...asset, ...patch, id: mediaId });
+  return publicMedia({ ...committed.asset, id: mediaId });
 }
 
 function publicMedia(a: Doc<MediaAsset>) {

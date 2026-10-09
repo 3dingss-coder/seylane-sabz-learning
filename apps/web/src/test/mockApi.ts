@@ -5,7 +5,7 @@ type Handler = (
   init: RequestInit,
 ) => { status?: number; data?: unknown; error?: { code: string; message: string } };
 
-/** Minimal fetch router for page tests: `{ 'POST /v1/auth/login': () => ({ data }) }`. */
+/** Minimal fetch router for page tests: `{ 'POST /v1/auth/phone-login': () => ({ data }) }`. */
 export function mockApi(routes: Record<string, Handler>) {
   const calls: Array<{ key: string; body: unknown; headers: Record<string, string> }> = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {

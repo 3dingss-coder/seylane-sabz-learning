@@ -1,12 +1,12 @@
-# Implementation status (live)
+# Implementation tracker (historical; not live deployment state)
 
-All 15 build prompts (§32.2 / §34) are implemented on branch `arena/01a0e829-seylane-sabz-learning` (PR #7).
-What is still open needs accounts, keys or devices the owner has to provide. See [`USER-TODO.md`](./USER-TODO.md).
+> This file began as a tracker for an older branch/PR. Its historical build/test counts and deployment statements are not authoritative for the current checkout or Cloudflare dashboard. Current auth limitations are documented in [`USER-TODO.md`](./USER-TODO.md); source-confirmed Cloudflare configuration and owner checks are in [`CLOUDFLARE_CONFIGURATION_REPORT.md`](../CLOUDFLARE_CONFIGURATION_REPORT.md).
+
 
 | PROMPT | Scope | Status | Where |
 |---|---|---|---|
 | 001 | Foundation & design system | ✅ | `apps/web/src/components/ui`, `styles/index.css`, CI |
-| 002 | Auth (F1): register/login/refresh/logout/reset, lockout, onboarding | ✅ | `functions/src/routes/auth.ts`, `auth/*`, `pages/auth/*` |
+| 002 | Auth (F1): generic public registration acknowledgement, existing refresh/logout, role/session guards | ⚠️ provider-dependent; phone-only login issues no session; password/staff/reset/OTP paths are absent | `functions/src/routes/auth.ts`, `auth/*`, `pages/auth/*` |
 | 003 | Firestore schema/rules/indexes, repeatable seed (catalog + logos/images → Storage) | ✅ | `firestore.rules`, `storage.rules`, `firestore.indexes.json`, `scripts/seed-catalog.ts`, `functions/src/seed/*` |
 | 004 | Admin content (brands/products/packages/sections, uploads) + sample training packages | ✅ | `pages/admin/Content*`, `PackageEditorPage`, `services/content.ts` |
 | 005 | Quiz builder (versioned questions, settings) | ✅ | `pages/admin/QuizBuilderPage.tsx` |
@@ -29,9 +29,9 @@ What is still open needs accounts, keys or devices the owner has to provide. See
 |---|---|---|
 | Functions unit + API (Vitest + supertest, memory backend) — includes 28 mentor-AI tests | 146 | local + CI |
 | Web unit/integration (Vitest + Testing Library, mocked API, axe structural checks) | 64 | local + CI |
-| Emulator: security rules + the API suite on Firestore + Storage adapter (`functions/test-emulator/*`) | 6 rules + 3 storage + API suite | CI only (no JDK in the dev sandbox) |
-| E2E Playwright: foundation (5, on Chromium desktop/mobile + WebKit iPhone) + §28.2 journeys (5) + axe WCAG AA (4) | 14 specs | CI only |
-| Lighthouse CI: `/login` + signed-in Home, perf/a11y/best-practices ≥ 90, LCP < 3 s | 2 URLs × 3 runs | CI only |
+| Emulator: security rules + Firestore/Storage adapter (`functions/test-emulator/*`) | Historical suite; not run by current `ci.yml` | Optional workflow/local task only |
+| E2E Playwright | See current E2E files and fresh CI/test results; no demo-password login | Current CI job |
+| Lighthouse CI: public `/login` + `/register`, perf/a11y/best-practices ≥ 90, LCP < 3 s | 2 public routes × 3 runs; no signed-in home | Current CI job |
 | Android debug APK (Gradle) | — | CI only (`android.yml`) |
 
 ### §28.2 key test cases → tests
@@ -49,13 +49,13 @@ What is still open needs accounts, keys or devices the owner has to provide. See
 | 9 | Assignment union | `assignments.test.ts` «28.2 #9» |
 | 10 | Mentor «نمی‌دانم» | `mentor.test.ts` «28.2 #10» + `mentor-ai.test.ts` (پاسخ بدون هیچ فراخوانی مدل) |
 | 11 | Quiet hours | `notify.test.ts` «quiet hours» |
-| 12 | Duplicate registration | `auth.test.ts` «28.2 #12» |
+| 12 | Duplicate registration does not disclose whether a phone exists; a new phone may create an inactive marketer record without session | `auth.test.ts` public registration boundary |
 
 ## §37 checklists
 
-- **§37.1 (every PR):** tests green ✅ • 0 TS/lint errors ✅ • RTL + tokens ✅ • Loading/Empty/Error ✅ • §25 events: server-side events plus client events (`/me/events`) ✅ • API docs (§21.4.1) ✅ • no paid deps, no secrets ✅ • a11y basics (focus ring, ≥48px, jsx-a11y lint) ✅
-- **§37.2 (features):** §5.2 AC covered by the tests above ✅ • demo users + seed for the client demo ✅
-- **§37.3 (release):** regression checklist + runbook ✅ (`RELEASE.md`) • Lighthouse ≥ 90 ✅ enforced in CI on the production build (re-check on the deployed URL) • dev/prod deploy ⏳ needs the Firebase/Cloudflare secrets
+- **§37.1 (every PR):** use the fresh CI checks for this commit; the historical green checkmarks above are not current evidence.
+- **§37.2 (features):** seed files provide data fixtures only; they do not create sign-in credentials or verified identities.
+- **§37.3 (release):** see [`RELEASE.md`](./RELEASE.md) and [`CLOUDFLARE_CONFIGURATION_REPORT.md`](../CLOUDFLARE_CONFIGURATION_REPORT.md); Lighthouse audits public auth routes only. Cloudflare deploy requires independent owner approval and verified dashboard state.
 - **§37.4 (product):** 9 MVP features built ✅ • deployed APK + PWA + panels ⏳ owner setup • beta + KPI baseline ⏳ owner
 
 ## Decisions recorded (§36)

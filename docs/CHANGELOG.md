@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-08 — Auth boundary, fail-closed Netlify shim, Cloudflare inventory
+
+- Phone-only login no longer grants a session; public registration uses a generic response and may create only an inactive marketer record for a new number. Seed phone numbers and `superadmin` records do not verify identity or create sign-in credentials. No fake SMS/OTP provider was added.
+- Netlify's legacy API function now returns `503 UNAVAILABLE` instead of initializing a memory-backed Worker adapter; the supported API runtime is the Cloudflare Worker with D1 persistence. Production CORS no longer trusts arbitrary `*.pages.dev`/`*.workers.dev` origins unless explicitly allowlisted.
+- D1 media composition now copies source parts to a hidden stage and swaps only a complete contiguous chunk set atomically; timeouts leave source parts available for retry. Media finalization uses a transactional pending→ready/rejected state change, requires the declared byte size, and rejects late upload parts for terminal media records.
+- Lighthouse CI now audits `/login` and `/register` without demo credentials; retired login script and reset/password UI claims were removed or marked historical. Seed script logs that `--superadmin-phone` creates no identity proof or login/session and does not elevate existing records.
+- Added a source-vs-live Cloudflare configuration report and refreshed the release/setup/Netlify/auth audit guides. Live dashboard settings remain unverified.
+- Validation and lockfile results for this change are recorded after local checks; no production deploy or migration was run.
+
 ## 2026-10-06 (2) — Fix: D1 -> R2 migration stalled on the smallest files
 
 - With `R2_MIGRATE_PURGE = "off"` the `migrate-blobs` job re-checked the same smallest files every run and never reached the larger ones (already-copied files used up the batch). Files already verified in R2 no longer count against the batch limits.

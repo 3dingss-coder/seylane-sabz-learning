@@ -8,6 +8,7 @@ async function probeGemini(
   try {
     const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1', {
       headers: { 'x-goog-api-key': key },
+      signal: AbortSignal.timeout(10_000),
     });
     if (res.ok) return { ok: true, status: res.status };
     let reason: string | undefined;

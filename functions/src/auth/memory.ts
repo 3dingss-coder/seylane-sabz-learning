@@ -1,19 +1,19 @@
 import {
   base64UrlToString,
-  hashPassword,
   hmacSha256Base64Url,
   randomBytesBase64Url,
   sha256Hex,
   stringToBase64Url,
   timingSafeEqualStr,
-  verifyPassword,
 } from '../lib/crypto';
 import type { DocStore } from '../store/types';
-import type { AuthProvider, AuthTokens, SignInResult } from './types';
+import { StoreConflictError } from '../store/types';
+import type { AuthProvider, AuthTokens } from './types';
 
 interface Account {
   email: string;
-  passwordHash: string;
+  /** Legacy persisted credential hash; it is retained for read compatibility and never checked. */
+  passwordHash?: string;
   displayName: string;
   disabled: boolean;
   claims: Record<string, unknown>;
@@ -60,22 +60,21 @@ export class MemoryAuthProvider implements AuthProvider {
     };
   }
 
-  async createUser(p: {
-    email: string;
-    password: string;
-    displayName: string;
-    passwordless?: boolean;
-  }) {
+  async createUser(p: { email: string; displayName: string }) {
     const email = p.email.toLowerCase();
+    const emailKey = `_auth_email/${sha(email)}`;
+    const existingLink = await this.store.get<{ uid: string }>(emailKey);
+    if (existingLink) throw new StoreConflictError(emailKey);
+
     const deterministicId = `u_${sha(email).slice(0, 18)}`;
-    const uid = (await this.store.get(`_auth/${deterministicId}`))
-      ? this.store.newId()
-      : deterministicId;
-    await this.store.create(`_auth_email/${sha(email)}`, { uid });
+    const deterministicAccount = await this.store.get<Account>(`_auth/${deterministicId}`);
+    // Preserve the collision fallback only for the truncated deterministic UID; never create a
+    // second identity when the existing account already carries this exact email.
+    if (deterministicAccount?.email.toLowerCase() === email) throw new StoreConflictError(emailKey);
+    const uid = deterministicAccount ? this.store.newId() : deterministicId;
+    await this.store.create(emailKey, { uid });
     await this.store.create(`_auth/${uid}`, {
       email,
-      // 'none' never verifies (verifyPassword needs 3 parts), so a passwordless account can't be password-signed-in.
-      passwordHash: p.passwordless ? 'none' : hashPassword(p.password),
       displayName: p.displayName,
       disabled: false,
       claims: {},
@@ -91,27 +90,9 @@ export class MemoryAuthProvider implements AuthProvider {
     await this.store.delete(`_auth/${uid}`);
   }
 
-  async signIn(email: string, password: string): Promise<SignInResult> {
-    const link = await this.store.get<{ uid: string }>(`_auth_email/${sha(email.toLowerCase())}`);
-    const acc = link ? await this.store.get<Account>(`_auth/${link.uid}`) : null;
-    if (!link || !acc || !verifyPassword(password, acc.passwordHash))
-      return { ok: false, reason: 'invalid' };
-    if (acc.disabled) return { ok: false, reason: 'disabled' };
-    return { ok: true, uid: link.uid, tokens: await this.issue(link.uid) };
-  }
-
-  /** Phone-only login for the MemoryAuthProvider (local + Cloudflare D1), never Firebase Auth. */
-  async demoSignIn(email: string): Promise<SignInResult> {
-    const link = await this.store.get<{ uid: string }>(`_auth_email/${sha(email.toLowerCase())}`);
-    const acc = link ? await this.store.get<Account>(`_auth/${link.uid}`) : null;
-    if (!link || !acc) return { ok: false, reason: 'invalid' };
-    if (acc.disabled) return { ok: false, reason: 'disabled' };
-    return { ok: true, uid: link.uid, tokens: await this.issue(link.uid) };
-  }
-
-  /** Caller must first verify phone ownership with a real provider; this method never verifies OTP. */
-  async signInVerifiedPhone(email: string): Promise<SignInResult> {
-    return this.demoSignIn(email);
+  /** Test fixture helper; intentionally not part of AuthProvider and never routed over HTTP. */
+  async issueTestSession(uid: string): Promise<AuthTokens> {
+    return this.issue(uid);
   }
 
   async refresh(refreshToken: string) {
@@ -189,14 +170,7 @@ export class MemoryAuthProvider implements AuthProvider {
   async setDisabled(uid: string, disabled: boolean) {
     await this.store.update(`_auth/${uid}`, { disabled });
   }
-  async setPassword(uid: string, password: string) {
-    await this.store.update(`_auth/${uid}`, { passwordHash: hashPassword(password) });
-  }
   async setClaims(uid: string, claims: Record<string, unknown>) {
     await this.store.update(`_auth/${uid}`, { claims });
-  }
-  async sendPasswordResetEmail(email: string) {
-    // Local mode has no mail transport; the link would be logged by a real provider.
-    console.info(`[auth:memory] password reset requested for ${email.replace(/(.).+@/, '$1***@')}`);
   }
 }

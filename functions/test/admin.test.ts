@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createCtx, fakeMp4, type TestCtx } from './support/ctx';
+import { register } from '../src/services/users';
 
 let ctx: TestCtx;
 let admin: { id: string; token: string };
@@ -168,14 +169,18 @@ describe('users & roles (PROMPT 007)', () => {
   });
 
   it('admin sees, searches by and can correct the residence of a user', async () => {
-    const reg = await ctx.api().post('/v1/auth/phone-register', {
-      name: 'مهدی',
-      phone: '09365554433',
-      province: 'خراسان رضوی',
-      city: 'نیشابور',
-    });
-    expect(reg.status).toBe(201);
-    const id = reg.body.data.user.id as string;
+    // Trusted test fixture: public registration cannot authenticate or return a user ID.
+    const registered = await register(
+      ctx.deps,
+      {
+        name: 'مهدی',
+        phone: '09365554433',
+        province: 'خراسان رضوی',
+        city: 'نیشابور',
+      },
+      'marketer',
+    );
+    const id = registered.id;
 
     // The list the admin panel reads carries the residence…
     const list = await ctx.api(admin.token).get('/v1/admin/users?q=نیشابور');

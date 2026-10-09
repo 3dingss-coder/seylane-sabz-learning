@@ -5,9 +5,12 @@
  *              FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 GCLOUD_PROJECT=demo-seylane \
  *              STORAGE_BUCKET=demo-seylane.appspot.com npm run seed -- --demo
  *   Prod/dev : GOOGLE_APPLICATION_CREDENTIALS=sa.json GCLOUD_PROJECT=<id> STORAGE_BUCKET=<bucket> \
- *              FIREBASE_WEB_API_KEY=<key> npm run seed [-- --superadmin-phone 09.. --superadmin-password ..]
+ *              FIREBASE_WEB_API_KEY=<key> npm run seed [-- --superadmin-phone 09..]
  *   Memory   : npm run seed -- --memory --demo   (writes functions/.local-data, used by the local API)
  *
+ * SECURITY: --superadmin-phone only provisions/resolves a role record. Phone ownership is not
+ * verified, no password/OTP credential or login/session is created, and existing records are not
+ * elevated. Use only from an owner-controlled environment; never treat seeded phones as credentials.
  * Flags: --demo (demo teams/users), --force (overwrite seeded packages), --report <file.md>
  */
 import fs from 'node:fs';
@@ -74,15 +77,18 @@ async function main() {
     log: (m) => console.info(`[seed] ${m}`),
   });
   const phone = value('superadmin-phone');
-  const pwd = value('superadmin-password') ?? process.env.SEED_SUPERADMIN_PASSWORD;
-  if (phone && pwd) {
+  if (phone) {
+    console.warn(
+      '[seed] SECURITY: this phone is not verified; no password/OTP credential or login/session is created.',
+    );
     const u = await ensureUser(deps, {
       name: value('superadmin-name') ?? 'مدیر ارشد سیستم',
-      identifier: phone,
-      password: pwd,
+      phone,
       role: 'superadmin',
     });
-    console.info(`[seed] superadmin ready: ${u.id}`);
+    console.info(
+      `[seed] requested superadmin phone resolved to record ${u.id} (role=${u.role}, status=${u.status}); ensureUser does not elevate existing records.`,
+    );
   }
   if (memory && 'flush' in deps.store) (deps.store as { flush: () => void }).flush();
   const out = value('report');

@@ -74,7 +74,7 @@ describe('routing', () => {
   it('protects the admin panel', async () => {
     localStorage.clear();
     renderAt('/admin');
-    expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'رفتن به ورود بازاریاب' })).toBeInTheDocument();
   });
 
   it('resets image error state when ProductImage or BrandLogo src changes', () => {

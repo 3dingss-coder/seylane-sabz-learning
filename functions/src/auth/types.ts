@@ -5,33 +5,16 @@ export interface AuthTokens {
   expiresIn: number;
 }
 
-export type SignInResult =
-  | { ok: true; uid: string; tokens: AuthTokens }
-  | { ok: false; reason: 'invalid' | 'disabled' | 'locked' };
-
 /**
- * Identity port (D35). The API is the only gateway: clients never talk to Firebase Auth
- * directly. Firebase implementation uses Admin SDK + Identity Toolkit REST; the memory
- * implementation is used for tests and the no-emulator local server.
+ * Identity port. The public API has no password, OTP, or phone-login credential exchange.
+ * Phone registration may create only an inactive marketer record; it never issues a session.
  */
 export interface AuthProvider {
-  /** `passwordless`: phone-only account — no password is ever checked, so skip the costly hash. */
-  createUser(p: {
-    email: string;
-    password: string;
-    displayName: string;
-    passwordless?: boolean;
-  }): Promise<string>;
+  createUser(p: { email: string; displayName: string }): Promise<string>;
   deleteUser(uid: string): Promise<void>;
-  signIn(email: string, password: string): Promise<SignInResult>;
   refresh(refreshToken: string): Promise<{ uid: string; tokens: AuthTokens } | null>;
   verify(idToken: string): Promise<{ uid: string } | null>;
-  /** Issue a session only after an external phone-verification provider has confirmed ownership. */
-  signInVerifiedPhone?(email: string): Promise<SignInResult>;
   revoke(uid: string): Promise<void>;
   setDisabled(uid: string, disabled: boolean): Promise<void>;
-  setPassword(uid: string, password: string): Promise<void>;
   setClaims(uid: string, claims: Record<string, unknown>): Promise<void>;
-  /** Email users only (phone users are reset by an admin — D35). */
-  sendPasswordResetEmail(email: string): Promise<void>;
 }

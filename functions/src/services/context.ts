@@ -2,7 +2,6 @@ import type { Mailer } from '../mail/types';
 import type { AiHub } from '../ai/hub';
 import type { AppConfig } from '../config';
 import type { AuthProvider } from '../auth/types';
-import type { PhoneVerificationProvider } from '../auth/phone';
 import type { RateLimitStore } from '../http/rateLimit';
 import type { BlobStore } from '../blob/types';
 import type { LlmClient } from '../llm/types';
@@ -18,8 +17,6 @@ export interface Deps {
   config: AppConfig;
   store: DocStore;
   auth: AuthProvider;
-  /** Optional production SMS/OTP adapter. No adapter is configured by the current Cloudflare build. */
-  phoneVerification?: PhoneVerificationProvider;
   /** Shared limiter backend, when the deployment platform provides one. */
   rateLimitStore?: RateLimitStore;
   blob: BlobStore;

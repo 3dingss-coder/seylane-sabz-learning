@@ -46,14 +46,6 @@ export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
     h(async (req) => users.updateMe(d, me(req), parse(users.patchMeSchema, req.body))),
   );
   r.post(
-    '/me/password',
-    rateLimit(limiter, 'pwchange', 5, 60_000, uid),
-    h(
-      async (req) => users.changePassword(d, me(req), parse(users.changePasswordSchema, req.body)),
-      204,
-    ),
-  );
-  r.post(
     '/me/onboarding',
     h(async (req) => users.completeOnboarding(d, me(req))),
   );

@@ -1,11 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 import { Button, Spinner } from '@/components/ui';
 import { homePathFor, useAuth } from '@/lib/auth';
 import { PANEL_LABEL, panelOf } from '@/lib/roles';
 import type { Role } from '@/lib/types';
-import { StaffLoginPage } from '@/pages/auth/StaffLoginPage';
 
 export function FullPageSpinner() {
   return (
@@ -25,9 +24,8 @@ export function RequireAuth({ roles, children }: { roles: Role[]; children: Reac
   const loc = useLocation();
   if (status === 'loading') return <FullPageSpinner />;
   if (status === 'anonymous' || !user) {
-    // /admin and /manager show their own username + password sign-in at the same URL.
     const panel = panelOf(loc.pathname);
-    if (panel === 'admin' || panel === 'manager') return <StaffLoginPage panel={panel} />;
+    if (panel === 'admin' || panel === 'manager') return <StaffAccessNotice panel={panel} />;
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   }
   if (!roles.includes(user.role)) {
@@ -49,6 +47,40 @@ const ROLE_LABEL: Record<Role, string> = {
   superadmin: 'مدیر ارشد',
 };
 
+/** No password/OTP provider is configured for a fresh staff session. */
+function StaffAccessNotice({ panel }: { panel: 'admin' | 'manager' }) {
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-background p-4">
+      <div className="w-full max-w-sm rounded-card border border-border bg-surface p-6 text-center shadow-sm">
+        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-card bg-primary-light text-primary">
+          <ShieldAlert className="size-8" aria-hidden />
+        </div>
+        <h1 className="text-lg font-bold text-text">{PANEL_LABEL[panel]}</h1>
+        <p className="mt-2 text-sm leading-7 text-text-secondary">
+          شمارهٔ تلفن به‌تنهایی هویت یا نقش مدیریتی را ثابت نمی‌کند. در این نسخه سرویس پیامکی یا
+          ارائه‌دهندهٔ هویت برای ورود تازهٔ کارکنان پیکربندی نشده است؛ نشست معتبر قبلی قابل استفاده
+          است، اما بازیابی حساب از این صفحه ممکن نیست. برای دسترسی سازمانی با مالک سامانه تماس
+          بگیرید.
+        </p>
+        <div className="mt-5 flex flex-col gap-2">
+          <Link
+            className="inline-flex min-h-12 items-center justify-center rounded-card bg-primary px-4 py-3 font-bold text-white"
+            to="/login"
+          >
+            رفتن به ورود بازاریاب
+          </Link>
+          <Link
+            className="inline-flex min-h-12 items-center justify-center rounded-card border border-border px-4 py-3 text-text"
+            to="/gallery"
+          >
+            بازگشت به صفحهٔ عمومی
+          </Link>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 /** Signed in with an account that can't open this panel: offer to switch accounts. */
 function WrongAccount({
   panel,
@@ -65,7 +97,7 @@ function WrongAccount({
   const switchAccount = async () => {
     setBusy(true);
     await logout();
-    nav(from, { replace: true });
+    nav('/login', { replace: true, state: { from } });
   };
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background p-4">
@@ -75,15 +107,16 @@ function WrongAccount({
         </div>
         <h1 className="text-lg font-bold text-text">{PANEL_LABEL[panel]}</h1>
         <p className="mt-2 text-sm leading-7 text-text-secondary">
-          شما با حساب «{ROLE_LABEL[role]}» وارد شده‌اید. برای ورود به {PANEL_LABEL[panel]} با حساب{' '}
-          {panel === 'admin' ? 'ادمین' : 'مدیر'} وارد شوید.
+          حساب فعلی شما «{ROLE_LABEL[role]}» است و اجازهٔ ورود به {PANEL_LABEL[panel]} را ندارد.
+          شمارهٔ تلفن به‌تنهایی راهی برای تغییر حساب یا اثبات نقش نیست؛ فقط از نشست معتبر همان حساب
+          استفاده کنید.
         </p>
         <div className="mt-5 flex flex-col gap-2">
           <Button onClick={() => void switchAccount()} loading={busy}>
-            ورود با حساب {panel === 'admin' ? 'ادمین' : 'مدیر'}
+            خروج و بازگشت به صفحهٔ ورود
           </Button>
           <Button variant="secondary" onClick={() => nav(homePathFor(role), { replace: true })}>
-            بازگشت به {PANEL_LABEL[panelOf(homePathFor(role)) as keyof typeof PANEL_LABEL]}
+            بازگشت به پنل خود
           </Button>
         </div>
       </div>

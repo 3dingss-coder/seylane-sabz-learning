@@ -20,27 +20,10 @@ import type { AuthResult, Me, Role } from './types';
 interface AuthState {
   user: Me | null;
   status: 'loading' | 'authenticated' | 'anonymous';
-  /** Marketers: local demo sign-in or phone + a verified OTP challenge in production. */
-  login(phone: string, verification?: { challengeId: string; code: string }): Promise<Me>;
-  /** Request a real one-time code; production has no default/fake provider. */
-  requestPhoneCode(phone: string): Promise<{ challengeId: string; expiresInSec: number }>;
-  /** Marketers: sign up with name + phone + residence and required production verification. */
-  register(
-    input: {
-      name: string;
-      phone: string;
-      province: string;
-      city: string;
-      challengeId?: string;
-      code?: string;
-    },
-  ): Promise<Me>;
-  /** Admin / manager panels: username + password. */
-  staffLogin(input: {
-    panel: 'admin' | 'manager';
-    username: string;
-    password: string;
-  }): Promise<Me>;
+  /** Submitting a phone never authenticates an existing account; the server responds generically. */
+  login(phone: string): Promise<Me>;
+  /** Records only a generic, inactive marketer request; it never creates an authenticated session. */
+  register(input: { name: string; phone: string; province: string; city: string }): Promise<void>;
   logout(): Promise<void>;
   refreshMe(): Promise<void>;
   setUser(u: Me): void;
@@ -116,15 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       status,
-      login: async (phone, verification) =>
-        accept(await api.post<AuthResult>('/auth/phone-login', { phone, ...verification })),
-      requestPhoneCode: async (phone) =>
-        api.post<{ accepted: boolean; challengeId: string; expiresInSec: number }>(
-          '/auth/phone/request',
-          { phone },
-        ),
-      register: async (input) => accept(await api.post<AuthResult>('/auth/phone-register', input)),
-      staffLogin: async (input) => accept(await api.post<AuthResult>('/auth/staff-login', input)),
+      login: async (phone) => accept(await api.post<AuthResult>('/auth/phone-login', { phone })),
+      register: async (input) => {
+        await api.post<{ accepted: true }>('/auth/phone-register', input);
+      },
       logout: async () => {
         try {
           await flushBeats(); // send offline progress before the token is revoked

@@ -1,88 +1,27 @@
-# راهنمای کامل اتصال خودکار گیت‌هاب به کلودفلر و دیتابیس Cloudflare D1 (۱۰۰٪ رایگان)
+# Cloudflare — راهنمای تطبیق با سورس فعلی
 
-این پروژه به‌طور کامل برای اجرای بدون وابستگی به Firebase و بدون محدودیت‌های Netlify روی زیرساخت رایگان **Cloudflare (Workers / Pages + دیتابیس SQLite ابری D1)** بازطراحی شده است.
+> راهنمای قدیمیِ این فایل شامل ادعاهای منسوخ (ساخت خودکار D1، login با credentialهای دمو، و روشن‌کردن Pages به‌عنوان مسیر اصلی) بود. آن دستورها را اجرا نکنید. مرجع اصلیِ مقادیر سورس، شناسه‌های شناخته‌شده، موارد تأییدنشدهٔ داشبورد و ترتیب کار مالک: [`CLOUDFLARE_CONFIGURATION_REPORT.md`](../CLOUDFLARE_CONFIGURATION_REPORT.md).
 
----
+## آنچه سورس مخزن می‌گوید
 
-## چه مشکلاتی از نسخه قبلی (Firebase / Netlify) برطرف شد؟
+- Worker ورودی `functions/src/cloudflare-worker.ts` است و `wrangler.toml` نام Worker، assets، bindingها و cron را تعریف می‌کند. این مقدارها **تنظیمات مخزن‌اند**؛ ثابت نمی‌کنند همان binding/نسخه اکنون در حساب Cloudflare فعال است.
+- Worker در production برای persistence به D1 نیاز دارد و در نبود binding `DB` fail-closed می‌شود؛ برای session, users, progress یا rate limit، fallback حافظه‌ای تولیدی ندارد.
+- `wrangler.toml` یک D1 database name/ID و یک R2 bucket name اعلام می‌کند. owner باید هر دو را در داشبورد با resource زنده و backup تطبیق دهد. workflow دیگر D1 را خودکار نمی‌سازد یا به ID تازه عوض نمی‌کند.
+- workflow deploy در `.github/workflows/deploy.yml` پس از push به `main` یا اجرای دستی فعال می‌شود. اگر Cloudflare credentials حاضر باشند، D1 name و `database_id` را تطبیق می‌دهد، migrationهای `0001` و `0002` را اعمال می‌کند و Worker را deploy می‌کند؛ Pages deploy فقط با متغیر اختیاری تنظیم می‌شود. Workflow به CI سبز وابستگی صریح ندارد و production-affecting است.
+- `R2_MIGRATE_PURGE` اکنون `off` است. جابه‌جایی D1 به R2 و پاک‌سازی منبع به owner inventory، پشتیبان، byte verification و تأیید جداگانه نیاز دارد.
+- ورود به شمارهٔ موجود از phone-only مسیر session نمی‌دهد. ثبت‌نام عمومی پاسخ یکسان می‌دهد؛ شمارهٔ تازه ممکن است فقط رکورد غیرفعال `marketer` بسازد، بدون session. حساب‌های seed و شمارهٔ `superadmin` هویت را تأیید نمی‌کنند و حساب دمو password ندارد.
 
-1. **حذف وابستگی سنگین به Firebase**: دیگر نیازی به حساب کاربری Google Cloud، سرویس اکانت Firebase، یا شبیه‌سازهای جاوا نیست.
-2. **دیتابیس دائمی و رایگان روی Cloudflare D1 (`functions/src/store/d1.ts`)**:
-   - جدول‌های دیتابیس (`docs`، `blobs`، `blob_chunks`، `d1_tx_clock`، `d1_tx_scopes` و `rate_limits`) با migrationهای افزایشی و تکرارپذیر `0001_init.sql` و `0002_d1_tx_scopes.sql` ساخته می‌شوند؛ مسیرهای runtime نیز schema را در اولین درخواست بررسی می‌کنند.
-   - کل کاتالوگ اولیه (۱۶ برند، ۲۴۳ محصول، ۸ پکیج آموزشی، آزمون‌ها و حساب‌های دمو) در اولین اجرا به‌طور خودکار در دیتابیس D1 سید (Seed) می‌شود.
-   - برخلاف `/tmp` در Netlify که با هر Cold Start پاک می‌شد، کاربران ثبت‌نام‌شده، توکن‌های ورود، پیشرفت آموزشی و فایل‌های آپلودشده در دیتابیس ابری Cloudflare D1 ماندگار هستند.
-3. **ذخیره‌سازی فایل‌ها و تصاویر آپلودشده درون D1 (یا R2) بدون نیاز به کارت بانکی (`functions/src/blob/cloudflare.ts`)**:
-   - فایل‌های آپلودشده در پنل ادمین به‌صورت قطعه‌بندی‌شده (Chunked) داخل خود دیتابیس رایگان D1 ذخیره و با پشتیبانی از `Range` استریم می‌شوند (و در صورت اتصال باکت `MEDIA_BUCKET` از R2 نیز پشتیبانی می‌کند).
-4. **رفع تداخل پوشه `/functions` و فایل `_redirects` در کلودفلر**:
-   - مسیر `functions/v1/[[path]].ts` برای Cloudflare Pages Functions و `functions/src/cloudflare-worker.ts` برای Cloudflare Workers اضافه شد تا کلودفلر هم فرانت‌اند و هم API (`/v1/*`) را روی یک دامنه واحد (`*.workers.dev` یا `*.pages.dev`) بدون خطای CORS و بدون خطای `پاسخ سرور نامعتبر است` اجرا کند.
-   - کل باندل سرور کلودفلر به حجم فشرده **۱۱۲ کیلوبایت** و بدون هیچ وابستگی به ماژول‌های بومی Node (`fs`/`http`/`zlib`) رسیده است.
+## پیش از هر تغییر در داشبورد
 
----
+1. گزارش [`CLOUDFLARE_CONFIGURATION_REPORT.md`](../CLOUDFLARE_CONFIGURATION_REPORT.md) را بخوانید و فقط در داشبورد owner مقادیر live را تأیید کنید.
+2. Worker name و deployed commit، Account ID، D1 name/ID و binding، R2 bucket و binding، custom domains/routes و Cron Triggers را تطبیق دهید. resource جدید نسازید و D1 ID را عوض نکنید مگر owner با backup و plan جداگانه تصویب کند.
+3. در Workers Builds، Git branch/source، Node/Bun version واقعی، package-manager selection، lockfile و build logs را ببینید. CI مخزن از `npm ci`/`package-lock.json` استفاده می‌کند؛ status محلی یا `wrangler deploy --dry-run` جایگزین Workers Build نیست.
+4. GitHub Actions Secrets/Variables را فقط در Settings بررسی کنید؛ هیچ secret، API token، service-account JSON یا user data را در این فایل، chat، log یا Git قرار ندهید.
+5. پیش از هر deploy، owner باید مشکل هویت، branch protection/deploy approval، backup/restore و migration plan را حل کند. این PR به deploy یا production migration مجوز نمی‌دهد.
 
-## روش اول (پیشنهادی و کاملاً خودکار با GitHub Actions): فقط با ۲ کلید در گیت‌هاب
+## مواردی که این فایل تضمین نمی‌کند
 
-با این روش، با هر `git push` روی شاخه `main`:
-- گیت‌هاب به‌صورت خودکار دیتابیس **Cloudflare D1** (`seylane-sabz-db`) را در اکانت کلودفلر شما می‌سازد (اگر از قبل وجود نداشته باشد)،
-- جدول‌های دیتابیس را ایجاد می‌کند،
-- و هم فرانت‌اند (React PWA) و هم بک‌اند (`/v1/*`) را روی ساب‌دامین رایگان `*.workers.dev` شما منتشر می‌کند.
-
-### مرحله ۱: دریافت Account ID از کلودفلر
-1. وارد [داشبورد کلودفلر (dash.cloudflare.com)](https://dash.cloudflare.com) شوید.
-2. از منوی سمت چپ وارد **Workers & Pages** شوید.
-3. در ستون سمت راست صفحه، مقدار **Account ID** (یک کد ۳۲ کاراکتری) را کپی کنید.
-
-### مرحله ۲: ساخت API Token در کلودفلر
-1. در داشبورد کلودفلر به مسیر **My Profile → API Tokens** (یا لینک مستقیم `https://dash.cloudflare.com/profile/api-tokens`) بروید.
-2. روی **Create Token** کلیک کنید.
-3. روی قالب **Edit Cloudflare Workers** کلیک کنید (`Use template`):
-   - در بخش **Permissions** مطمئن شوید این دسترسی‌ها وجود دارند (اگر D1 نبود، روی `+ Add more` بزنید و اضافه کنید):
-     - `Account` → `Workers Scripts` → `Edit`
-     - `Account` → `D1` → `Edit`
-     - `Account` → `Cloudflare Pages` → `Edit`
-   - در بخش **Account Resources** گزینه `Include → All accounts` را انتخاب کنید.
-4. روی **Continue to summary** و سپس **Create Token** بزنید و توکن ساخته‌شده را کپی کنید.
-
-### مرحله ۳: ثبت کلیدهای لازم در تنظیمات GitHub
-1. در مخزن گیت‌هاب پروژه به **Settings → Secrets and variables → Actions** بروید.
-2. روی **New repository secret** کلیک کنید و این دو Secret را بسازید:
-   - نام: `CLOUDFLARE_ACCOUNT_ID` ← مقدار: کد Account ID مرحله ۱
-   - نام: `CLOUDFLARE_API_TOKEN` ← مقدار: توکن مرحله ۲
-3. کلیدهای هوش مصنوعی (اختیاری، هر دو طرح رایگان دارند — جزئیات: [`MENTOR-AI.md`](./MENTOR-AI.md) §۹ و [`USER-TODO.md`](./USER-TODO.md) §۳.۵):
-   - `GEMINI_API_KEY` ← برای چت مستند، درک تصویر/PDF/ویدیو/صدا، جست‌وجوی معنایی و **صدای منتور**.
-   - `GROQ_API_KEY` ← برای تبدیل گفتار فارسی به متن (Whisper) در تماس صوتی و پاسخ‌های سریع.
-   - بدون هیچ‌کدام، منتور با موتور قانون‌محور داخلی و متن آماده کار می‌کند (هیچ خطایی رخ نمی‌دهد).
-4. *(اختیاری)* برای کنترل تماس صوتی دوطرفه، Variable `MENTOR_VOICE_REALTIME` را `on` یا `off` بگذارید (پیش‌فرض `on`).
-
-### مرحله ۴: تست انتشار خودکار
-- به تب **Actions** در گیت‌هاب بروید، ورک‌فلوی **Deploy to Cloudflare (Worker + D1 Database)** را انتخاب کنید و روی **Run workflow** بزنید (یا هر تغییری را روی `main` پوش کنید).
-- در پایان اجرا، لینک زنده سایت شما (`https://seylane-sabz-learning.<your-subdomain>.workers.dev`) در لاگ نمایش داده می‌شود!
-
----
-
-## روش دوم: اتصال مستقیم مخزن گیت‌هاب از داخل داشبورد کلودفلر (بدون GitHub Secrets)
-
-اگر ترجیح می‌دهید خود کلودفلر مستقیماً به گیت‌هاب وصل شود:
-
-1. در داشبورد کلودفلر به **Workers & Pages → D1 SQL Database** بروید، روی **Create** بزنید و یک دیتابیس به نام `seylane-sabz-db` بسازید.
-2. سپس به **Workers & Pages → Overview** بروید و روی **Create** کلیک کنید:
-   - می‌توانید در همان تب **Workers** روی **Import a repository** بزنید و مخزن `seylane-sabz-learning` را انتخاب کنید (فایل `wrangler.toml` در ریشه پروژه همه تنظیمات Build و Assets را آماده دارد).
-   - یا در تب **Pages** روی **Connect to Git** بزنید و مخزن را با تنظیمات زیر وصل کنید:
-     - **Build command**: `npm run build`
-     - **Build output directory**: `apps/web/dist`
-3. پس از ساخته شدن پروژه در کلودفلر، وارد **Settings → Bindings** پروژه شوید:
-   - روی **Add** → **D1 database** کلیک کنید:
-     - **Variable name**: `DB`
-     - **D1 database**: `seylane-sabz-db`
-   - ذخیره کنید. از این لحظه تمام داده‌ها روی دیتابیس D1 ذخیره می‌شوند و هر تغییر در گیت‌هاب به‌طور خودکار سایت را آپدیت می‌کند.
-
----
-
-## حساب‌های آماده برای ورود و تست
-
-در صفحه ورود (`/login`) می‌توانید با کلیک روی دکمه‌های ورود سریع دمو یا وارد کردن شماره موبایل (با یا بدون رمز عبور `demo1234`) وارد شوید:
-
-| نقش | شماره موبایل | رمز عبور (اختیاری در حالت دمو) |
-| --- | --- | --- |
-| **ادمین هلدینگ** | `09120000002` | `demo1234` |
-| **مدیر تیم** | `09120000003` | `demo1234` |
-| **بازاریاب** | `09120000004` | `demo1234` |
+- وجود D1/R2 resource در حساب، اتصال binding در live Worker، فعال بودن domain/route، cron یا deploy موفق را تأیید نمی‌کند.
+- `workers.dev`, `pages.dev`, Firebase، OTP/SMS، یا accountهای fixture روش login نیستند.
+- وجود Cloudflare API token یا secret را ادعا نمی‌کند و از owner درخواست نمی‌کند آن‌ها را برای ما ارسال کند.
+- build موفق محلی، GitHub Actions، Workers Builds یا تنظیمات dashboard را به‌تنهایی تأیید نمی‌کند.

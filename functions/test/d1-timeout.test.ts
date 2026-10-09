@@ -23,6 +23,26 @@ function stubDb(): D1Database {
 
 afterEach(() => vi.useRealTimers());
 
+describe('D1 schema initialization retry', () => {
+  it('evicts a timed-out shared DDL promise so a later caller can retry', async () => {
+    vi.useFakeTimers();
+    let batchCalls = 0;
+    const db = {
+      prepare: () => ({}),
+      batch: () => (batchCalls++ === 0 ? new Promise(() => {}) : Promise.resolve([])),
+    } as unknown as D1Database;
+    const first = ensureD1Schema(db);
+    const second = ensureD1Schema(db);
+    const firstResult = expect(first).rejects.toThrow(/timed out/);
+    const secondResult = expect(second).rejects.toThrow(/timed out/);
+    await vi.advanceTimersByTimeAsync(D1_CALL_TIMEOUT_MS + 1);
+    await Promise.all([firstResult, secondResult]);
+
+    await expect(ensureD1Schema(db)).resolves.toBeUndefined();
+    expect(batchCalls).toBe(2);
+  });
+});
+
 describe('D1 call timeout', () => {
   it('bounds both D1 execution and queue wait without freezing later calls', async () => {
     vi.useFakeTimers();
@@ -71,7 +91,7 @@ describe('D1-backed blob read timeout', () => {
 });
 
 describe('D1-backed rate limiter timeout', () => {
-  it('bounds a stalled counter update and does not start queued SQL after its deadline', async () => {
+  it('bounds stalled counter updates without a process-local queue poisoning later callers', async () => {
     vi.useFakeTimers();
     let updateCalls = 0;
     const db = {
@@ -95,7 +115,7 @@ describe('D1-backed rate limiter timeout', () => {
 
     await vi.advanceTimersByTimeAsync(D1_CALL_TIMEOUT_MS + 10);
     await Promise.all([firstResult, secondResult]);
-    expect(updateCalls).toBe(1);
+    expect(updateCalls).toBe(2);
   });
 });
 

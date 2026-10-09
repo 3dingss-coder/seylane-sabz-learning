@@ -1,7 +1,12 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CloudflareBlobStore, type R2BucketLike } from '../src/blob/cloudflare';
-import { type D1Database, type D1PreparedStatement, type D1Result } from '../src/store/d1';
+import {
+  D1_CALL_TIMEOUT_MS,
+  type D1Database,
+  type D1PreparedStatement,
+  type D1Result,
+} from '../src/store/d1';
 
 interface SqliteStatement {
   get(...params: Array<string | number | null>): Record<string, unknown> | undefined;
@@ -18,6 +23,7 @@ interface SqliteDatabase {
 }
 
 const requireSqlite = createRequire(__filename);
+afterEach(() => vi.useRealTimers());
 const { DatabaseSync } = requireSqlite('node:sqlite') as {
   DatabaseSync: new (location: string) => SqliteDatabase;
 };
@@ -92,10 +98,15 @@ class FakeR2 implements R2BucketLike {
   async put(
     key: string,
     value: ArrayBuffer | Uint8Array,
-    o?: { httpMetadata?: { contentType?: string } },
+    o?: {
+      httpMetadata?: { contentType?: string };
+      onlyIf?: { etagDoesNotMatch?: string };
+    },
   ) {
+    if (o?.onlyIf?.etagDoesNotMatch === '*' && this.objects.has(key)) return null;
     const data = value instanceof Uint8Array ? new Uint8Array(value) : new Uint8Array(value);
     this.objects.set(key, { data, contentType: o?.httpMetadata?.contentType ?? '' });
+    return { size: data.byteLength };
   }
   async head(key: string) {
     const o = this.objects.get(key);
@@ -122,31 +133,6 @@ class FakeR2 implements R2BucketLike {
   }
   async delete(key: string) {
     this.objects.delete(key);
-  }
-  partSizes: number[] = [];
-  async createMultipartUpload(key: string, o?: { httpMetadata?: { contentType?: string } }) {
-    const parts: Uint8Array[] = [];
-    const store = this.objects;
-    const sizes = this.partSizes;
-    return {
-      uploadPart: async (n: number, v: ArrayBuffer | Uint8Array) => {
-        const u = v instanceof Uint8Array ? new Uint8Array(v) : new Uint8Array(v);
-        parts[n - 1] = u;
-        sizes.push(u.byteLength);
-        return { partNumber: n };
-      },
-      complete: async () => {
-        const total = parts.reduce((s, p) => s + p.byteLength, 0);
-        const out = new Uint8Array(total);
-        let off = 0;
-        for (const p of parts) {
-          out.set(p, off);
-          off += p.byteLength;
-        }
-        store.set(key, { data: out, contentType: o?.httpMetadata?.contentType ?? '' });
-      },
-      abort: async () => {},
-    };
   }
 }
 
@@ -177,6 +163,17 @@ async function setup(purge: boolean) {
 }
 
 describe('D1 -> R2 media move', () => {
+  it('bounds a stalled R2 stat without pretending the read completed', async () => {
+    vi.useFakeTimers();
+    const r2 = new FakeR2();
+    r2.head = () => new Promise(() => {});
+    const store = new CloudflareBlobStore('secret', { r2 });
+    const pending = store.stat('media/video/stalled.mp4');
+    const result = expect(pending).rejects.toThrow(/R2 blob stat timed out/);
+    await vi.advanceTimersByTimeAsync(D1_CALL_TIMEOUT_MS + 1);
+    await result;
+  });
+
   it('gives same-millisecond same-size D1 rewrites distinct purge-guard versions', async () => {
     const db = createSqliteD1();
     const writer = new CloudflareBlobStore('secret', { db, now: () => 123_456 });
@@ -217,18 +214,15 @@ describe('D1 -> R2 media move', () => {
     expect(whole?.data.byteLength).toBe(small.byteLength);
   });
 
-  it('copies every file to R2 byte-for-byte; D1 stays until purge is on', async () => {
-    const { db, r2, store, small, big } = await setup(false);
+  it('conditionally copies small files and retains large D1 files without safe multipart preconditions', async () => {
+    const { db, r2, store, small } = await setup(false);
     const res = await store.migrateToObjectStorage({ maxFiles: 10, maxBytes: 100 * 1024 * 1024 });
-    expect(res).toMatchObject({ moved: 2, failed: 0, purged: 0, remaining: 2 });
+    expect(res).toMatchObject({ moved: 1, failed: 1, purged: 0, remaining: 2 });
     expect(
       Buffer.compare(Buffer.from(need(r2, 'media/audio/small.mp4').data), Buffer.from(small)),
     ).toBe(0);
-    expect(
-      Buffer.compare(Buffer.from(need(r2, 'media/video/big.mp4').data), Buffer.from(big)),
-    ).toBe(0);
-    expect(need(r2, 'media/video/big.mp4').contentType).toBe('video/mp4');
-    expect(r2.partSizes.slice(0, -1).every((n) => n === 8 * 1024 * 1024)).toBe(true);
+    expect(r2.objects.has('media/video/big.mp4')).toBe(false);
+    expect((await store.stat('media/video/big.mp4'))?.size).toBe(20 * 1024 * 1024 + 123);
     expect(r2.objects.has('uploads/m1/0')).toBe(false);
     const left = await db.prepare('SELECT COUNT(*) AS n FROM blobs').first<{ n: number }>();
     expect(Number(left?.n)).toBe(3);
@@ -251,19 +245,51 @@ describe('D1 -> R2 media move', () => {
     expect(retained?.path).toBe('media/audio/small.mp4');
   });
 
-  it('with purge on, removes the D1 rows only after byte-for-byte verification', async () => {
+  it('uses R2 conditional PUT when an object appears after HEAD and keeps the D1 source', async () => {
+    const { db, r2, store, small } = await setup(false);
+    const concurrent = bytesOf(small.byteLength, 99);
+    const originalHead = r2.head.bind(r2);
+    let injected = false;
+    r2.head = async (key) => {
+      const before = await originalHead(key);
+      if (key === 'media/audio/small.mp4' && !injected) {
+        injected = true;
+        r2.objects.set(key, { data: concurrent, contentType: 'audio/mp4' });
+      }
+      return before;
+    };
+
+    const res = await store.migrateToObjectStorage({ maxFiles: 1 });
+    expect(res).toMatchObject({ moved: 0, failed: 1, purged: 0, remaining: 2 });
+    expect(
+      Buffer.compare(Buffer.from(need(r2, 'media/audio/small.mp4').data), Buffer.from(concurrent)),
+    ).toBe(0);
+    expect(
+      (
+        await db
+          .prepare('SELECT path FROM blobs WHERE path = ?1')
+          .bind('media/audio/small.mp4')
+          .first<{ path: string }>()
+      )?.path,
+    ).toBe('media/audio/small.mp4');
+  });
+
+  it('with purge on, removes only the verified small D1 copy and retains the unsafe large file', async () => {
     const { db, r2, store, small } = await setup(true);
     const res = await store.migrateToObjectStorage({ maxFiles: 10, maxBytes: 100 * 1024 * 1024 });
-    expect(res).toMatchObject({ moved: 2, purged: 2, failed: 0, remaining: 0 });
+    expect(res).toMatchObject({ moved: 1, purged: 1, failed: 1, remaining: 1 });
     const rows = await db.prepare('SELECT path FROM blobs').all<{ path: string }>();
-    expect((rows.results ?? []).map((r) => r.path)).toEqual(['uploads/m1/0']);
+    expect((rows.results ?? []).map((r) => r.path).sort()).toEqual([
+      'media/video/big.mp4',
+      'uploads/m1/0',
+    ]);
     const again = await store.read('media/audio/small.mp4');
     expect(Buffer.compare(Buffer.from(again?.data ?? new Uint8Array()), Buffer.from(small))).toBe(
       0,
     );
-    expect(r2.objects.size).toBe(2);
+    expect(r2.objects.size).toBe(1);
     const idle = await store.migrateToObjectStorage();
-    expect(idle).toMatchObject({ moved: 0, remaining: 0 });
+    expect(idle).toMatchObject({ moved: 0, remaining: 1 });
   });
 
   it('migrates in bounded batches and never loses a file when R2 fails', async () => {
@@ -273,9 +299,6 @@ describe('D1 -> R2 media move', () => {
     expect(first?.remaining).toBe(1);
     const real = r2.put.bind(r2);
     r2.put = async () => {
-      throw new Error('R2 down');
-    };
-    r2.createMultipartUpload = async () => {
       throw new Error('R2 down');
     };
     const failed = await store.migrateToObjectStorage({ maxFiles: 5 });
@@ -288,24 +311,22 @@ describe('D1 -> R2 media move', () => {
     expect(await store.migrateToObjectStorage()).toBeNull();
   });
 
-  it('with purge off, keeps making progress through every file and logs each run', async () => {
-    const { db, r2, store, small, big } = await setup(false);
-    // One new file per run, like the 15-minute cron: earlier, already-copied files must not
-    // use up the batch, otherwise the bigger files would never be reached.
+  it('logs repeated runs while preserving large files whose R2 multipart write cannot be conditional', async () => {
+    const { db, r2, store, small } = await setup(false);
+    // Repeated manual runs verify the already-copied small file and keep the large D1 source.
     for (let i = 0; i < 4; i++) await store.migrateToObjectStorage({ maxFiles: 1 });
     expect(
       Buffer.compare(Buffer.from(need(r2, 'media/audio/small.mp4').data), Buffer.from(small)),
     ).toBe(0);
-    expect(
-      Buffer.compare(Buffer.from(need(r2, 'media/video/big.mp4').data), Buffer.from(big)),
-    ).toBe(0);
+    expect(r2.objects.has('media/video/big.mp4')).toBe(false);
     const last = await store.migrateToObjectStorage({ maxFiles: 1 });
-    expect(last).toMatchObject({ moved: 0, verified: 2, failed: 0 });
+    expect(last).toMatchObject({ moved: 0, verified: 1, failed: 1, remaining: 2 });
     const log = await db
       .prepare('SELECT status, COUNT(*) AS n FROM blob_migration_log GROUP BY status')
       .all<{ status: string; n: number }>();
     const by = Object.fromEntries((log.results ?? []).map((r) => [r.status, Number(r.n)]));
-    expect(by['copied-and-verified']).toBe(2);
+    expect(by['copied-and-verified']).toBe(1);
+    expect(by.failed).toBe(4);
     expect(by.run).toBe(5);
   });
 });

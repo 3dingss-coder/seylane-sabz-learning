@@ -185,15 +185,6 @@ export function randomBytesBase64Url(length: number): string {
   return bytesToBase64Url(randomBytes(length));
 }
 
-export function randomInt(minOrMax: number, maybeMax?: number): number {
-  const min = maybeMax === undefined ? 0 : minOrMax;
-  const max = maybeMax === undefined ? minOrMax : maybeMax;
-  const range = Math.max(1, max - min);
-  const buf = new Uint32Array(1);
-  globalThis.crypto.getRandomValues(buf);
-  return min + ((buf[0] ?? 0) % range);
-}
-
 export function timingSafeEqualStr(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -201,36 +192,6 @@ export function timingSafeEqualStr(a: string, b: string): boolean {
     diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
   return diff === 0;
-}
-
-/** Iterated HMAC-SHA256 password derivation (portable across Node and Cloudflare Workers). */
-function deriveKey(password: string, salt: Uint8Array, rounds = 1024): Uint8Array {
-  const pwBytes = encoder.encode(password);
-  let block = hmacSha256Bytes(pwBytes, salt);
-  const acc = new Uint8Array(block);
-  for (let i = 1; i < rounds; i++) {
-    block = hmacSha256Bytes(pwBytes, block);
-    for (let j = 0; j < 32; j++) acc[j] = (acc[j] ?? 0) ^ (block[j] ?? 0);
-  }
-  return acc;
-}
-
-export function hashPassword(password: string): string {
-  const salt = randomBytes(16);
-  const key = deriveKey(password, salt);
-  return `pbkdf2$${bytesToBase64(salt)}$${bytesToBase64(key)}`;
-}
-
-export function verifyPassword(password: string, stored: string): boolean {
-  const [scheme, saltB64, keyB64] = stored.split('$');
-  if (!scheme || !saltB64 || !keyB64) return false;
-  try {
-    const salt = base64ToBytes(saltB64);
-    const key = deriveKey(password, salt);
-    return timingSafeEqualStr(bytesToBase64(key), keyB64);
-  } catch {
-    return false;
-  }
 }
 
 export function utf8ByteLength(str: string): number {

@@ -19,15 +19,20 @@ beforeAll(async () => {
 }, 120_000);
 
 async function loginAll() {
-  for (const [k, phone] of Object.entries({
+  for (const [key, phone] of Object.entries({
     sa: '09120000001',
     admin: '09120000002',
     mgr: '09120000003',
     sara: '09120000004',
     ali: '09120000005',
   })) {
-    const r = await ctx.api().post('/v1/auth/login', { identifier: phone, password: 'demo1234' });
-    tokens[k] = r.body.data.idToken;
+    const [user] = await ctx.deps.store.query({
+      collection: 'users',
+      where: [['phone', '==', phone]],
+      limit: 1,
+    });
+    if (!user) throw new Error(`Missing seeded fixture: ${phone}`);
+    tokens[key] = (await ctx.issueTestSession(user.id)).idToken;
   }
   ctx.limiter.reset();
 }
@@ -54,7 +59,7 @@ describe('scheduled jobs', () => {
     await runWeeklyDigest(ctx.deps, true);
     expect(ctx.deps.mail.sent.length).toBe(before);
     expect(await runMentorDaily(ctx.deps)).toBeGreaterThanOrEqual(0);
-    expect(await flushDeferredPush(ctx.deps)).toBeGreaterThanOrEqual(0);
+    expect((await flushDeferredPush(ctx.deps)).processed).toBeGreaterThanOrEqual(0);
   });
 });
 

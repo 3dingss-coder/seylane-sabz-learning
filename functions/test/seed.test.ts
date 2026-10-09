@@ -78,12 +78,14 @@ describe('real catalog seed (PROMPT 003/004)', () => {
     expect(users).toHaveLength(7);
   });
 
-  it('a demo marketer can complete a real seeded section end-to-end', async () => {
-    const login = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: '09120000004', password: 'demo1234' });
-    expect(login.status).toBe(200);
-    const token = login.body.data.idToken as string;
+  it('a seeded marketer fixture can complete a real section end-to-end with a test-only session', async () => {
+    const [demoMarketer] = await ctx.deps.store.query({
+      collection: 'users',
+      where: [['phone', '==', '09120000004']],
+      limit: 1,
+    });
+    if (!demoMarketer) throw new Error('Missing seeded marketer fixture');
+    const token = (await ctx.issueTestSession(demoMarketer.id)).idToken;
     const home = await ctx.api(token).get('/v1/me/home');
     expect(home.body.data.packages.length).toBe(8);
     const pkg = await ctx.api(token).get('/v1/me/packages/seed-pkg-vitas');

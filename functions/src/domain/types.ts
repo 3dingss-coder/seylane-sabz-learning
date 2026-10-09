@@ -6,8 +6,10 @@ export type UserStatus = 'active' | 'inactive';
 export interface User {
   name: string;
   phone: string | null;
+  /** Null or absent means the number was never verified by an approved identity provider. */
+  phoneVerifiedAt?: string | null;
   email: string | null;
-  /** True for accounts created without a password after verified phone sign-in. */
+  /** Legacy metadata retained on stored rows; never establishes identity or grants a session. */
   passwordless?: boolean;
   /** Residence («محل سکونت»), captured at sign-up; null on accounts created before it existed. */
   province: string | null;
@@ -304,7 +306,7 @@ export interface Notification {
   body: string;
   actionRef: string | null;
   readAt: string | null;
-  pushStatus: 'none' | 'sent' | 'deferred' | 'skipped' | 'failed';
+  pushStatus: 'none' | 'sent' | 'partial' | 'deferred' | 'skipped' | 'failed' | 'unknown';
   deliverAfter: string | null;
   createdAt: string;
 }

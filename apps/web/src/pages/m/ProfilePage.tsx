@@ -11,16 +11,14 @@ import { ROLE_LABEL, faDate } from '@/lib/format';
 import { toPersianDigits } from '@/lib/digits';
 import type { Me } from '@/lib/types';
 
-/** Profile: name, password change, logout (shared by all roles). */
+/** Profile: name, notifications and logout (shared by all roles). */
 export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
   const { user, setUser, logout } = useAuth();
   const toast = useToast();
   const nav = useNavigate();
   const [name, setName] = useState(user?.name ?? '');
-  const [cur, setCur] = useState('');
-  const [next, setNext] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<'' | 'name' | 'pw' | 'out'>('');
+  const [busy, setBusy] = useState<'' | 'name' | 'out'>('');
   if (!user) return null;
 
   const saveName = async (e: FormEvent) => {
@@ -33,23 +31,6 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
     } catch (err) {
       setErrors(err instanceof ApiError ? err.fields : {});
       toast.show({ type: 'error', message: errMsg(err) });
-    } finally {
-      setBusy('');
-    }
-  };
-  const changePw = async (e: FormEvent) => {
-    e.preventDefault();
-    if (next.length < 8) return setErrors({ newPassword: 'رمز جدید باید حداقل ۸ نویسه باشد.' });
-    setBusy('pw');
-    try {
-      await api.post('/me/password', { currentPassword: cur, newPassword: next });
-      toast.show({ type: 'success', message: 'رمز عوض شد.' });
-      setCur('');
-      setNext('');
-      setErrors({});
-    } catch (err) {
-      const f = err instanceof ApiError ? err.fields : {};
-      setErrors(Object.keys(f).length ? f : { currentPassword: errMsg(err) });
     } finally {
       setBusy('');
     }
@@ -97,48 +78,6 @@ export function ProfilePage({ embedded = false }: { embedded?: boolean }) {
         </form>
       </Card>
       <PushOptIn />
-      {user.passwordless ? (
-        <Card role="status">
-          <h2 className="text-base font-bold">ورود بدون رمز</h2>
-          <p className="mt-2 text-sm leading-6 text-text-secondary">
-            برای این حساب رمزی تعریف نشده است. تغییر یا ساخت رمز تا زمانی که تأیید شمارهٔ امن فعال
-            شود در دسترس نیست؛ از مدیر سامانه دربارهٔ روش ورود حساب خود راهنمایی بگیرید.
-          </p>
-        </Card>
-      ) : (
-        <Card>
-          <form onSubmit={changePw} className="flex flex-col gap-3">
-            <h2 className="text-base font-bold">تغییر رمز</h2>
-            <Input
-              label="رمز فعلی"
-              type="password"
-              ltr
-              autoComplete="current-password"
-              value={cur}
-              onChange={(e) => setCur(e.target.value)}
-              error={errors.currentPassword}
-            />
-            <Input
-              label="رمز جدید"
-              type="password"
-              ltr
-              autoComplete="new-password"
-              value={next}
-              onChange={(e) => setNext(e.target.value)}
-              error={errors.newPassword}
-              hint="حداقل ۸ نویسه"
-            />
-            <Button
-              type="submit"
-              variant="secondary"
-              loading={busy === 'pw'}
-              disabled={!cur || !next}
-            >
-              تغییر رمز
-            </Button>
-          </form>
-        </Card>
-      )}
       <Button
         variant="danger"
         loading={busy === 'out'}

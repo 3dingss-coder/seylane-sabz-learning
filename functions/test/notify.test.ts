@@ -43,12 +43,10 @@ describe('deadlines & escalation (28.2 #4)', () => {
     expect(await notifs(m.id, 'deadline_warning')).toHaveLength(2);
     expect(await notifs(m.id, 'deadline_passed')).toHaveLength(1);
     expect(await notifs(mgr.id, 'escalation')).toHaveLength(1);
-    // still accessible after deadline (D15: no automatic lock)
-    const login = await ctx
-      .api()
-      .post('/v1/auth/login', { identifier: m.phone, password: 'pass1234' });
+    // A current session confirms the passed deadline does not automatically lock the package.
+    const currentSession = await ctx.issueTestSession(m.id);
     expect(
-      (await ctx.api(login.body.data.idToken).get(`/v1/me/packages/${fx.packageId}`)).status,
+      (await ctx.api(currentSession.idToken).get(`/v1/me/packages/${fx.packageId}`)).status,
     ).toBe(200);
   });
 });
@@ -71,12 +69,73 @@ describe('quiet hours (28.2 #11)', () => {
       { priority: 'high', urgent: true },
     );
     expect(ctx.deps.push.sent).toHaveLength(1);
-    expect(await flushDeferredPush(ctx.deps)).toBe(0);
+    expect(await flushDeferredPush(ctx.deps)).toMatchObject({ processed: 0, sent: 0 });
     ctx.setNow('2026-10-04T03:31:00.000Z'); // 07:01 Tehran
-    expect(await flushDeferredPush(ctx.deps)).toBe(1);
+    expect(await flushDeferredPush(ctx.deps)).toMatchObject({ processed: 1, sent: 1, failed: 0 });
     expect(ctx.deps.push.sent).toHaveLength(2);
     // push payload is generic (no sensitive details on lock screen)
     expect(ctx.deps.push.sent[0]?.msg.body).not.toContain('فوری');
+  });
+
+  it('caps each deferred-push sweep and reports a possible remaining backlog', async () => {
+    const m = await ctx.user('marketer');
+    const now = '2026-10-04T03:31:00.000Z';
+    ctx.setNow(now);
+    await ctx.deps.store.set('device_tokens/fcm-batch', {
+      userId: m.id,
+      token: 'fcm-token-batch',
+      platform: 'web',
+    });
+    for (let index = 0; index < 25; index++) {
+      await ctx.deps.store.set(`notifications/deferred-batch-${index}`, {
+        userId: m.id,
+        type: 'new_assignment',
+        title: 'آموزش جدید',
+        body: 'x',
+        createdAt: now,
+        pushStatus: 'deferred',
+        deliverAfter: now,
+      });
+    }
+
+    const summary = await flushDeferredPush(ctx.deps);
+    expect(summary).toMatchObject({ selected: 20, processed: 20, backlogPossible: true, sent: 20 });
+    const remaining = await ctx.deps.store.query<{ pushStatus: string }>({
+      collection: 'notifications',
+      where: [
+        ['userId', '==', m.id],
+        ['pushStatus', '==', 'deferred'],
+      ],
+    });
+    expect(remaining).toHaveLength(5);
+  });
+
+  it('records ambiguous push outcomes and never blindly retries a claimed deferred delivery', async () => {
+    const m = await ctx.user('marketer');
+    await ctx.deps.store.set('device_tokens/fcm-ambiguous', {
+      userId: m.id,
+      token: 'fcm-token-ambiguous',
+      platform: 'web',
+    });
+    ctx.setNow('2026-10-03T19:30:00.000Z');
+    await notifyUsers(ctx.deps, [m.id], 'new_assignment', { title: 'آموزش', body: 'x' });
+    expect((await notifs(m.id))[0]?.pushStatus).toBe('deferred');
+
+    let sends = 0;
+    ctx.deps.push.send = async () => {
+      sends++;
+      return { sent: 0, invalidTokens: [], unknownTokens: ['fcm-token-ambiguous'] };
+    };
+    ctx.setNow('2026-10-04T03:31:00.000Z');
+    const [first, concurrent] = await Promise.all([
+      flushDeferredPush(ctx.deps),
+      flushDeferredPush(ctx.deps),
+    ]);
+    expect(first.processed + concurrent.processed).toBe(1);
+    expect(first.unknown + concurrent.unknown).toBe(1);
+    expect(sends).toBe(1);
+    expect((await notifs(m.id))[0]?.pushStatus).toBe('unknown');
+    expect((await flushDeferredPush(ctx.deps)).processed).toBe(0);
   });
 
   it('in-app notifications are always created; read-all works', async () => {

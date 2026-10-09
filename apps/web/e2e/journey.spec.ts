@@ -1,222 +1,69 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-/**
- * §28.2 key journeys on the real seed (catalog from «لیست برندها و محصولات سیلانه سبز» +
- * sample training packages + demo users). Media playback is simulated through the same
- * heartbeat API the player uses (headless Chromium lacks AAC/H.264 codecs).
- */
 test.describe.configure({ mode: 'serial' });
 
-const API = 'http://127.0.0.1:5001/v1';
-const PASS = 'demo1234';
-const ADMIN = '09120000002';
-const MANAGER = '09120000003';
-const MARKETER = '09120000004';
-const FRESH_MARKETER = '09120000007';
+const uniquePhone = () => `09${String(Date.now()).slice(-9)}`;
 
-// API tokens are cached per user: login is rate-limited to 10/min per IP (spec §21).
-const tokens = new Map<string, string>();
-async function token(request: APIRequestContext, identifier: string) {
-  const cached = tokens.get(identifier);
-  if (cached) return cached;
-  const r = await request.post(`${API}/auth/login`, { data: { identifier, password: PASS } });
-  expect(r.ok(), await r.text()).toBeTruthy();
-  const t = ((await r.json()) as { data: { idToken: string } }).data.idToken;
-  tokens.set(identifier, t);
-  return t;
-}
-
-async function login(page: Page, identifier: string) {
-  // Marketers sign in through the UI with their phone only. Admin/manager panels use a
-  // username + password form, so for the seeded staff phones we establish the session
-  // through the API and let the app restore it from the stored refresh token.
-  const staff = [ADMIN, MANAGER].includes(identifier);
-  if (staff) {
-    const r = await page.request.post(`${API}/auth/login`, {
-      data: { identifier, password: PASS },
-    });
-    expect(r.ok(), await r.text()).toBeTruthy();
-    const { refreshToken } = ((await r.json()) as { data: { refreshToken: string } }).data;
-    await page.addInitScript((rt) => localStorage.setItem('ssl.refresh', rt), refreshToken);
-    await page.goto(identifier === ADMIN ? '/admin' : '/manager');
-    await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
-    return;
-  }
+test('phone-only login does not reveal account state or issue a session', async ({ page }) => {
   await page.goto('/login');
-  await page.getByLabel(/شماره موبایل/).fill(identifier);
-  await page.getByRole('button', { name: 'ورود' }).click();
-  // Wait until the session is established before navigating (avoids racing the login call).
-  await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
-}
+  const phone = page.getByLabel('شماره موبایل');
+  const submit = page.getByRole('button', { name: 'ورود' });
 
-async function expectImagesLoaded(page: Page, selector: string, min: number) {
-  const imgs = page.locator(selector);
-  await expect(imgs.first()).toBeVisible();
-  const all = await imgs.all();
-  expect(all.length).toBeGreaterThanOrEqual(min);
-  for (const img of all) {
-    await expect
-      .poll(() =>
-        img.evaluate(
-          (el) => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth > 0,
-        ),
-      )
-      .toBe(true);
-  }
-}
+  await phone.fill('09120000001'); // seeded privileged fixture: its number is not a credential
+  await submit.click();
+  const knownNumberMessage = await page.getByRole('alert').textContent();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByLabel('نام و نام خانوادگی')).toHaveCount(0);
 
-test('marketer: home → section → (played) → quiz pass → next section unlocked', async ({
-  page,
-  request,
-}) => {
-  await login(page, MARKETER);
-  const next = page.getByTestId('next-item');
-  await expect(next).toBeVisible();
-  await expectImagesLoaded(page, '[data-testid="package-card"] img', 1);
-
-  const t = await token(request, MARKETER);
-  const auth = { Authorization: `Bearer ${t}` };
-  const home = (await (await request.get(`${API}/me/home`, { headers: auth })).json()) as {
-    data: { nextItem: { sectionId: string; packageId: string } };
-  };
-  const { sectionId, packageId } = home.data.nextItem;
-
-  await next.getByRole('button').click();
-  await expect(page).toHaveURL(new RegExp(`/sections/${sectionId}$`));
-  await expect(page.getByText('پیشرفت این قسمت')).toBeVisible();
-
-  // One quiz per package: it lives on the podcast section, so play THAT section (the next
-  // item can be a quiz-less video section, e.g. when a package lists its video first).
-  const pkgDetail = (await (
-    await request.get(`${API}/me/packages/${packageId}`, { headers: auth })
-  ).json()) as { data: { sections: Array<{ id: string; quizRequired?: boolean }> } };
-  const quizSectionId =
-    pkgDetail.data.sections.find((x) => x.quizRequired !== false)?.id ?? sectionId;
-  await page.goto(`/sections/${quizSectionId}`);
-  await expect(page.getByText('پیشرفت این قسمت')).toBeVisible();
-
-  // Simulate continuous playback with playedDeltaSec heartbeats (+ idempotency keys).
-  const sec = (await (
-    await request.get(`${API}/me/sections/${quizSectionId}`, { headers: auth })
-  ).json()) as {
-    data: { section: { durationSec: number; quizId: string } };
-  };
-  const dur = sec.data.section.durationSec;
-  let pos = 0;
-  let completed = false;
-  for (let i = 0; i < 19 && !completed; i++) {
-    pos = Math.min(dur, pos + 60);
-    const r = await request.post(`${API}/me/sections/${quizSectionId}/progress`, {
-      headers: { ...auth, 'Idempotency-Key': `e2e-${quizSectionId}-${i}` },
-      data: { positionSec: pos, playedDeltaSec: 60, ts: new Date().toISOString() },
-    });
-    expect(r.ok(), `heartbeat ${i}: ${r.status()} ${await r.text()}`).toBeTruthy();
-    completed = ((await r.json()) as { data: { completed: boolean } }).data.completed;
-  }
-  expect(completed).toBe(true);
-
-  // Correct answers come from the admin API only (never shipped to the marketer client).
-  const at = await token(request, ADMIN);
-  const quiz = (await (
-    await request.get(`${API}/admin/quizzes/${sec.data.section.quizId}`, {
-      headers: { Authorization: `Bearer ${at}` },
-    })
-  ).json()) as {
-    data: {
-      questions: Array<{
-        stem: string;
-        options: Array<{ key: string; text: string }>;
-        answerKey: string;
-      }>;
-    };
-  };
-
-  await page.getByTestId('start-quiz').click();
-  await page.getByTestId('quiz-start').click();
-  for (const q of quiz.data.questions) {
-    await expect(page.locator('legend', { hasText: q.stem })).toBeVisible();
-    const correct = q.options.find((o) => o.key === q.answerKey)?.text ?? '';
-    await page
-      .locator('label')
-      .filter({ has: page.getByText(correct, { exact: true }) })
-      .first()
-      .click();
-    const nextBtn = page.getByRole('button', { name: /بعدی/ });
-    if (await nextBtn.isVisible()) await nextBtn.click();
-  }
-  await page.getByTestId('quiz-submit').click();
-  await page.getByTestId('quiz-confirm').click();
-  await expect(page.getByTestId('quiz-result')).toContainText('قبول شدی');
-
-  // Sequential lock: the next section of the package is now open.
-  await page.goto(`/packages/${packageId}`);
-  const rows = page.getByTestId('section-row');
-  await expect(rows.nth(0)).toContainText('تکمیل', { timeout: 15_000 });
-  await expect(rows.nth(1)).toBeVisible();
+  await phone.fill('09990000000');
+  await submit.click();
+  await expect(page.getByRole('alert')).toHaveText(knownNumberMessage ?? '');
+  await expect(page).toHaveURL(/\/login$/);
+  expect(await page.evaluate(() => localStorage.getItem('ssl.refresh'))).toBeNull();
 });
 
-test('fresh marketer can open later sections without finishing earlier ones', async ({
-  page,
-  request,
-}) => {
-  await login(page, FRESH_MARKETER);
-  await page.goto('/learn');
-  await page.getByRole('tab', { name: /جدید/ }).click();
-  await expect(page.getByTestId('package-card').first()).toBeVisible();
-  // Multi-part package (فورمی): no sequential lock, part 2 is open from the start.
-  await page.goto('/packages/seed-pkg-formi');
-  await expect(page.getByTestId('section-row').nth(1)).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/ابتدا قسمت قبل را کامل کنید/)).toHaveCount(0);
-
-  const t = await token(request, FRESH_MARKETER);
-  const pk = (await (
-    await request.get(`${API}/me/packages/seed-pkg-formi`, {
-      headers: { Authorization: `Bearer ${t}` },
-    })
-  ).json()) as {
-    data: { sections: Array<{ quizId: string; state: string; quizRequired?: boolean }> };
-  };
-  expect(pk.data.sections.some((s) => s.state === 'locked')).toBe(false);
-  // One quiz per package: it sits on the podcast section, the video section has none.
-  expect(pk.data.sections[0]?.quizRequired).not.toBe(false);
-  expect(pk.data.sections[1]?.quizRequired).toBe(false);
-  // The package quiz is open right away, without finishing any media first.
-  const host = pk.data.sections[0];
-  const r = await request.post(`${API}/me/quizzes/${host?.quizId}/attempts`, {
-    headers: { Authorization: `Bearer ${t}` },
-  });
-  expect([200, 201]).toContain(r.status());
-});
-
-test('manager: team dashboard, completion report and CSV export', async ({ page }) => {
-  await login(page, MANAGER);
-  await expect(page).toHaveURL(/\/manager$/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('تیم');
-  await page.goto('/manager/reports');
-  await expect(page.getByText(/ردیف/)).toBeVisible();
-  const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'خروجی CSV' }).click();
-  expect((await download).suggestedFilename()).toMatch(/^completion-report-.*\.csv$/);
-});
-
-test('admin: brands with real logos, unassigned tab, package editor', async ({ page }) => {
-  await login(page, ADMIN);
-  await expect(page).toHaveURL(/\/admin$/);
-  await page.goto('/admin/content');
-  await expectImagesLoaded(page, '[data-testid="brand-card"] img', 12);
-  await page.getByRole('tab', { name: /بدون تخصیص/ }).click();
-  await expect(page.getByText(/دارت/).first()).toBeVisible();
-  await page.goto('/admin/packages/seed-pkg-formi');
-  await expect(page.getByRole('heading', { name: 'آموزش کیت درمانی فورمی' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /آزمون/ }).first()).toBeVisible();
-});
-
-test('RBAC: marketer cannot use the admin panel (explanation + switch account)', async ({
+test('self-registration has a generic response, creates no session, and asks for no password or OTP', async ({
   page,
 }) => {
-  await login(page, FRESH_MARKETER);
-  await page.goto('/admin/users');
+  await page.goto('/register');
+  await page.getByLabel('نام و نام خانوادگی').fill('آزمون مرورگر');
+  await page.getByLabel('شماره موبایل').fill(uniquePhone());
+  await expect(page.getByLabel(/رمز|کد تأیید/)).toHaveCount(0);
+
+  await page.getByLabel('انتخاب محل فعالیت شما').click();
+  const provinces = page.getByRole('listbox', { name: 'استان‌های ایران' });
+  await expect(provinces).toBeVisible();
+  await page.getByRole('combobox', { name: 'جستجوی استان' }).fill('یزد');
+  await page.getByRole('option', { name: 'یزد', exact: true }).click();
+  await page.getByLabel('شهر').click();
+  const cities = page.getByRole('listbox', { name: 'شهرهای استان یزد' });
+  await page.getByRole('combobox', { name: 'جستجوی شهر' }).fill('یزد');
+  await cities.getByRole('option', { name: 'یزد', exact: true }).click();
+  const submit = page.getByRole('button', { name: 'ارسال درخواست ثبت‌نام' });
+  await submit.click();
+  const newNumberMessage = await page.getByRole('status').textContent();
+  await expect(page).toHaveURL(/\/register$/);
+  await expect(page.getByRole('status')).toContainText(
+    /این پاسخ وجود یا نبود حساب فعلی را نشان نمی‌دهد/,
+  );
+  await expect(page.getByLabel(/رمز|کد تأیید/)).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('ssl.refresh'))).toBeNull();
+
+  await page.getByLabel('شماره موبایل').fill('09120000001'); // seeded superadmin fixture
+  await submit.click();
+  await expect(page.getByRole('status')).toHaveText(newNumberMessage ?? '');
+  await expect(page).toHaveURL(/\/register$/);
+  expect(await page.evaluate(() => localStorage.getItem('ssl.refresh'))).toBeNull();
+});
+
+test('staff panel explains the unavailable identity path instead of asking for a password', async ({
+  page,
+}) => {
+  await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'پنل ادمین' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'ورود با حساب ادمین' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'کاربران' })).toHaveCount(0);
+  await expect(
+    page.getByText(/شمارهٔ تلفن به‌تنهایی هویت یا نقش مدیریتی را ثابت نمی‌کند/),
+  ).toBeVisible();
+  await expect(page.getByLabel(/رمز|کد تأیید/)).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'رفتن به ورود بازاریاب' })).toBeVisible();
 });

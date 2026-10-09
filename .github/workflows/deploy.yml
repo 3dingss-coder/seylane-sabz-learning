@@ -9,6 +9,7 @@ name: Deploy to Cloudflare (Worker + D1 Database)
 #
 # Optional Secrets / Variables:
 #   GEMINI_API_KEY                 (Optional: enables AI Mentor; falls back to rule-based mentor without it)
+#   FCM_SERVICE_ACCOUNT_JSON       (Optional: enables real FCM push delivery; absent/invalid credentials keep push disabled)
 #   CLOUDFLARE_D1_DATABASE_NAME    (Optional: defaults to `seylane-sabz-db`; must match the pre-existing D1 binding in wrangler.toml)
 #   CLOUDFLARE_PAGES_PROJECT       (Optional: if you also want `wrangler pages deploy` in addition to Worker)
 on:
@@ -69,6 +70,11 @@ jobs:
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
           VITE_APP_ENV: prod
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
         run: npm run build
 
       - name: Verify Existing Cloudflare D1 & Deploy Full-Stack Worker
@@ -78,9 +84,17 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DB_NAME: ${{ vars.CLOUDFLARE_D1_DATABASE_NAME || 'seylane-sabz-db' }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+          # `wrangler deploy` reruns the configured build and overwrites apps/web/dist, so the
+          # build-time values must also be present here or the deployed assets lose production config.
           VITE_API_BASE: ${{ vars.VITE_API_BASE }}
           VITE_SENTRY_DSN: ${{ vars.VITE_SENTRY_DSN }}
           VITE_APP_ENV: prod
+          VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_VAPID_KEY: ${{ vars.VITE_FIREBASE_VAPID_KEY }}
         run: |
           set -euo pipefail
           echo "Checking pre-existing Cloudflare D1 database: $DB_NAME ..."
@@ -108,8 +122,10 @@ jobs:
             exit 1
           fi
 
-          echo "Applying additive, idempotent D1 schema migration (migrations/0001_init.sql) ..."
+          # These migrations are additive and idempotent. Do not create/replace a database here.
+          echo "Applying additive, idempotent D1 schema migrations ..."
           npx --yes wrangler@4 d1 execute "$DB_NAME" --remote --file=migrations/0001_init.sql
+          npx --yes wrangler@4 d1 execute "$DB_NAME" --remote --file=migrations/0002_d1_tx_scopes.sql
 
           # No auto-create and no ignored migration errors: a schema or binding mismatch is a hard stop.
           npx --yes wrangler@4 deploy
@@ -117,6 +133,11 @@ jobs:
           if [ -n "$GEMINI_API_KEY" ]; then
             echo "Syncing GEMINI_API_KEY to the Worker ..."
             printf '%s' "$GEMINI_API_KEY" | npx --yes wrangler@4 secret put GEMINI_API_KEY
+          fi
+
+          if [ -n "$FCM_SERVICE_ACCOUNT_JSON" ]; then
+            echo "Syncing FCM_SERVICE_ACCOUNT_JSON to the Worker ..."
+            printf '%s' "$FCM_SERVICE_ACCOUNT_JSON" | npx --yes wrangler@4 secret put FCM_SERVICE_ACCOUNT_JSON
           fi
 
       - name: Optional Deploy to Cloudflare Pages (if CLOUDFLARE_PAGES_PROJECT is set)

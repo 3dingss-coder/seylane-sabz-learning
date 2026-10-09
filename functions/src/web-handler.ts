@@ -10,7 +10,8 @@ import { randomBytesBase64Url, utf8ByteLength } from './lib/crypto';
 import { systemClock } from './lib/time';
 import { GeminiClient } from './llm/gemini';
 import { DisabledMailer } from './mail/types';
-import { DisabledPushSender } from './push/types';
+import { FcmHttpPushSender, parseServiceAccount } from './push/fcm-http';
+import { DisabledPushSender, type PushSender } from './push/types';
 import { adminRouter } from './routes/admin';
 import { authRouter } from './routes/auth';
 import { healthRouter } from './routes/health';
@@ -19,7 +20,7 @@ import { meRouter } from './routes/me';
 import type { Deps } from './services/context';
 import { D1Store, type D1Database } from './store/d1';
 import { InMemoryStore } from './store/helpers';
-import type { Data, DocStore } from './store/types';
+import { StoreConflictError, type Data, type DocStore } from './store/types';
 
 export interface CloudflareEnv {
   DB?: D1Database;
@@ -31,25 +32,44 @@ export interface CloudflareEnv {
   LOCAL_AUTH_SECRET?: string;
   GEMINI_API_KEY?: string;
   GEMINI_MODEL?: string;
+  FCM_SERVICE_ACCOUNT_JSON?: string;
   APP_URL?: string;
   PLAYBACK_BUDGET?: string;
   RATE_LIMIT_SCALE?: string;
   [key: string]: unknown;
 }
 
-async function resolveSigningSecret(store: DocStore, envSecret?: string): Promise<string> {
+export async function resolveSigningSecret(store: DocStore, envSecret?: string): Promise<string> {
   if (envSecret && envSecret.trim().length >= 16) return envSecret.trim();
   const key = '_system/auth_secret';
-  const existing = await store.get<{ value: string }>(key);
-  if (existing?.value) return existing.value;
+  const readStoredSecret = async (): Promise<string | null> => {
+    const record = await store.get<{ value: string }>(key);
+    if (!record) return null;
+    if (typeof record.value !== 'string' || record.value.trim().length < 16) {
+      throw new Error(
+        'Stored local auth signing secret is invalid; refusing to use an unstable key.',
+      );
+    }
+    return record.value.trim();
+  };
+
+  const existing = await readStoredSecret();
+  if (existing) return existing;
+
   const generated = randomBytesBase64Url(48);
   try {
     await store.create(key, { value: generated, createdAt: new Date().toISOString() });
-  } catch {
-    // Created concurrently by another worker isolate
+    return generated;
+  } catch (err) {
+    // Only an explicit uniqueness conflict means another isolate initialized the stable key.
+    // Timeouts and storage failures have unknown commit outcomes and must not use a local fallback.
+    if (!(err instanceof StoreConflictError)) throw err;
   }
-  const saved = await store.get<{ value: string }>(key);
-  return saved?.value ?? generated;
+
+  const saved = await readStoredSecret();
+  if (!saved)
+    throw new Error('Concurrent local auth signing secret creation was not visible in storage.');
+  return saved;
 }
 
 /**
@@ -91,7 +111,7 @@ export async function buildCloudflareDeps(
       purgeAfterMigrate: stringEnv.R2_MIGRATE_PURGE === 'on',
       now: () => systemClock().getTime(),
     }),
-    push: new DisabledPushSender(),
+    push: buildPushSender(stringEnv),
     mail: new DisabledMailer(),
     llm: finalConfig.geminiApiKey
       ? new GeminiClient(finalConfig.geminiApiKey, finalConfig.geminiModel)
@@ -100,10 +120,25 @@ export async function buildCloudflareDeps(
   };
 }
 
-function isOriginAllowed(origin: string, requestUrl: URL, allowedOrigins: string[]): boolean {
+/** Real FCM delivery only when a valid service account is configured; never blocks startup. */
+function buildPushSender(env: Record<string, string | undefined>): PushSender {
+  const sa = parseServiceAccount(env.FCM_SERVICE_ACCOUNT_JSON);
+  if (!sa) {
+    if (env.FCM_SERVICE_ACCOUNT_JSON) {
+      console.warn('[push] FCM_SERVICE_ACCOUNT_JSON is set but invalid; push is disabled');
+    }
+    return new DisabledPushSender();
+  }
+  return new FcmHttpPushSender(sa, env.APP_URL ?? '');
+}
+
+function isOriginAllowed(origin: string, requestUrl: URL, config: AppConfig): boolean {
   const clean = origin.replace(/\/$/, '');
   if (clean === requestUrl.origin) return true;
-  if (allowedOrigins.includes(clean)) return true;
+  if (config.allowedOrigins.includes(clean)) return true;
+  // Preview hosts are convenient for local/staging review but must be explicitly allowlisted in
+  // production; otherwise any user-created *.pages.dev / *.workers.dev site could call the API.
+  if (config.env === 'prod') return false;
   try {
     const u = new URL(clean);
     if (
@@ -130,7 +165,7 @@ function securityHeaders(origin: string | null, requestUrl: URL, config: AppConf
     'Cross-Origin-Resource-Policy': 'cross-origin',
     'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   });
-  if (origin && isOriginAllowed(origin, requestUrl, config.allowedOrigins)) {
+  if (origin && isOriginAllowed(origin, requestUrl, config)) {
     h.set('Access-Control-Allow-Origin', origin);
     h.set(
       'Access-Control-Allow-Headers',
@@ -187,7 +222,7 @@ function serveBytes(
 
 /**
  * Creates a zero-socket Web Fetch handler (`(request: Request) => Promise<Response>`)
- * that executes all `/v1/*` API routes directly in memory.
+ * that executes `/v1/*` routes against the configured D1/local store and R2/blob bindings.
  */
 export function createFetchHandler(
   deps: Deps,
@@ -241,9 +276,47 @@ export function createFetchHandler(
           const token = decodeURIComponent(uploadMatch[1] ?? '');
           const t = blob.verifyTicket(token, 'put');
           if (!t) throw new ApiError('FORBIDDEN', 'لینک آپلود منقضی یا نامعتبر است.');
+          const libraryPart = /^uploads\/([^/]+)\/(\d+)$/.exec(t.p);
+          const expectedPartSize = async (): Promise<number | null> => {
+            if (!libraryPart) return null;
+            const media = await deps.store.get<{
+              library?: boolean;
+              status?: string;
+              declaredSize?: number;
+              partSize?: number;
+              totalParts?: number;
+            }>(`media/${libraryPart[1]}`);
+            const index = Number(libraryPart[2]);
+            const partSize = media?.partSize ?? 1024 * 1024;
+            const totalParts = media?.totalParts ?? 0;
+            const declaredSize = media?.declaredSize;
+            if (
+              !media?.library ||
+              media.status !== 'pending' ||
+              !Number.isSafeInteger(index) ||
+              index < 0 ||
+              !Number.isSafeInteger(totalParts) ||
+              totalParts <= 0 ||
+              index >= totalParts ||
+              typeof declaredSize !== 'number' ||
+              !Number.isSafeInteger(declaredSize) ||
+              !Number.isSafeInteger(partSize) ||
+              partSize <= 0
+            ) {
+              throw new ApiError('CONFLICT', 'این آپلود دیگر فعال نیست.');
+            }
+            const size =
+              index < totalParts - 1 ? partSize : declaredSize - partSize * (totalParts - 1);
+            if (size <= 0 || size !== t.max)
+              throw new ApiError('FORBIDDEN', 'پیوند بخش آپلود با این فایل هم‌خوانی ندارد.');
+            return size;
+          };
+          const expected = await expectedPartSize();
           const bytes = new Uint8Array(await request.arrayBuffer());
-          if (bytes.byteLength > t.max)
-            throw new ApiError('VALIDATION', 'حجم فایل بیش از حد مجاز است.');
+          if (bytes.byteLength > t.max || (expected !== null && bytes.byteLength !== expected))
+            throw new ApiError('VALIDATION', 'حجم فایل با بخش درخواستی مطابقت ندارد.');
+          // Re-check after reading the body so an expired/aborted upload cannot write a late part.
+          await expectedPartSize();
           await blob.put(t.p, bytes, t.ct);
           return jsonResponse({ data: { ok: true, size: bytes.byteLength } }, 200, baseHeaders);
         } catch (e) {

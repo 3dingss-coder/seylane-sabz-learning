@@ -44,16 +44,15 @@ describe('session survives transient failures', () => {
     expect(expired).toHaveBeenCalled();
   });
 
-  it('retries phone-login on 503 and explains Cloudflare edge JSON errors', async () => {
+  it('does not retry phone-login on 503 because POST retries are not implicit', async () => {
     const { request } = await load();
-    let n = 0;
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
-      ++n === 1 ? json(503, { error: { code: 'INTERNAL', message: 'x' } }) : json(200, { data: { ok: 1 } }),
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      json(503, { error: { code: 'INTERNAL', message: 'x' } }),
     );
     await expect(
       request('/auth/phone-login', { method: 'POST', body: { phone: '0912' }, anonymous: true }),
-    ).resolves.toEqual({ ok: 1 });
-    expect(n).toBe(2);
+    ).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it('shows a clear message for Cloudflare edge JSON errors (no `error` field)', async () => {

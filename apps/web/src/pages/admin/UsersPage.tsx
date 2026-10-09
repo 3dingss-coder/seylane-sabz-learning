@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Pencil, Search } from 'lucide-react';
+import { Pencil, Search } from 'lucide-react';
 import {
   Button,
   EmptyState,
@@ -16,7 +16,6 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { ResidencePicker, type Residence } from '@/components/common/ResidencePicker';
 import { QueryState } from '@/components/common/QueryState';
 import { DataTable } from '@/components/admin/DataTable';
-import { ConfirmDialog } from '@/components/admin/ConfirmDialog';
 import { MemberTimeline } from '@/components/reports/MemberTimeline';
 import { ApiError, api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -26,7 +25,7 @@ import { ROLE_LABEL, faNumber, faRelative } from '@/lib/format';
 import type { Me, Role, Timeline } from '@/lib/types';
 import { useBrands, useTeams, useUsers } from './adminQueries';
 
-/** A6 — کاربران: role, team, status, brand access, password reset. */
+/** A6 — کاربران: role, team, status, brand access. */
 export function UsersPage() {
   const users = useUsers();
   const teams = useTeams();
@@ -179,8 +178,6 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
     province: user.province ?? '',
     city: user.city ?? '',
   });
-  const [reset, setReset] = useState(false);
-  const [tempPwd, setTempPwd] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const qc = useQueryClient();
   const toast = useToast();
@@ -212,18 +209,6 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
         ? setErrors(e.fields)
         : toast.show({ type: 'error', message: errMsg(e) }),
   });
-  const doReset = useMutation({
-    mutationFn: () =>
-      api.post<{ method: 'email' | 'temporary'; temporaryPassword: string | null }>(
-        `/admin/users/${user.id}/reset-password`,
-      ),
-    onSuccess: (r) => {
-      setReset(false);
-      if (r.temporaryPassword) setTempPwd(r.temporaryPassword);
-      else toast.show({ type: 'success', message: 'لینک بازیابی به ایمیل کاربر ارسال شد.' });
-    },
-    onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
-  });
   const submit = () => {
     if (residence.province && !residence.city) {
       setErrors({ city: 'شهر را انتخاب کنید.' });
@@ -238,35 +223,12 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
       title={`ویرایش ${user.name}`}
       size="lg"
       footer={
-        <>
-          <Button
-            variant="ghost"
-            icon={<KeyRound className="size-4" aria-hidden />}
-            onClick={() => setReset(true)}
-          >
-            بازتنظیم رمز
-          </Button>
-          <Button loading={save.isPending} onClick={submit}>
-            ذخیره
-          </Button>
-        </>
+        <Button loading={save.isPending} onClick={submit}>
+          ذخیره
+        </Button>
       }
     >
       <div className="flex flex-col gap-3">
-        {tempPwd && (
-          <div
-            role="status"
-            className="rounded-card border border-primary/30 bg-primary-light p-3 text-sm"
-          >
-            رمز موقت:{' '}
-            <b dir="ltr" className="select-all font-mono text-base">
-              {tempPwd}
-            </b>
-            <p className="mt-1 text-xs text-text-secondary">
-              این رمز فقط یک بار نمایش داده می‌شود. آن را به کاربر بدهید تا بعد از ورود عوض کند.
-            </p>
-          </div>
-        )}
         <Input
           label="نام"
           value={name}
@@ -347,16 +309,6 @@ function UserDialog({ user, onClose }: { user: Me; onClose: () => void }) {
           </div>
         </fieldset>
       </div>
-      <ConfirmDialog
-        open={reset}
-        title="بازتنظیم رمز؟"
-        loading={doReset.isPending}
-        onClose={() => setReset(false)}
-        onConfirm={() => doReset.mutate()}
-        confirmText="بازتنظیم"
-      >
-        همه نشست‌های فعلی کاربر بسته می‌شود. برای کاربران موبایلی یک رمز موقت ساخته می‌شود.
-      </ConfirmDialog>
     </Modal>
   );
 }

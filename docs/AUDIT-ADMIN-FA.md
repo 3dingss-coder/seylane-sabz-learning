@@ -1,5 +1,7 @@
 # ممیزی پنل ادمین — فهرست کامل باگ‌ها و همگامی با پنل بازاریاب
 
+> **تاریخی و منسوخ برای مسیرهای auth:** این ممیزی مربوط به checkout سپتامبر ۲۰۲۶ است و مسیرهای login/reset/password را قبل از حذف آن‌ها توصیف می‌کند. در checkout فعلی reset/change-password و staff-login وجود ندارند؛ شمارهٔ seed اثبات هویت نیست و ورود تازهٔ admin نیازمند identity/session موردتأیید است. این گزارش، وضعیت live Cloudflare را هم تأیید نمی‌کند.
+
 تاریخ: ۱۴۰۵-۰۷-۰۷ (۲۰۲۶-۰۹-۲۹) · برنچ: `arena/01a0ef6c-seylane-sabz-learning` از `main` @ `faa212a`
 دامنه: `apps/web/src/pages/admin/*`، `apps/web/src/components/{ui,admin,common,reports}`، `functions/src/{routes/services/lib}`،
 پیکربندی استقرار (`wrangler.toml`، `netlify.toml`، `functions/src/index.ts`) · **پنل بازاریاب فقط برای راستی‌آزمایی «رسیدن دستور ادمین» بازبینی شد و تغییری در آن داده نشد.**
@@ -100,25 +102,22 @@
 
 ---
 
-## ۶. راهنمای بازتولید
+## ۶. روش بازتولید (بایگانی تاریخی)
 
-```bash
-npm ci
-RESEED=true LOCAL_PERSIST=false npm start     # API روی :3000/v1، وب روی :5173
-# ورودها (رمز demo1234): superadmin 09120000001 · admin 09120000002 · manager 09120000003 · marketer 09120000004
-# برای اجرای دستی کارها (نقش superadmin):
-curl -X POST localhost:3000/v1/admin/jobs/daily-reminders -H "Authorization: Bearer $TOKEN"
-```
+این ممیزی از checkout و API حافظه‌ایِ سپتامبر ۲۰۲۶ استفاده کرده است. دستورات، demo identityها و password آن محیط عمداً حذف شده‌اند و این روش دیگر برای checkout فعلی معتبر نیست. ورودهای role-based با دادهٔ seed را اجرا یا به‌عنوان credential تلقی نکنید.
 
-سنجه‌های کلیدی که در این ممیزی استفاده شد: بستن یک «مهلت مرحله» در مسیر و دیدن `deadlineAt` در `/v1/me/packages` با حساب بازاریاب؛ تیک «نمایش بایگانی» و زدن «مسیر آشنایی کامل»؛ بازکردن گفت‌وگوی «بازنشانی رمز» و زدن Esc.
+## ۷. وضعیت فعلی و ارجاع‌ها
 
-## ۷. پس از استقرار (مهم)
+این گزارش، وضعیت جاری Cloudflare، Cron، Workers Builds یا GitHub CI را تأیید نمی‌کند. توصیف‌های قدیمی دربارهٔ cron کامنت‌شده، زمان‌بند بیرونی، CI failures، ترتیب build/typecheck و test counts مربوط به همان commit تاریخی‌اند.
 
-- **Cloudflare / زمان‌بند**: دو خط آخر بلوک زیر در `wrangler.toml` فعلاً کامنت است؛ اگر پلن، Cron Triggers را اجازه داد، همین دو خط را باز کنید تا چهار cron فعال شود: `*/15 * * * *` (flush Push)، `0 * * * *` (مهلت‌ها + خلاصهٔ هفتگی)، `30 4 * * *` (منتور ۰۸:۰۰ تهران)، `30 6 * * *` (یادآوری ۱۰:۰۰ تهران). تا وقتی بلوک کامنت بماند (وضعیت فعلی)، یک سرویس زمان‌بند بیرونی (GitHub Actions schedule / cron-job.org / UptimeRobot با GET نبود — باید POST باشد) هر ساعت `POST /v1/admin/jobs/<name>` را با توکن superadmin صدا بزند. بلوک `[[d1_databases]]` تغییر نکرد.
-- **CI**: چک «Lint · Typecheck · Unit tests · Cloudflare Build» روی `main` هم قرمز است (۵ پوش آخر) و ربطی به این تغییرات ندارد: در `.github/workflows/ci.yml`، `npm run typecheck` قبل از `npm run build` اجرا می‌شود، در حالی که `functions/src/cloudflare-worker.ts` فایل تولیدیِ `functions/lib/seed-snapshot.json` را import می‌کند (`TS2307`)؛ با پاک‌کردن همان فایل، دقیقاً همین خطا محلی بازتولید شد. اصلاح = جابه‌جایی `npm run build` بالای `npm run typecheck`؛ اما workflow قابل پیچ نبود (توکن GitHub App این اجازه را ندارد) پس فقط به‌صورت patch در `docs/USER-TODO.md` §۱ ثبت شده است. `deploy.yml` اصلاً لمس نشده.
-- **Firestore**: هیچ کوئری ترکیبی تازه‌ای افزوده نشد؛ `npm run check:indexes -w functions` روی ۶۷ شکل کوئری، ۰ نیاز به ایندکس جدید گزارش می‌دهد.
-- دروازهٔ سبزِ این تغییرات: `format:check`، `lint`، `build`، `typecheck`، توابع (۱۳ فایل/۱۳۱ تست) و وب (۱۲ فایل/۶۴ تست).
+برای وضعیت فعلی از این منابع استفاده کنید:
+
+- [`CLOUDFLARE_CONFIGURATION_REPORT.md`](../CLOUDFLARE_CONFIGURATION_REPORT.md) — مقدارهای قابل‌تأیید از مخزن در برابر وضعیت زندهٔ تأییدنشده، D1/R2/cron و owner checklist.
+- [`docs/RELEASE.md`](./RELEASE.md) — preflight امن؛ هیچ دستور deploy یا production migration در این PR اجرا نشده است.
+- [`docs/USER-TODO.md`](./USER-TODO.md) — blocker احراز هویت و اقدام‌های باقی‌ماندهٔ مالک.
+
+هیچ service زمان‌بند بیرونی را با admin token وصل نکنید. Worker cron باید از dashboard و اجرای واقعی تأیید شود؛ deploy خودکار `main` نیز پیش از هر تغییر production نیازمند تأیید owner است.
 
 ---
 
- خلاصه: ۳۰ باگ قطعی پیدا و همه رفع شد؛ شش مورد آگاهانه به‌عنوان ریسک/کار آینده ثبت شد. هیچ باگی با «بستن UI» پوشانده نشد — یا علت در سرور رفع شد، یا پاسخ سرور صادقانه شد و UI همان را نشان می‌دهد.
+خلاصهٔ باگ‌ها و تست‌های این فایل فقط به audit تاریخی مربوط است؛ آن را به وضعیت فعلی یا کیفیت production تعمیم ندهید.

@@ -366,11 +366,6 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
       users.adminUpdateUser(d, actorOf(req), id(req), parse(users.adminPatchUserSchema, req.body)),
     ),
   );
-  r.post(
-    '/admin/users/:id/reset-password',
-    rateLimit(limiter, 'reset', 10, 60_000, (req) => me(req).id),
-    h(async (req) => users.adminResetPassword(d, actorOf(req), id(req))),
-  );
   r.get(
     '/admin/teams',
     h(async () => users.listTeams(d)),

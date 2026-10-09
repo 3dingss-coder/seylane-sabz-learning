@@ -69,6 +69,9 @@ export interface TestCtx {
   now: { value: Date };
   advance(ms: number): void;
   setNow(iso: string): void;
+  issueTestSession(
+    userId: string,
+  ): Promise<{ idToken: string; refreshToken: string; expiresIn: number }>;
   user(
     role: Role,
     opts?: { teamId?: string | null; name?: string; brandIds?: string[] },
@@ -117,18 +120,16 @@ export async function createCtx(
     now,
     advance: (ms) => (now.value = new Date(now.value.getTime() + ms)),
     setNow: (iso) => (now.value = new Date(iso)),
+    issueTestSession: (userId) => (deps.auth as MemoryAuthProvider).issueTestSession(userId),
     async user(role, o = {}) {
       phoneSeq++;
       const phone = `0912${String(1000000 + phoneSeq).slice(-7)}`;
-      const u = await register(
-        deps,
-        { name: o.name ?? `کاربر ${phoneSeq}`, identifier: phone, password: 'pass1234' },
-        role,
-        { teamId: o.teamId ?? null, brandIds: o.brandIds ?? [] },
-      );
-      const signed = await deps.auth.signIn(`${phone}@phone.seylane-sabz.app`, 'pass1234');
-      if (!signed.ok) throw new Error('sign-in failed');
-      return { id: u.id, token: signed.tokens.idToken, phone };
+      const u = await register(deps, { name: o.name ?? `کاربر ${phoneSeq}`, phone }, role, {
+        teamId: o.teamId ?? null,
+        brandIds: o.brandIds ?? [],
+      });
+      const signed = await (deps.auth as MemoryAuthProvider).issueTestSession(u.id);
+      return { id: u.id, token: signed.idToken, phone };
     },
     api(token) {
       const withAuth = (t: request.Test) => (token ? t.set('Authorization', `Bearer ${token}`) : t);
@@ -210,14 +211,15 @@ export async function buildFixture(
   const dur = o.durationSec ?? 300;
   const sections: Fixture['sections'] = [];
   for (let i = 0; i < (o.sections ?? 2); i++) {
+    const video = fakeMp4(dur);
     const up = await content.createUploadUrl(d, SYSTEM, {
       kind: 'video',
       fileName: `s${i}.mp4`,
       mime: 'video/mp4',
-      sizeBytes: 200,
+      sizeBytes: video.length,
     });
     const asset = await d.store.get<{ path: string }>(`media/${up.mediaId}`);
-    await d.blob.put(asset?.path ?? '', fakeMp4(dur), 'video/mp4');
+    await d.blob.put(asset?.path ?? '', video, 'video/mp4');
     await content.finalizeMedia(d, SYSTEM, up.mediaId, {});
     const s = await content.createSection(d, SYSTEM, pkg.id, {
       title: `قسمت ${i + 1}`,

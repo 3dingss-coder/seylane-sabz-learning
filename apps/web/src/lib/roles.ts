@@ -4,7 +4,7 @@ import type { Role } from './types';
 export function panelOf(path: string): 'admin' | 'manager' | 'marketer' | 'public' {
   if (path === '/admin' || path.startsWith('/admin/')) return 'admin';
   if (path === '/manager' || path.startsWith('/manager/')) return 'manager';
-  if (/^\/(login|register|forgot-password|gallery)(\/|$)/.test(path)) return 'public';
+  if (/^\/(login|register|gallery)(\/|$)/.test(path)) return 'public';
   return 'marketer';
 }
 

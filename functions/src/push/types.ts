@@ -6,8 +6,16 @@ export interface PushMessage {
 export interface PushSender {
   /** False when this deployment has no real push transport configured (prevents fake delivery status). */
   readonly enabled?: boolean;
-  /** Returns tokens that are permanently invalid and should be removed. */
-  send(tokens: string[], msg: PushMessage): Promise<{ sent: number; invalidTokens: string[] }>;
+  /** Returns explicit delivery outcomes; `unknownTokens` means the request may have reached FCM. */
+  send(
+    tokens: string[],
+    msg: PushMessage,
+  ): Promise<{
+    sent: number;
+    invalidTokens: string[];
+    failedTokens?: string[];
+    unknownTokens?: string[];
+  }>;
 }
 
 /** Records messages instead of sending (tests / local). */

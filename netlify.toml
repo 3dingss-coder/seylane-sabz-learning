@@ -1,5 +1,5 @@
-# Netlify configuration for Seylane Academy (آکادمی سیلانه)
-# Ready for one-click deployment on https://app.netlify.com
+# Legacy static-host configuration only. The supported /v1 API is the Cloudflare Worker.
+# `netlify/functions/api.js` deliberately returns 503; never serve auth/data from a memory fallback.
 
 [build]
   command = "npm run build"
@@ -12,7 +12,6 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  included_files = ["functions/lib/seed-snapshot.json"]
 
 # Static CDN shortcut for public catalog & branding assets
 [[redirects]]

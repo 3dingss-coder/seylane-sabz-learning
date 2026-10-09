@@ -105,7 +105,7 @@ export interface SeedReport {
     status: string;
     quizSource: 'client-quiz-bank' | 'sample' | 'none';
   }>;
-  demoUsers: Array<{ role: string; name: string; phone: string; password: string }>;
+  demoUsers: Array<{ role: string; name: string; phone: string }>;
 }
 
 const MIME_BY_EXT: Record<string, string> = {
