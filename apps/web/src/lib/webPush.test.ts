@@ -29,6 +29,14 @@ function browserPush(permission: NotificationPermission, answer: NotificationPer
 beforeEach(() => {
   vi.resetModules();
   post.mockClear();
+  it('rejects opt-in when the server fails to save the FCM token', async () => {
+    for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
+    browserPush('default', 'granted');
+    post.mockRejectedValueOnce(new Error('API unavailable'));
+    const { enableWebPush } = await import('./webPush');
+    await expect(enableWebPush()).rejects.toThrow('API unavailable');
+  });
+
 });
 afterEach(() => {
   vi.unstubAllEnvs();
