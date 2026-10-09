@@ -64,6 +64,12 @@ export async function enableWebPush(): Promise<WebPushState> {
   return perm;
 }
 
+/** Retry token creation/registration after permission has already been granted. */
+export async function retryWebPush() {
+  if (webPushState() !== 'granted') throw new Error('Browser notification permission is not granted.');
+  await subscribe();
+}
+
 /** On app start: refresh the token silently if the user already allowed notifications. */
 export async function resumeWebPush() {
   if (webPushState() !== 'granted') return;
