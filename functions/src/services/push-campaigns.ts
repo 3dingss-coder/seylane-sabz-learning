@@ -243,7 +243,8 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
       pushDeferred,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message.slice(0, 400) : 'ارسال کمپین ناموفق بود.';
+    const message =
+      error instanceof Error ? error.message.slice(0, 400) : 'ارسال کمپین ناموفق بود.';
     const finishedAt = d.clock().toISOString();
     await d.store.update(path, {
       status: 'failed',
@@ -277,11 +278,16 @@ export async function cancelCampaign(d: Deps, actor: Actor, id: string) {
     throw error;
   }
   await d.store.update(path, { status: 'cancelled', updatedAt: now });
-  await audit(d, actor, 'push_campaign.cancelled', 'push_campaigns', id, current, { status: 'cancelled' });
+  await audit(d, actor, 'push_campaign.cancelled', 'push_campaigns', id, current, {
+    status: 'cancelled',
+  });
   return { id, status: 'cancelled' as const };
 }
 
-/** Invoked by the existing 15-minute Worker cron. A durable unique claim prevents duplicate sends. */
+/**
+ * Invoked by the existing 15-minute Worker cron.
+ * A durable unique claim prevents duplicate sends.
+ */
 export async function runScheduledCampaigns(d: Deps) {
   const due = await d.store.query<Campaign>({
     collection: 'push_campaigns',
