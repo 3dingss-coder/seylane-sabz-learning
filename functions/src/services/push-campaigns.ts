@@ -36,6 +36,8 @@ interface Campaign {
   pushSent: number | null;
   pushFailed: number | null;
   pushSkipped: number | null;
+  /** Users without a registered device; optional for backwards compatibility with old records. */
+  pushNoDevice?: number | null;
   pushDeferred: number | null;
   lastError: string | null;
 }
@@ -142,6 +144,7 @@ export async function saveCampaign(
     pushSent: null,
     pushFailed: null,
     pushSkipped: null,
+    pushNoDevice: null,
     pushDeferred: null,
     lastError: null,
   };
@@ -211,6 +214,8 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
     const pushSent = rows.filter((n) => n.pushStatus === 'sent').length;
     const pushFailed = rows.filter((n) => n.pushStatus === 'failed').length;
     const pushSkipped = rows.filter((n) => n.pushStatus === 'skipped').length;
+    // `skipped` is the legacy stored status for users without any registered device.
+    const pushNoDevice = pushSkipped;
     const pushDeferred = rows.filter((n) => n.pushStatus === 'deferred').length;
     const status: CampaignStatus =
       pushSent > 0 && (pushFailed > 0 || pushSkipped > 0)
@@ -226,6 +231,7 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
       pushSent,
       pushFailed,
       pushSkipped,
+      pushNoDevice,
       finishedAt,
       updatedAt: finishedAt,
       lastError: null,
@@ -239,6 +245,7 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
         pushSent,
         pushFailed,
         pushSkipped,
+        pushNoDevice,
         pushDeferred,
       });
     }
@@ -250,6 +257,7 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
       pushSent,
       pushFailed,
       pushSkipped,
+      pushNoDevice,
       pushDeferred,
     };
   } catch (error) {
