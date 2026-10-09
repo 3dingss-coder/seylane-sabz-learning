@@ -285,6 +285,34 @@ const CAMPAIGN_STATUS: Record<PushCampaign['status'], string> = {
   cancelled: 'لغوشده',
 };
 
+
+export function PushProviderStatus() {
+  const provider = useQuery({
+    queryKey: ['admin', 'push-provider-status'],
+    queryFn: ({ signal }) => api.get<{ configured: boolean }>('/admin/push-provider-status', signal),
+    retry: false,
+  });
+  if (provider.isSuccess && !provider.data.configured) {
+    return (
+      <Card className="border border-danger/40 bg-background">
+        <p className="font-bold text-danger-fg">ارسال Push پیکربندی نشده است</p>
+        <p className="text-sm text-text-secondary">
+          ارسال به دستگاه‌ها تا زمان تنظیم معتبر حساب سرویس FCM در محیط Preview غیرفعال است.
+          مقدار Secret را در کد یا گفتگو وارد نکنید؛ فقط تنظیمات محیط را در داشبورد بررسی کنید.
+        </p>
+      </Card>
+    );
+  }
+  if (provider.isError) {
+    return (
+      <p className="text-sm text-text-secondary">
+        وضعیت پیکربندی Push قابل بررسی نیست؛ قبل از ارسال، اتصال API و مجوز ادمین را بررسی کنید.
+      </p>
+    );
+  }
+  return null;
+}
+
 function PushCampaigns() {
   const qc = useQueryClient();
   const toast = useToast();
@@ -303,11 +331,6 @@ function PushCampaigns() {
           failed: number;
         };
       }>('/admin/push-campaigns', signal),
-  });
-  const provider = useQuery({
-    queryKey: ['admin', 'push-provider-status'],
-    queryFn: ({ signal }) => api.get<{ configured: boolean }>('/admin/push-provider-status', signal),
-    retry: false,
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -403,6 +426,7 @@ function PushCampaigns() {
   };
   return (
     <div className="flex flex-col gap-4">
+      <PushProviderStatus />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
         {[
           ['کل کمپین‌ها', q.data?.stats.total],
