@@ -760,7 +760,11 @@ async function finalize(d: Deps, id: string): Promise<void> {
     nothingAccepted &&
     !summary.interrupted &&
     (summary.attempted > 0 || failingBatches > 0 || summary.noDevice > 0);
-  const status: PushCampaignStatus = shouldFail ? 'failed' : hasErrors ? 'sent_with_errors' : 'sent';
+  const status: PushCampaignStatus = shouldFail
+    ? 'failed'
+    : hasErrors
+      ? 'sent_with_errors'
+      : 'sent';
   const hasFailure = status !== 'sent';
   const errorBatch = batches.find((b) => b.lastError);
   await d.store.update(`${CAMPAIGNS}/${id}`, {
