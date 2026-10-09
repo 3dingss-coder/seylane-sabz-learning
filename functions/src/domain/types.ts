@@ -303,6 +303,8 @@ export interface Notification {
   actionRef: string | null;
   /** Optional rich-push image; absent on legacy notifications. */
   imageUrl?: string | null;
+  /** Optional campaign that originated this notification. */
+  campaignId?: string | null;
   readAt: string | null;
   pushStatus: 'none' | 'sent' | 'deferred' | 'skipped' | 'failed';
   deliverAfter: string | null;
