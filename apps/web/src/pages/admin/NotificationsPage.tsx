@@ -341,7 +341,7 @@ function PushCampaigns() {
     },
   });
   const send = useMutation({
-    mutationFn: (id: string) => api.post(`/admin/push-campaigns/${id}/send'),
+    mutationFn: (id: string) => api.post(`/admin/push-campaigns/${id}/send`),
     onSuccess: (result) => {
       setSendTarget(null);
       toast.show({ type: 'success', message: 'درخواست ارسال کمپین انجام شد؛ گزارش نهایی را در تاریخچه بررسی کنید.' });
