@@ -9,6 +9,7 @@ import * as content from '../services/content';
 import { isJobName, JOB_NAMES, runJob } from '../services/cron';
 import { invalidateIndexCache as invalidateKnowledgeCache } from '../services/retrieval';
 import { ApiError } from '../http/errors';
+import { FcmHttpPushSender } from '../push/fcm-http';
 import * as mentor from '../services/mentor';
 import * as guides from '../services/mentor-guides';
 import * as aiQuality from '../services/mentor-quality';
@@ -600,6 +601,8 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     '/admin/push-campaigns/:id/cancel',
     h(async (req) => pushCampaigns.cancelCampaign(d, actorOf(req), id(req))),
   );
+
+  r.get('/admin/push-provider-status', h(async () => ({ configured: d.push instanceof FcmHttpPushSender })));
 
   // Policies & audit
   r.get(
