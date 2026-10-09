@@ -1,12 +1,20 @@
 import { z } from 'zod';
 import { ApiError } from '../http/errors';
-import { text, } from '../http/validate';
+import { text } from '../http/validate';
 import type { User } from '../domain/types';
 import { StoreConflictError } from '../store/types';
 import { audit, type Actor, type Deps } from './context';
 import { notifyUsers } from './notify';
 
-const campaignStatuses = ['draft', 'scheduled', 'sending', 'sent', 'partial', 'failed', 'cancelled'] as const;
+const campaignStatuses = [
+  'draft',
+  'scheduled',
+  'sending',
+  'sent',
+  'partial',
+  'failed',
+  'cancelled',
+] as const;
 type CampaignStatus = (typeof campaignStatuses)[number];
 type Audience = 'all' | 'team' | 'user' | 'role';
 
@@ -38,9 +46,14 @@ const internalPath = z.string().trim().max(500).refine(
   (v) => v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/\\'),
   'مقصد باید یک مسیر داخلی معتبر باشد.',
 );
-const imageUrl = z.string().trim().url().max(2048)
+const imageUrl = z
+  .string()
+  .trim()
+  .url()
+  .max(2048)
   .refine((v) => v.startsWith('https://'), 'آدرس تصویر باید HTTPS باشد.')
-  .nullable().optional();
+  .nullable()
+  .optional();
 
 export const campaignInputSchema = z.object({
   name: text(2, 100, 'نام کمپین'),
@@ -129,7 +142,15 @@ export async function saveCampaign(
     lastError: null,
   };
   await d.store.set(path, next as unknown as Record<string, unknown>);
-  await audit(d, actor, before ? 'push_campaign.updated' : 'push_campaign.created', 'push_campaigns', path.split('/')[1]!, before, next);
+  await audit(
+    d,
+    actor,
+    before ? 'push_campaign.updated' : 'push_campaign.created',
+    'push_campaigns',
+    path.split('/')[1]!,
+    before,
+    next,
+  );
   return publicCampaign(path.split('/')[1]!, next);
 }
 
@@ -161,7 +182,12 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
     }
     throw error;
   }
-  await d.store.update(path, { status: 'sending', startedAt: now, updatedAt: now, lastError: null });
+  await d.store.update(path, {
+    status: 'sending',
+    startedAt: now,
+    updatedAt: now,
+    lastError: null,
+  });
   const claimed = current;
   try {
     const users = await resolveUsers(d, claimed.audience, claimed.targetId);
@@ -181,18 +207,50 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
     const pushFailed = rows.filter((n) => n.pushStatus === 'failed').length;
     const pushSkipped = rows.filter((n) => n.pushStatus === 'skipped').length;
     const pushDeferred = rows.filter((n) => n.pushStatus === 'deferred').length;
-    const status: CampaignStatus = pushSent > 0 && (pushFailed > 0 || pushSkipped > 0) ? 'partial'
-      : pushSent > 0 || (pushDeferred > 0 && pushFailed === 0 && pushSkipped === 0) ? 'sent' : 'failed';
+    const status: CampaignStatus =
+      pushSent > 0 && (pushFailed > 0 || pushSkipped > 0)
+        ? 'partial'
+        : pushSent > 0 || (pushDeferred > 0 && pushFailed === 0 && pushSkipped === 0)
+          ? 'sent'
+          : 'failed';
     const finishedAt = d.clock().toISOString();
     await d.store.update(path, {
       status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped,
-      finishedAt, updatedAt: finishedAt, lastError: null, pushDeferred,
+      finishedAt,
+      updatedAt: finishedAt,
+      lastError: null,
+      pushDeferred,
     });
-    if (actor) await audit(d, actor, 'push_campaign.sent', 'push_campaigns', id, claimed, { status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped, pushDeferred });
-    return { id, status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped, pushDeferred };
+    if (actor) {
+      await audit(d, actor, 'push_campaign.sent', 'push_campaigns', id, claimed, {
+        status,
+        targetCount: users.length,
+        createdNotifications,
+        pushSent,
+        pushFailed,
+        pushSkipped,
+        pushDeferred,
+      });
+    }
+    return {
+      id,
+      status,
+      targetCount: users.length,
+      createdNotifications,
+      pushSent,
+      pushFailed,
+      pushSkipped,
+      pushDeferred,
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 400) : 'ارسال کمپین ناموفق بود.';
-    await d.store.update(path, { status: 'failed', finishedAt: d.clock().toISOString(), updatedAt: d.clock().toISOString(), lastError: message });
+    const finishedAt = d.clock().toISOString();
+    await d.store.update(path, {
+      status: 'failed',
+      finishedAt,
+      updatedAt: finishedAt,
+      lastError: message,
+    });
     throw error;
   }
 }
@@ -223,7 +281,7 @@ export async function cancelCampaign(d: Deps, actor: Actor, id: string) {
   return { id, status: 'cancelled' as const };
 }
 
-/** Invoked by the existing 15-minute Worker cron. Transactional claim prevents duplicate sends. */
+/** Invoked by the existing 15-minute Worker cron. A durable unique claim prevents duplicate sends. */
 export async function runScheduledCampaigns(d: Deps) {
   const due = await d.store.query<Campaign>({
     collection: 'push_campaigns',
@@ -237,7 +295,11 @@ export async function runScheduledCampaigns(d: Deps) {
       await executeCampaign(d, campaign.id);
       results.push({ id: campaign.id, ok: true });
     } catch (error) {
-      results.push({ id: campaign.id, ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'failed' });
+      results.push({
+        id: campaign.id,
+        ok: false,
+        error: error instanceof Error ? error.message.slice(0, 200) : 'failed',
+      });
     }
   }
   return results;
