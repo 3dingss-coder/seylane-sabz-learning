@@ -17,21 +17,51 @@ import {
 import { PanelLayout } from '@/layouts/PanelLayout';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { ProfilePage } from '@/pages/m/ProfilePage';
-const AdminDashboard = lazy(() => import('./AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
-const AssignmentsPage = lazy(() => import('./AssignmentsPage').then((m) => ({ default: m.AssignmentsPage })));
-const AuditPage = lazy(() => import('./AuditPage').then((m) => ({ default: m.AuditPage })));
-const BrandDetailPage = lazy(() => import('./BrandDetailPage').then((m) => ({ default: m.BrandDetailPage })));
-const ContentPage = lazy(() => import('./ContentPage').then((m) => ({ default: m.ContentPage })));
-const NotificationsPage = lazy(() => import('./NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
-const MediaLibraryPage = lazy(() => import('./MediaLibraryPage').then((m) => ({ default: m.MediaLibraryPage })));
-const MentorGuidesPage = lazy(() => import('./MentorGuidesPage').then((m) => ({ default: m.MentorGuidesPage })));
-const PackageEditorPage = lazy(() => import('./PackageEditorPage').then((m) => ({ default: m.PackageEditorPage })));
-const PoliciesPage = lazy(() => import('./PoliciesPage').then((m) => ({ default: m.PoliciesPage })));
-const QuizBuilderPage = lazy(() => import('./QuizBuilderPage').then((m) => ({ default: m.QuizBuilderPage })));
-const ReportsPage = lazy(() => import('./ReportsPage').then((m) => ({ default: m.ReportsPage })));
-const TeamsPage = lazy(() => import('./TeamsPage').then((m) => ({ default: m.TeamsPage })));
-const UsersPage = lazy(() => import('./UsersPage').then((m) => ({ default: m.UsersPage })));
-const AdminUserDetail = lazy(() => import('./UsersPage').then((m) => ({ default: m.AdminUserDetail })));
+const AdminDashboard = lazy(() =>
+  import('./AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
+);
+const AssignmentsPage = lazy(() =>
+  import('./AssignmentsPage').then((m) => ({ default: m.AssignmentsPage })),
+);
+const AuditPage = lazy(() =>
+  import('./AuditPage').then((m) => ({ default: m.AuditPage })),
+);
+const BrandDetailPage = lazy(() =>
+  import('./BrandDetailPage').then((m) => ({ default: m.BrandDetailPage })),
+);
+const ContentPage = lazy(() =>
+  import('./ContentPage').then((m) => ({ default: m.ContentPage })),
+);
+const NotificationsPage = lazy(() =>
+  import('./NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
+);
+const MediaLibraryPage = lazy(() =>
+  import('./MediaLibraryPage').then((m) => ({ default: m.MediaLibraryPage })),
+);
+const MentorGuidesPage = lazy(() =>
+  import('./MentorGuidesPage').then((m) => ({ default: m.MentorGuidesPage })),
+);
+const PackageEditorPage = lazy(() =>
+  import('./PackageEditorPage').then((m) => ({ default: m.PackageEditorPage })),
+);
+const PoliciesPage = lazy(() =>
+  import('./PoliciesPage').then((m) => ({ default: m.PoliciesPage })),
+);
+const QuizBuilderPage = lazy(() =>
+  import('./QuizBuilderPage').then((m) => ({ default: m.QuizBuilderPage })),
+);
+const ReportsPage = lazy(() =>
+  import('./ReportsPage').then((m) => ({ default: m.ReportsPage })),
+);
+const TeamsPage = lazy(() =>
+  import('./TeamsPage').then((m) => ({ default: m.TeamsPage })),
+);
+const UsersPage = lazy(() =>
+  import('./UsersPage').then((m) => ({ default: m.UsersPage })),
+);
+const AdminUserDetail = lazy(() =>
+  import('./UsersPage').then((m) => ({ default: m.AdminUserDetail })),
+);
 
 const NAV = [
   { to: '/admin', label: 'داشبورد', icon: LayoutDashboard },
@@ -55,8 +85,14 @@ const NAV = [
 
 export default function AdminRoutes() {
   return (
-    <Suspense fallback={<div role="status" aria-live="polite" className="p-6 text-center">در حال بارگذاری…</div>}>
-    <Routes>
+    <Suspense
+      fallback={
+        <div role="status" aria-live="polite" className="p-6 text-center">
+          در حال بارگذاری…
+        </div>
+      }
+    >
+      <Routes>
       <Route element={<PanelLayout title="پنل ادمین" items={NAV} />}>
         <Route index element={<AdminDashboard />} />
         <Route path="content" element={<ContentPage />} />
@@ -76,7 +112,7 @@ export default function AdminRoutes() {
         <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
-    </Routes>
+      </Routes>
     </Suspense>
   );
 }
