@@ -422,7 +422,11 @@ export async function manualSend(d: Deps, actor: Actor, input: z.infer<typeof ma
     users.map((u) => u.id),
     'manual',
     { title: input.title, body: input.body },
-    { priority: 'normal', imageUrl: input.imageUrl ?? null, actionRef: input.actionRef ?? '/home' },
+    {
+      priority: 'normal',
+      imageUrl: input.imageUrl ?? null,
+      actionRef: input.actionRef ?? '/home',
+    },
   );
   await audit(d, actor, 'notification.manual_sent', 'notifications', input.audience, null, {
     ...input,
