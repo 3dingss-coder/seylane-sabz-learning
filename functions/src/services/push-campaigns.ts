@@ -29,6 +29,7 @@ interface Campaign {
   pushSent: number | null;
   pushFailed: number | null;
   pushSkipped: number | null;
+  pushDeferred: number | null;
   lastError: string | null;
 }
 
@@ -123,6 +124,7 @@ export async function saveCampaign(
     pushSent: null,
     pushFailed: null,
     pushSkipped: null,
+    pushDeferred: null,
     lastError: null,
   };
   await d.store.set(path, next as unknown as Record<string, unknown>);
@@ -166,15 +168,16 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
     const pushSent = rows.filter((n) => n.pushStatus === 'sent').length;
     const pushFailed = rows.filter((n) => n.pushStatus === 'failed').length;
     const pushSkipped = rows.filter((n) => n.pushStatus === 'skipped').length;
-    const status: CampaignStatus = pushFailed > 0 && (pushSent > 0 || pushSkipped > 0) ? 'partial'
-      : pushFailed > 0 || createdNotifications === 0 ? 'failed' : 'sent';
+    const pushDeferred = rows.filter((n) => n.pushStatus === 'deferred').length;
+    const status: CampaignStatus = pushSent > 0 && (pushFailed > 0 || pushSkipped > 0) ? 'partial'
+      : pushSent > 0 || (pushDeferred > 0 && pushFailed === 0 && pushSkipped === 0) ? 'sent' : 'failed';
     const finishedAt = d.clock().toISOString();
     await d.store.update(path, {
       status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped,
-      finishedAt, updatedAt: finishedAt, lastError: null,
+      finishedAt, updatedAt: finishedAt, lastError: null, pushDeferred,
     });
-    if (actor) await audit(d, actor, 'push_campaign.sent', 'push_campaigns', id, claimed, { status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped });
-    return { id, status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped };
+    if (actor) await audit(d, actor, 'push_campaign.sent', 'push_campaigns', id, claimed, { status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped, pushDeferred });
+    return { id, status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped, pushDeferred };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 400) : 'ارسال کمپین ناموفق بود.';
     await d.store.update(path, { status: 'failed', finishedAt: d.clock().toISOString(), updatedAt: d.clock().toISOString(), lastError: message });
