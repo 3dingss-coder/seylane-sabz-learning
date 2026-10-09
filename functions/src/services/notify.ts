@@ -171,6 +171,7 @@ export interface NotifyOptions {
   throttleMs?: number;
   push?: boolean;
   imageUrl?: string | null;
+  campaignId?: string | null;
 }
 
 async function throttled(d: Deps, userId: string, key: string, windowMs: number): Promise<boolean> {
@@ -257,6 +258,7 @@ export async function notifyUsers(
           body: content.body,
           actionRef: opts.actionRef ?? null,
           imageUrl: opts.imageUrl ?? null,
+          campaignId: opts.campaignId ?? null,
           readAt: null,
           pushStatus: wantPush ? (deferred ? 'deferred' : 'none') : 'none',
           deliverAfter: deferred
