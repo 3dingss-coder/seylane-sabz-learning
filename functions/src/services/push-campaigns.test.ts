@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { campaignInputSchema } from './push-campaigns';
+import { campaignInputSchema, campaignStatusFromPushCounts } from './push-campaigns';
 
 const validCampaign = {
   name: 'آغاز دوره جدید',
@@ -55,5 +55,31 @@ describe('campaignInputSchema', () => {
         scheduledAt: '2030-01-01T12:00:00.000Z',
       }).success,
     ).toBe(true);
+  });
+});
+
+describe('campaignStatusFromPushCounts', () => {
+  it('does not mark a campaign failed when recipients have no registered device', () => {
+    expect(campaignStatusFromPushCounts({ sent: 0, failed: 0, skipped: 9, deferred: 0 })).toBe(
+      'sent',
+    );
+  });
+
+  it('keeps no-device recipients separate from actual failures', () => {
+    expect(campaignStatusFromPushCounts({ sent: 2, failed: 0, skipped: 7, deferred: 0 })).toBe(
+      'partial',
+    );
+    expect(campaignStatusFromPushCounts({ sent: 0, failed: 2, skipped: 7, deferred: 0 })).toBe(
+      'failed',
+    );
+  });
+
+  it('preserves deferred-only campaigns as sent and actual mixed failures as partial', () => {
+    expect(campaignStatusFromPushCounts({ sent: 0, failed: 0, skipped: 0, deferred: 3 })).toBe(
+      'sent',
+    );
+    expect(campaignStatusFromPushCounts({ sent: 3, failed: 1, skipped: 0, deferred: 0 })).toBe(
+      'partial',
+    );
   });
 });
