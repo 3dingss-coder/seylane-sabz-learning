@@ -16,13 +16,13 @@ afterEach(() => {
 });
 
 function renderStatus() {
-  return render(
-    <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-    >
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = render(
+    <QueryClientProvider client={client}>
       <PushProviderStatus />
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 describe('PushProviderStatus', () => {
@@ -35,8 +35,10 @@ describe('PushProviderStatus', () => {
 
   it('does not show a configuration warning when the provider is configured', async () => {
     mocks.get.mockResolvedValue({ configured: true });
-    renderStatus();
-    await waitFor(() => expect(mocks.get).toHaveBeenCalled());
+    const { client } = renderStatus();
+    await waitFor(() =>
+      expect(client.getQueryState(['admin', 'push-provider-status'])?.status).toBe('success'),
+    );
     expect(screen.queryByText('ارسال Push پیکربندی نشده است')).not.toBeInTheDocument();
   });
 });
