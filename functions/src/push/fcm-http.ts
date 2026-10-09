@@ -60,7 +60,7 @@ export class FcmHttpPushSender implements PushSender {
 
   constructor(
     private readonly sa: ServiceAccount,
-    private readonly appUrl = '',
+    _appUrl = '',
     private readonly fetchImpl: FetchLike = (i, init) => fetch(i, init),
     private readonly now: () => number = () => Date.now(),
   ) {}
