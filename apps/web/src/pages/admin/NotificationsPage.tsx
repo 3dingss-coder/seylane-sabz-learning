@@ -252,7 +252,7 @@ function ManualSend() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [actionRef, setActionRef] = useState('/home');
+  const [actionRef, setActionRef] = useState('/messages');
   const [confirm, setConfirm] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const toast = useToast();
@@ -264,7 +264,7 @@ function ManualSend() {
         title: title.trim(),
         body: body.trim(),
         imageUrl: imageUrl.trim() || null,
-        actionRef: actionRef.trim() || '/home',
+        actionRef: actionRef.trim() || '/messages',
       }),
     onSuccess: (r) => {
       setConfirm(false);
@@ -278,7 +278,7 @@ function ManualSend() {
       setTitle('');
       setBody('');
       setImageUrl('');
-      setActionRef('/home');
+      setActionRef('/messages');
     },
     onError: (e) => {
       setConfirm(false);
