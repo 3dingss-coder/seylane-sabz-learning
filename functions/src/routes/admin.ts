@@ -602,7 +602,12 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     h(async (req) => pushCampaigns.cancelCampaign(d, actorOf(req), id(req))),
   );
 
-  r.get('/admin/push-provider-status', h(async () => ({ configured: d.push instanceof FcmHttpPushSender })));
+  r.get(
+    '/admin/push-provider-status',
+    h(async () => ({
+      configured: d.push instanceof FcmHttpPushSender ? await d.push.isConfigured() : false,
+    })),
+  );
 
   // Policies & audit
   r.get(
