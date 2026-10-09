@@ -5,6 +5,7 @@ import { rebuildKnowledgeIndex } from './knowledge';
 import { extractPendingMedia } from './media-ingest';
 import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
+import { runScheduledCampaigns } from './push-campaigns';
 import type { Deps } from './context';
 
 export type JobName =
@@ -23,7 +24,10 @@ export interface JobOptions {
 
 /** The one job table: cron triggers and `POST /admin/jobs/:name` both run through it. */
 export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>> = {
-  'flush-push': (d) => flushDeferredPush(d).then((sent) => ({ sent })),
+  'flush-push': async (d) => ({
+    sent: await flushDeferredPush(d),
+    campaigns: await runScheduledCampaigns(d),
+  }),
   'deadline-sweep': (d) => runDeadlineSweep(d),
   'weekly-digest': (d, o) => runWeeklyDigest(d, Boolean(o?.force)),
   'daily-reminders': (d) => runDailyReminders(d),
