@@ -6,16 +6,14 @@ import { StoreConflictError } from '../store/types';
 import { audit, type Actor, type Deps } from './context';
 import { notifyUsers } from './notify';
 
-const campaignStatuses = [
-  'draft',
-  'scheduled',
-  'sending',
-  'sent',
-  'partial',
-  'failed',
-  'cancelled',
-] as const;
-type CampaignStatus = (typeof campaignStatuses)[number];
+type CampaignStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'sending'
+  | 'sent'
+  | 'partial'
+  | 'failed'
+  | 'cancelled';
 type Audience = 'all' | 'team' | 'user' | 'role';
 
 interface Campaign {
@@ -148,16 +146,17 @@ export async function saveCampaign(
     lastError: null,
   };
   await d.store.set(path, next as unknown as Record<string, unknown>);
+  const campaignId = path.slice('push_campaigns/'.length);
   await audit(
     d,
     actor,
     before ? 'push_campaign.updated' : 'push_campaign.created',
     'push_campaigns',
-    path.split('/')[1]!,
+    campaignId,
     before,
     next,
   );
-  return publicCampaign(path.split('/')[1]!, next);
+  return publicCampaign(campaignId, next);
 }
 
 export async function sendCampaign(d: Deps, actor: Actor, id: string) {
