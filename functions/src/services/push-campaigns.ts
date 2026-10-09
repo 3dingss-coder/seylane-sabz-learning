@@ -129,7 +129,7 @@ export async function saveCampaign(
     imageUrl: input.imageUrl ?? null,
     actionRef: input.actionRef,
     audience: input.audience,
-    targetId: input.audience === 'all' ? null : (input.targetId ?? null),
+    targetId: input.audience === 'all' ? null : input.targetId ?? null,
     status: input.scheduledAt ? 'scheduled' : 'draft',
     scheduledAt: input.scheduledAt ?? null,
     createdAt: before?.createdAt ?? now,
