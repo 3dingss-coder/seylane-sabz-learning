@@ -116,7 +116,11 @@ export async function listCampaigns(d: Deps) {
       total: items.length,
       draft: items.filter((c) => c.status === 'draft').length,
       scheduled: items.filter((c) => c.status === 'scheduled').length,
-      sent: items.filter((c) => c.status === 'sent').length,
+      sent: items.filter((c) => c.status === 'sent' && (c.pushSent ?? 0) > 0).length,
+      noDeviceRecipients: items.reduce(
+        (total, c) => total + (c.pushNoDevice ?? c.pushSkipped ?? 0),
+        0,
+      ),
       failed: items.filter((c) => c.status === 'failed' || c.status === 'partial').length,
     },
   };
