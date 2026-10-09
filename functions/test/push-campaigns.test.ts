@@ -245,6 +245,17 @@ describe('push campaigns: immediate send', () => {
     expect(JSON.stringify(r.body)).not.toContain('invalid-token-0000001');
   });
 
+  it('does not report a successful Push when all selected users have no device token', async () => {
+    const c = await createDraft();
+    const r = await send(c.id);
+    expect(r.status).toBe(200);
+    expect(r.body.data.campaign.status).toBe('failed');
+    expect(r.body.data.campaign.summary.attempted).toBe(0);
+    expect(r.body.data.campaign.summary.accepted).toBe(0);
+    expect(r.body.data.campaign.summary.noDevice).toBeGreaterThan(0);
+    expect(ctx.deps.push.sent).toHaveLength(0);
+  });
+
   it('a provider that rejects everything marks the campaign failed, without leaking tokens', async () => {
     await addDevice(marketer.token, 'fcm-token-eeeeeeee5');
     const sender = new FailingSender();
@@ -341,7 +352,7 @@ describe('push campaigns: batching, budgets and interruption safety', () => {
     expect(r.body.data.campaign.summary.batchesDone).toBe(INLINE_BATCHES);
     await runPushCampaigns(ctx.deps);
     const done = await ctx.api(admin.token).get(`/v1/admin/push-campaigns/${c.id}`);
-    expect(done.body.data.campaign.status).toBe('sent');
+    expect(done.body.data.campaign.status).toBe('sent_with_errors');
     expect(done.body.data.campaign.summary.batchesDone).toBe(4);
     expect(done.body.data.campaign.summary.users).toBe(devices + 2);
     expect(done.body.data.campaign.summary.attempted).toBe(devices);
