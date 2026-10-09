@@ -40,14 +40,17 @@ async function subscribe(): Promise<boolean> {
     import('firebase/app'),
     import('firebase/messaging'),
   ]);
-  if (!(await isSupported())) return false;
+  if (!(await isSupported())) {
+    throw new Error('Firebase Messaging is not supported in this browser.');
+  }
   const app = getApps()[0] ?? initializeApp(config);
   const registration = await navigator.serviceWorker.ready;
   const token = await getToken(getMessaging(app), {
     vapidKey,
     serviceWorkerRegistration: registration,
   });
-  if (!token) return false;
+  if (!token) throw new Error('Firebase did not return a web push token.');
+  // Do not mark the device as registered until the API has persisted the token successfully.
   await api.post('/me/devices', { token, platform: 'web' });
   setPushToken(token);
   return true;
