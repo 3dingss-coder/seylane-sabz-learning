@@ -354,7 +354,7 @@ function PushCampaigns() {
     },
   });
   const cancel = useMutation({
-    mutationFn: (id: string) => api.post(`/admin/push-campaigns/${id}/cancel'),
+    mutationFn: (id: string) => api.post(`/admin/push-campaigns/${id}/cancel`),
     onSuccess: () => {
       toast.show({ type: 'success', message: 'کمپین لغو شد.' });
       void qc.invalidateQueries({ queryKey: ['admin', 'push-campaigns'] });
