@@ -329,6 +329,7 @@ function PushCampaigns() {
           scheduled: number;
           sent: number;
           failed: number;
+          noDeviceRecipients: number;
         };
       }>('/admin/push-campaigns', signal),
   });
@@ -427,13 +428,14 @@ function PushCampaigns() {
   return (
     <div className="flex flex-col gap-4">
       <PushProviderStatus />
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {[
           ['کل کمپین‌ها', q.data?.stats.total],
           ['پیش‌نویس', q.data?.stats.draft],
           ['زمان‌بندی‌شده', q.data?.stats.scheduled],
           ['ارسال‌شده', q.data?.stats.sent],
           ['ناموفق/ناقص', q.data?.stats.failed],
+          ['گیرنده بدون دستگاه', q.data?.stats.noDeviceRecipients],
         ].map(([label, value]) => (
           <Card key={String(label)} className="flex flex-col gap-1">
             <p className="text-xs text-text-secondary">{label}</p>
@@ -591,7 +593,11 @@ function PushCampaigns() {
                     <p className="text-sm text-text-secondary">{c.title}</p>
                   </div>
                   <span className="shrink-0 rounded-full bg-background px-2 py-1 text-xs">
-                    {CAMPAIGN_STATUS[c.status]}
+                    {c.status === 'sent' &&
+                    (c.pushSent ?? 0) === 0 &&
+                    (c.pushNoDevice ?? c.pushSkipped ?? 0) > 0
+                      ? 'بدون دستگاه'
+                      : CAMPAIGN_STATUS[c.status]}
                   </span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm">{c.body}</p>
