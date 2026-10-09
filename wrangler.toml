@@ -46,6 +46,10 @@ binding = "MEDIA_BUCKET"
 bucket_name = "seylane-sabz-media"
 
 # Workers Logs: capture invocations and errors (1101/1102/503) for diagnosis.
+# Worker Previews are created by Cloudflare Workers Builds for pull requests.
+# Keep preview-specific bindings isolated; add test D1/R2 resources before runtime testing.
+[previews]
+
 [observability]
 enabled = true
 head_sampling_rate = 1
