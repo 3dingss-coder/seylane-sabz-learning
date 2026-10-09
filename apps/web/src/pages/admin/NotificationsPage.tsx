@@ -253,8 +253,6 @@ function TemplateDialog({ t, onClose }: { t: NotificationTemplate; onClose: () =
   );
 }
 
-
-
 type PushCampaign = {
   id: string;
   name: string;
@@ -409,7 +407,9 @@ function PushCampaigns() {
         ].map(([label, value]) => (
           <Card key={String(label)} className="flex flex-col gap-1">
             <p className="text-xs text-text-secondary">{label}</p>
-            <p className="text-xl font-bold">{value === undefined ? '—' : toPersianDigits(Number(value))}</p>
+            <p className="text-xl font-bold">
+              {value === undefined ? '—' : toPersianDigits(Number(value))}
+            </p>
           </Card>
         ))}
       </div>
@@ -556,7 +556,9 @@ function PushCampaigns() {
                     <p className="font-bold">{c.name}</p>
                     <p className="text-sm text-text-secondary">{c.title}</p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-background px-2 py-1 text-xs">{CAMPAIGN_STATUS[c.status]}</span>
+                  <span className="shrink-0 rounded-full bg-background px-2 py-1 text-xs">
+                    {CAMPAIGN_STATUS[c.status]}
+                  </span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm">{c.body}</p>
                 <p className="text-xs text-text-secondary">
