@@ -21,11 +21,22 @@ export function parseServiceAccount(raw: string | undefined): ServiceAccount | n
   if (!raw || !raw.trim()) return null;
   try {
     const j = JSON.parse(raw) as Partial<ServiceAccount>;
-    if (j.project_id && j.client_email && j.private_key) {
+    const privateKey =
+      typeof j.private_key === 'string' ? j.private_key.replace(/\\\\n/g, '\\n').trim() : '';
+    const pemLooksValid =
+      privateKey.startsWith('-----BEGIN PRIVATE KEY-----') &&
+      privateKey.includes('-----END PRIVATE KEY-----');
+    if (
+      typeof j.project_id === 'string' &&
+      j.project_id.trim() &&
+      typeof j.client_email === 'string' &&
+      j.client_email.includes('@') &&
+      pemLooksValid
+    ) {
       return {
-        project_id: j.project_id,
-        client_email: j.client_email,
-        private_key: j.private_key,
+        project_id: j.project_id.trim(),
+        client_email: j.client_email.trim(),
+        private_key: privateKey,
       };
     }
   } catch {
