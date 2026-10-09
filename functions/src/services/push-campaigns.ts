@@ -75,6 +75,20 @@ export const campaignInputSchema = z
     path: ['targetId'],
   });
 
+/** Preserve the existing status enum while keeping missing devices out of failure counts. */
+export function campaignStatusFromPushCounts(counts: {
+  sent: number;
+  failed: number;
+  skipped: number;
+  deferred: number;
+}): CampaignStatus {
+  if (counts.sent > 0 && (counts.failed > 0 || counts.skipped > 0)) return 'partial';
+  if (counts.failed === 0 && (counts.sent > 0 || counts.skipped > 0 || counts.deferred > 0)) {
+    return 'sent';
+  }
+  return 'failed';
+}
+
 function publicCampaign(id: string, c: Campaign) {
   return { id, ...c };
 }
@@ -217,15 +231,12 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
     // `skipped` is the legacy stored status for users without any registered device.
     const pushNoDevice = pushSkipped;
     const pushDeferred = rows.filter((n) => n.pushStatus === 'deferred').length;
-    const status: CampaignStatus =
-      pushSent > 0 && (pushFailed > 0 || pushSkipped > 0)
-        ? 'partial'
-        : pushFailed === 0 &&
-            ((pushSent > 0 && pushDeferred >= 0) ||
-              (pushSkipped > 0 && pushDeferred === 0) ||
-              (pushDeferred > 0 && pushSkipped === 0))
-          ? 'sent'
-          : 'failed';
+    const status = campaignStatusFromPushCounts({
+      sent: pushSent,
+      failed: pushFailed,
+      skipped: pushSkipped,
+      deferred: pushDeferred,
+    });
     const finishedAt = d.clock().toISOString();
     await d.store.update(path, {
       status,
