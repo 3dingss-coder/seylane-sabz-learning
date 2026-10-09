@@ -303,6 +303,11 @@ function PushCampaigns() {
         };
       }>('/admin/push-campaigns', signal),
   });
+  const provider = useQuery({
+    queryKey: ['admin', 'push-provider-status'],
+    queryFn: ({ signal }) => api.get<{ configured: boolean }>('/admin/push-provider-status', signal),
+    retry: false,
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
