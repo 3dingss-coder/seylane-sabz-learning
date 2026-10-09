@@ -132,11 +132,20 @@ export class FcmHttpPushSender implements PushSender {
     return {
       message: {
         token,
-        notification: { title: msg.title, body: msg.body, ...(msg.imageUrl ? { image: msg.imageUrl } : {}) },
+        notification: {
+          title: msg.title,
+          body: msg.body,
+          ...(msg.imageUrl ? { image: msg.imageUrl } : {}),
+        },
         data: msg.data ?? {},
         android: { priority: 'HIGH' },
         webpush: {
-          notification: { icon: '/icons/icon-192.png', dir: 'rtl', lang: 'fa', ...(msg.imageUrl ? { image: msg.imageUrl } : {}) },
+          notification: {
+            icon: '/icons/icon-192.png',
+            dir: 'rtl',
+            lang: 'fa',
+            ...(msg.imageUrl ? { image: msg.imageUrl } : {}),
+          },
           ...(link ? { fcm_options: { link } } : {}),
         },
       },
