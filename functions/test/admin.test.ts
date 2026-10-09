@@ -248,7 +248,7 @@ describe('admin push provider status', () => {
 
   it('reports configured only when the sender signing key can be imported', async () => {
     const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-    ctx.deps.push = new FcmHttpPushSender({
+    (ctx.deps as Deps).push = new FcmHttpPushSender({
       project_id: 'test-project',
       client_email: 'test@example.invalid',
       private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
