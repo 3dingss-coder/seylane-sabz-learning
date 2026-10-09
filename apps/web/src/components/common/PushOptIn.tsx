@@ -18,7 +18,8 @@ export function PushOptIn() {
       </h2>
       {state === 'granted' && (
         <p className="text-sm text-text-secondary">
-          اجازه اعلان در مرورگر داده شده است؛ این به‌تنهایی تحویل اعلان را تضمین نمی‌کند. اگر اعلان‌ها نمی‌رسند، ثبت دستگاه را دوباره امتحان کنید.
+          اجازه اعلان در مرورگر داده شده است؛ این به‌تنهایی تحویل اعلان را تضمین نمی‌کند. اگر
+          اعلان‌ها نمی‌رسند، ثبت دستگاه را دوباره امتحان کنید.
         </p>
       )}
       {state === 'granted' && (
@@ -29,7 +30,10 @@ export function PushOptIn() {
             setBusy(true);
             try {
               await retryWebPush();
-              toast.show({ type: 'success', message: 'ثبت دستگاه برای دریافت اعلان انجام شد.' });
+              toast.show({
+                type: 'success',
+                message: 'ثبت دستگاه برای دریافت اعلان انجام شد.',
+              });
             } catch {
               toast.show({
                 type: 'error',
