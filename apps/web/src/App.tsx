@@ -14,15 +14,33 @@ import { HomePage } from '@/pages/m/HomePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 // Load secondary marketer screens only when visited to reduce the initial download.
-const OnboardingPage = lazy(() => import('@/pages/auth/OnboardingPage').then((m) => ({ default: m.OnboardingPage })));
-const CardsPage = lazy(() => import('@/pages/m/CardsPage').then((m) => ({ default: m.CardsPage })));
-const LearnPage = lazy(() => import('@/pages/m/LearnPage').then((m) => ({ default: m.LearnPage })));
-const MentorPage = lazy(() => import('@/pages/m/MentorPage').then((m) => ({ default: m.MentorPage })));
-const MessagesPage = lazy(() => import('@/pages/m/MessagesPage').then((m) => ({ default: m.MessagesPage })));
-const PackagePage = lazy(() => import('@/pages/m/PackagePage').then((m) => ({ default: m.PackagePage })));
-const ProfilePage = lazy(() => import('@/pages/m/ProfilePage').then((m) => ({ default: m.ProfilePage })));
-const QuizPage = lazy(() => import('@/pages/m/QuizPage').then((m) => ({ default: m.QuizPage })));
-const SectionPage = lazy(() => import('@/pages/m/SectionPage').then((m) => ({ default: m.SectionPage })));
+const OnboardingPage = lazy(() =>
+  import('@/pages/auth/OnboardingPage').then((m) => ({ default: m.OnboardingPage })),
+);
+const CardsPage = lazy(() =>
+  import('@/pages/m/CardsPage').then((m) => ({ default: m.CardsPage })),
+);
+const LearnPage = lazy(() =>
+  import('@/pages/m/LearnPage').then((m) => ({ default: m.LearnPage })),
+);
+const MentorPage = lazy(() =>
+  import('@/pages/m/MentorPage').then((m) => ({ default: m.MentorPage })),
+);
+const MessagesPage = lazy(() =>
+  import('@/pages/m/MessagesPage').then((m) => ({ default: m.MessagesPage })),
+);
+const PackagePage = lazy(() =>
+  import('@/pages/m/PackagePage').then((m) => ({ default: m.PackagePage })),
+);
+const ProfilePage = lazy(() =>
+  import('@/pages/m/ProfilePage').then((m) => ({ default: m.ProfilePage })),
+);
+const QuizPage = lazy(() =>
+  import('@/pages/m/QuizPage').then((m) => ({ default: m.QuizPage })),
+);
+const SectionPage = lazy(() =>
+  import('@/pages/m/SectionPage').then((m) => ({ default: m.SectionPage })),
+);
 
 // Panels are code-split: marketers (mobile, weak networks) never download admin code.
 const ManagerRoutes = lazy(() => import('@/pages/manager/ManagerRoutes'));
