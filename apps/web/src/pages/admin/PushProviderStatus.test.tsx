@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PushProviderStatus } from './NotificationsPage';
 
@@ -36,7 +36,7 @@ describe('PushProviderStatus', () => {
   it('does not show a configuration warning when the provider is configured', async () => {
     mocks.get.mockResolvedValue({ configured: true });
     renderStatus();
-    await screen.findByText(/وضعیت پیکربندی Push قابل بررسی نیست/).catch(() => undefined);
+    await waitFor(() => expect(mocks.get).toHaveBeenCalled());
     expect(screen.queryByText('ارسال Push پیکربندی نشده است')).not.toBeInTheDocument();
   });
 });
