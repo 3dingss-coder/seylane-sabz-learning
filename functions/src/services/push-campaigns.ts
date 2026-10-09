@@ -220,7 +220,10 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
     const status: CampaignStatus =
       pushSent > 0 && (pushFailed > 0 || pushSkipped > 0)
         ? 'partial'
-        : pushSent > 0 || (pushDeferred > 0 && pushFailed === 0 && pushSkipped === 0)
+        : pushFailed === 0 &&
+            ((pushSent > 0 && pushDeferred >= 0) ||
+              (pushSkipped > 0 && pushDeferred === 0) ||
+              (pushDeferred > 0 && pushSkipped === 0))
           ? 'sent'
           : 'failed';
     const finishedAt = d.clock().toISOString();
