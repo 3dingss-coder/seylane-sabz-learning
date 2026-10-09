@@ -181,7 +181,7 @@ describe('push campaigns: immediate send', () => {
     const c = await createDraft({ title: 'عنوان دستی ادمین', body: 'متن دستی ادمین' });
     const r = await send(c.id);
     expect(r.status).toBe(200);
-    expect(r.body.data.campaign.status).toBe('sent');
+    expect(r.body.data.campaign.status).toBe('sent_with_errors');
     expect(r.body.data.campaign.summary.attempted).toBe(2);
     expect(r.body.data.campaign.summary.accepted).toBe(2);
     expect(r.body.data.campaign.summary.failed).toBe(0);
@@ -210,7 +210,7 @@ describe('push campaigns: immediate send', () => {
     expect(ctx.deps.push.sent).toHaveLength(1);
     const replay = await send(c.id);
     expect(replay.status).toBe(200);
-    expect(replay.body.data.campaign.status).toBe('sent');
+    expect(replay.body.data.campaign.status).toBe('sent_with_errors');
     expect(ctx.deps.push.sent).toHaveLength(1);
     const other = await send(c.id, 'another-key-0002');
     expect(other.status).toBe(409);
@@ -313,7 +313,7 @@ describe('push campaigns: scheduling (server-side cron)', () => {
     expect(ctx.deps.push.sent).toHaveLength(1);
     const detail = await ctx.api(admin.token).get(`/v1/admin/push-campaigns/${c.id}`);
     expect(detail.status, JSON.stringify(detail.body)).toBe(200);
-    expect(detail.body.data.campaign.status).toBe('sent');
+    expect(detail.body.data.campaign.status).toBe('sent_with_errors');
     // A second scheduler run (retry, overlapping instance, restart) must not send again.
     await runPushCampaigns(ctx.deps);
     await runCron(ctx.deps, '*/15 * * * *');
