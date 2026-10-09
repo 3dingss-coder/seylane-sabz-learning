@@ -370,7 +370,7 @@ function PushCampaigns() {
     setActionRef(c.actionRef);
     setAudience(c.audience);
     setTargetId(c.targetId ?? '');
-    setScheduledAt(c.scheduledAt ? new Date(c.scheduledAt).toISOString().slice(0, 16) : '');
+    setScheduledAt(c.scheduledAt ? (() => { const date = new Date(c.scheduledAt); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 16); })() : '');
     setErrors({});
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
