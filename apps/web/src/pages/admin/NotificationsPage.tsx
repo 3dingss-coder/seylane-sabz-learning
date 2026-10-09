@@ -285,6 +285,17 @@ const CAMPAIGN_STATUS: Record<PushCampaign['status'], string> = {
   cancelled: 'لغوشده',
 };
 
+function campaignStatusLabel(c: PushCampaign): string {
+  if (
+    c.status === 'sent' &&
+    (c.pushSent ?? 0) === 0 &&
+    (c.pushNoDevice ?? c.pushSkipped ?? 0) > 0
+  ) {
+    return 'بدون دستگاه';
+  }
+  return CAMPAIGN_STATUS[c.status];
+}
+
 export function PushProviderStatus() {
   const provider = useQuery({
     queryKey: ['admin', 'push-provider-status'],
@@ -593,11 +604,7 @@ function PushCampaigns() {
                     <p className="text-sm text-text-secondary">{c.title}</p>
                   </div>
                   <span className="shrink-0 rounded-full bg-background px-2 py-1 text-xs">
-                    {c.status === 'sent' &&
-                      (c.pushSent ?? 0) === 0 &&
-                      (c.pushNoDevice ?? c.pushSkipped ?? 0) > 0
-                      ? 'بدون دستگاه'
-                      : CAMPAIGN_STATUS[c.status]}
+                    {campaignStatusLabel(c)}
                   </span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm">{c.body}</p>
