@@ -15,6 +15,7 @@ export class RecordingPushSender implements PushSender {
   readonly sent: Array<{ tokens: string[]; msg: PushMessage }> = [];
   async send(tokens: string[], msg: PushMessage) {
     this.sent.push({ tokens, msg });
-    return { sent: tokens.length, invalidTokens: tokens.filter((t) => t.startsWith('invalid')) };
+    const invalidTokens = tokens.filter((t) => t.startsWith('invalid'));
+    return { sent: tokens.length - invalidTokens.length, invalidTokens };
   }
 }

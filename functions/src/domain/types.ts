@@ -303,6 +303,8 @@ export interface Notification {
   actionRef: string | null;
   /** Optional rich-push image; absent on legacy notifications. */
   imageUrl?: string | null;
+  /** Set when the notification was created by a push campaign (see services/push-campaigns.ts). */
+  campaignId?: string | null;
   readAt: string | null;
   pushStatus: 'none' | 'sent' | 'deferred' | 'skipped' | 'failed';
   deliverAfter: string | null;
@@ -509,4 +511,96 @@ export interface MediaAsset {
   partSize?: number;
   totalParts?: number;
   archived?: boolean;
+}
+
+// ─── Push campaigns (admin studio) ──────────────────────────────────────────
+/**
+ * One status model for campaigns. Transitions:
+ *   draft → scheduled (scheduledAt set) → queued (claimed by a send or by the cron) → sending
+ *   → sent | sent_with_errors | failed        draft/scheduled → cancelled
+ * `queued`/`sending` are never edited or cancelled; `archivedAt` hides a finished or unused campaign.
+ */
+export type PushCampaignStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'queued'
+  | 'sending'
+  | 'sent'
+  | 'sent_with_errors'
+  | 'failed'
+  | 'cancelled';
+
+export interface PushCampaignAudience {
+  type: 'all' | 'team' | 'role' | 'user';
+  targetId: string | null;
+  /** any = every matching active user; web/android = only users with an active token of that platform. */
+  channel: 'any' | 'web' | 'android';
+}
+
+export type PushBatchStatus =
+  'pending' | 'sending' | 'sent' | 'sent_with_errors' | 'failed' | 'interrupted';
+
+export interface PushCampaignSummary {
+  batchesTotal: number;
+  batchesDone: number;
+  /** Users in the audience snapshot that were processed. */
+  users: number;
+  /** Device tokens sent to the provider (provider requests). */
+  attempted: number;
+  /** Provider accepted the request. NOT a delivery or view confirmation. */
+  accepted: number;
+  /** attempted - accepted (includes invalid tokens). */
+  failed: number;
+  /** Tokens the provider reported as permanently invalid (removed from device_tokens). */
+  invalid: number;
+  /** Users with no device token for the selected channel (in-app only). */
+  noDevice: number;
+  /** Batches whose previous run crashed mid-send; they are never re-sent automatically. */
+  interrupted: number;
+}
+
+export interface PushCampaign {
+  name: string;
+  title: string;
+  body: string;
+  imageUrl: string | null;
+  /** Internal route in the app, e.g. /messages. Never an external URL. */
+  actionRef: string;
+  audience: PushCampaignAudience;
+  status: PushCampaignStatus;
+  scheduledAt: string | null;
+  /** Audience size at the moment the campaign was started (snapshot). */
+  targetCount: number | null;
+  /** Users with a matching device token when the campaign was started (snapshot, approximate). */
+  pushReachable: number | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+  /** Idempotency key of the request that started the campaign (replays return the same result). */
+  sendRequestId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  summary: PushCampaignSummary;
+  /** Last sanitised error (never contains tokens or user data). */
+  lastError: string | null;
+  archivedAt: string | null;
+}
+
+export interface PushCampaignBatch {
+  campaignId: string;
+  index: number;
+  userIds: string[];
+  status: PushBatchStatus;
+  /** Number of started attempts; a failed batch is retried only if no provider request was made. */
+  attempts: number;
+  attempted: number;
+  accepted: number;
+  failed: number;
+  invalid: number;
+  noDevice: number;
+  lastError: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
 }

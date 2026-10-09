@@ -16,6 +16,7 @@ import * as knowledge from '../services/knowledge';
 import * as mediaIngest from '../services/media-ingest';
 import * as mediaLibrary from '../services/media-library';
 import * as notify from '../services/notify';
+import * as pushCampaigns from '../services/push-campaigns';
 import * as policies from '../services/policies';
 import * as reports from '../services/reports';
 import * as users from '../services/users';
@@ -559,6 +560,106 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
       'ارسال دستی اعلان حداکثر ۵ بار در ساعت ممکن است.',
     ),
     h(async (req) => notify.manualSend(d, actorOf(req), parse(notify.manualSendSchema, req.body))),
+  );
+
+  // Push campaigns (studio). All routes are admin+ (router-level), every write is audited, and
+  // `send` requires an Idempotency-Key so a retried request can never start a second send.
+  r.get(
+    '/admin/push-campaigns/dashboard',
+    h(async () => pushCampaigns.dashboard(d)),
+  );
+  r.get(
+    '/admin/push-campaigns',
+    h(async (req) => {
+      const q = parse(
+        z.object({
+          limit: z.coerce.number().int().min(1).max(50).default(20),
+          cursor: z.string().max(200).optional(),
+          status: z
+            .enum([
+              'draft',
+              'scheduled',
+              'queued',
+              'sending',
+              'sent',
+              'sent_with_errors',
+              'failed',
+              'cancelled',
+            ])
+            .optional(),
+          includeArchived: z
+            .enum(['true', 'false'])
+            .optional()
+            .transform((v) => v === 'true'),
+        }),
+        req.query,
+      );
+      return pushCampaigns.listCampaigns(d, q);
+    }),
+  );
+  r.post(
+    '/admin/push-campaigns',
+    h(
+      async (req) =>
+        pushCampaigns.createCampaign(
+          d,
+          actorOf(req),
+          parse(pushCampaigns.campaignSchema, req.body),
+        ),
+      201,
+    ),
+  );
+  r.post(
+    '/admin/push-campaigns/audience-preview',
+    h(async (req) =>
+      pushCampaigns.audiencePreview(
+        d,
+        parse(pushCampaigns.audiencePreviewSchema, req.body).audience,
+      ),
+    ),
+  );
+  r.get(
+    '/admin/push-campaigns/:id',
+    h(async (req) => pushCampaigns.campaignDetail(d, id(req))),
+  );
+  r.patch(
+    '/admin/push-campaigns/:id',
+    h(async (req) =>
+      pushCampaigns.updateCampaign(
+        d,
+        actorOf(req),
+        id(req),
+        parse(pushCampaigns.campaignUpdateSchema, req.body),
+      ),
+    ),
+  );
+  r.post(
+    '/admin/push-campaigns/:id/send',
+    rateLimit(
+      limiter,
+      'push-campaign-send',
+      10,
+      60 * 60_000,
+      (req) => me(req).id,
+      'ارسال کمپین حداکثر ۱۰ بار در ساعت ممکن است.',
+    ),
+    h(async (req) => {
+      const key = String(req.get('Idempotency-Key') ?? '').trim();
+      if (!/^[A-Za-z0-9_-]{8,100}$/.test(key))
+        throw new ApiError(
+          'VALIDATION',
+          'کلید درخواست (Idempotency-Key) معتبر نیست. صفحه را بازخوانی کنید.',
+        );
+      return pushCampaigns.sendCampaignNow(d, actorOf(req), id(req), key);
+    }),
+  );
+  r.post(
+    '/admin/push-campaigns/:id/cancel',
+    h(async (req) => pushCampaigns.cancelCampaign(d, actorOf(req), id(req))),
+  );
+  r.delete(
+    '/admin/push-campaigns/:id',
+    h(async (req) => pushCampaigns.archiveCampaign(d, actorOf(req), id(req))),
   );
 
   // Policies & audit

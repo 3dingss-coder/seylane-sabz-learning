@@ -12,6 +12,7 @@ import type {
   User,
 } from '../domain/types';
 import { audit, getPolicy, track, type Actor, type Deps } from './context';
+import { isSafeImageUrl, isSafeInternalPath } from './push-campaigns';
 
 /** Persian templates (spec §26). Variables in {braces}. Editable by admin. */
 export const DEFAULT_TEMPLATES: Record<
@@ -392,16 +393,15 @@ export const manualSendSchema = z
     imageUrl: z
       .string()
       .trim()
-      .url()
       .max(2048)
-      .refine((v) => v.startsWith('https://'), 'آدرس تصویر باید HTTPS باشد.')
+      .refine((v) => isSafeImageUrl(v), 'آدرس تصویر باید یک لینک عمومی و معتبر با HTTPS باشد.')
       .nullable()
       .optional(),
     actionRef: z
       .string()
       .trim()
-      .max(500)
-      .refine((v) => v.startsWith('/') && !v.startsWith('//'), 'لینک باید مسیر داخلی سایت باشد.')
+      .max(300)
+      .refine(isSafeInternalPath, 'لینک باید یک مسیر داخلی معتبر اپلیکیشن باشد؛ مثل /messages.')
       .nullable()
       .optional(),
   })
@@ -422,7 +422,7 @@ export async function manualSend(d: Deps, actor: Actor, input: z.infer<typeof ma
     users.map((u) => u.id),
     'manual',
     { title: input.title, body: input.body },
-    { priority: 'normal', imageUrl: input.imageUrl ?? null, actionRef: input.actionRef ?? '/home' },
+    { priority: 'normal', imageUrl: input.imageUrl ?? null, actionRef: input.actionRef ?? '/' },
   );
   await audit(d, actor, 'notification.manual_sent', 'notifications', input.audience, null, {
     ...input,

@@ -245,6 +245,7 @@ function TemplateDialog({ t, onClose }: { t: NotificationTemplate; onClose: () =
 }
 
 function ManualSend() {
+  const navigate = useNavigate();
   const teams = useTeams();
   const users = useUsers();
   const [audience, setAudience] = useState<'all' | 'team' | 'user' | 'role'>('all');
@@ -287,121 +288,134 @@ function ManualSend() {
     },
   });
   return (
-    <Card className="flex max-w-2xl flex-col gap-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Select
-          label="مخاطب"
-          value={audience}
-          onChange={(e) => {
-            setAudience(e.target.value as typeof audience);
-            setTargetId('');
-          }}
-        >
-          <option value="all">همه کاربران فعال</option>
-          <option value="role">یک نقش</option>
-          <option value="team">یک تیم</option>
-          <option value="user">یک فرد</option>
-        </Select>
-        {audience !== 'all' && (
+    <div className="flex max-w-2xl flex-col gap-4">
+      <Card className="flex flex-col gap-2 border-info/30 bg-info-light/40">
+        <p className="text-sm font-semibold text-text">
+          برای ساخت پیش‌نویس، زمان‌بندی، پیش‌نمایش کامل و گزارش نتیجه ارسال، از کمپین‌های Push
+          استفاده کنید.
+        </p>
+        <div>
+          <Button variant="secondary" onClick={() => navigate('/admin/push-campaigns/new')}>
+            ساخت کمپین Push
+          </Button>
+        </div>
+      </Card>
+      <Card className="flex flex-col gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Select
-            label="انتخاب"
-            value={targetId}
-            onChange={(e) => setTargetId(e.target.value)}
-            error={errors.targetId}
+            label="مخاطب"
+            value={audience}
+            onChange={(e) => {
+              setAudience(e.target.value as typeof audience);
+              setTargetId('');
+            }}
           >
-            <option value="">انتخاب کنید</option>
-            {audience === 'role' &&
-              ['marketer', 'manager', 'admin', 'superadmin'].map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_LABEL[r]}
-                </option>
-              ))}
-            {audience === 'team' &&
-              (teams.data ?? []).map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            {audience === 'user' &&
-              (users.data ?? [])
-                .filter((u) => u.status === 'active')
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
+            <option value="all">همه کاربران فعال</option>
+            <option value="role">یک نقش</option>
+            <option value="team">یک تیم</option>
+            <option value="user">یک فرد</option>
+          </Select>
+          {audience !== 'all' && (
+            <Select
+              label="انتخاب"
+              value={targetId}
+              onChange={(e) => setTargetId(e.target.value)}
+              error={errors.targetId}
+            >
+              <option value="">انتخاب کنید</option>
+              {audience === 'role' &&
+                ['marketer', 'manager', 'admin', 'superadmin'].map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABEL[r]}
                   </option>
                 ))}
-          </Select>
-        )}
-      </div>
-      <Input
-        label="عنوان"
-        value={title}
-        maxLength={80}
-        onChange={(e) => setTitle(e.target.value)}
-        error={errors.title}
-      />
-      <Textarea
-        label="متن"
-        value={body}
-        maxLength={300}
-        onChange={(e) => setBody(e.target.value)}
-        error={errors.body}
-        hint={`${toPersianDigits(body.length)} / ۳۰۰`}
-      />
-      <Input
-        label="آدرس تصویر اعلان (اختیاری)"
-        value={imageUrl}
-        maxLength={2048}
-        onChange={(e) => setImageUrl(e.target.value)}
-        error={errors.imageUrl}
-        hint="لینک مستقیم تصویر عمومی با HTTPS؛ نمایش تصویر به سیستم‌عامل و مرورگر بستگی دارد."
-      />
-      <Input
-        label="مسیر مقصد پس از کلیک"
-        value={actionRef}
-        maxLength={500}
-        onChange={(e) => setActionRef(e.target.value)}
-        error={errors.actionRef}
-        hint="مسیر داخلی مثل /home یا /messages"
-      />
-      <div className="rounded-card border border-border bg-background p-4" dir="rtl">
-        <p className="mb-3 text-xs font-bold text-text-secondary">پیش‌نمایش اعلان</p>
-        <div className="flex items-start gap-3 rounded-xl border border-border bg-surface p-3 shadow-sm">
-          <img src="/icons/icon-192.png" alt="" className="size-9 shrink-0 rounded-lg" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold text-text">{title.trim() || 'عنوان اعلان شما'}</p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-secondary">
-              {body.trim() || 'متن اعلان اینجا نمایش داده می‌شود.'}
-            </p>
-          </div>
+              {audience === 'team' &&
+                (teams.data ?? []).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              {audience === 'user' &&
+                (users.data ?? [])
+                  .filter((u) => u.status === 'active')
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+            </Select>
+          )}
         </div>
-        {imageUrl.trim() && /^https:\/\//i.test(imageUrl.trim()) && (
-          <img
-            src={imageUrl.trim()}
-            alt="پیش‌نمایش تصویر اعلان"
-            className="mt-3 max-h-48 w-full rounded-lg border border-border object-cover"
-          />
-        )}
-      </div>
-      <Button
-        icon={<Send className="size-4" aria-hidden />}
-        disabled={
-          title.trim().length < 2 || body.trim().length < 2 || (audience !== 'all' && !targetId)
-        }
-        onClick={() => setConfirm(true)}
-      >
-        ارسال
-      </Button>
-      <ConfirmDialog
-        open={confirm}
-        title="ارسال اعلان؟"
-        loading={m.isPending}
-        onClose={() => setConfirm(false)}
-        onConfirm={() => m.mutate()}
-        confirmText="ارسال"
-      >
-        اعلان «{title}» ارسال شود؟ این کار قابل بازگشت نیست.
-      </ConfirmDialog>
-    </Card>
+        <Input
+          label="عنوان"
+          value={title}
+          maxLength={80}
+          onChange={(e) => setTitle(e.target.value)}
+          error={errors.title}
+        />
+        <Textarea
+          label="متن"
+          value={body}
+          maxLength={300}
+          onChange={(e) => setBody(e.target.value)}
+          error={errors.body}
+          hint={`${toPersianDigits(body.length)} / ۳۰۰`}
+        />
+        <Input
+          label="آدرس تصویر اعلان (اختیاری)"
+          value={imageUrl}
+          maxLength={2048}
+          onChange={(e) => setImageUrl(e.target.value)}
+          error={errors.imageUrl}
+          hint="لینک مستقیم تصویر عمومی با HTTPS؛ نمایش تصویر به سیستم‌عامل و مرورگر بستگی دارد."
+        />
+        <Input
+          label="مسیر مقصد پس از کلیک"
+          value={actionRef}
+          maxLength={500}
+          onChange={(e) => setActionRef(e.target.value)}
+          error={errors.actionRef}
+          hint="مسیر داخلی مثل /home یا /messages"
+        />
+        <div className="rounded-card border border-border bg-background p-4" dir="rtl">
+          <p className="mb-3 text-xs font-bold text-text-secondary">پیش‌نمایش اعلان</p>
+          <div className="flex items-start gap-3 rounded-xl border border-border bg-surface p-3 shadow-sm">
+            <img src="/icons/icon-192.png" alt="" className="size-9 shrink-0 rounded-lg" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-text">{title.trim() || 'عنوان اعلان شما'}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-secondary">
+                {body.trim() || 'متن اعلان اینجا نمایش داده می‌شود.'}
+              </p>
+            </div>
+          </div>
+          {imageUrl.trim() && /^https:\/\//i.test(imageUrl.trim()) && (
+            <img
+              src={imageUrl.trim()}
+              alt="پیش‌نمایش تصویر اعلان"
+              className="mt-3 max-h-48 w-full rounded-lg border border-border object-cover"
+            />
+          )}
+        </div>
+        <Button
+          icon={<Send className="size-4" aria-hidden />}
+          disabled={
+            title.trim().length < 2 || body.trim().length < 2 || (audience !== 'all' && !targetId)
+          }
+          onClick={() => setConfirm(true)}
+        >
+          ارسال
+        </Button>
+        <ConfirmDialog
+          open={confirm}
+          title="ارسال اعلان؟"
+          loading={m.isPending}
+          onClose={() => setConfirm(false)}
+          onConfirm={() => m.mutate()}
+          confirmText="ارسال"
+        >
+          اعلان «{title}» ارسال شود؟ این کار قابل بازگشت نیست.
+        </ConfirmDialog>
+      </Card>
+    </div>
   );
 }
