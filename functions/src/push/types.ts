@@ -19,3 +19,20 @@ export class RecordingPushSender implements PushSender {
     return { sent: tokens.length - invalidTokens.length, invalidTokens };
   }
 }
+
+/**
+ * Used by deployed Workers when no valid FCM service account is configured.
+ * Unlike RecordingPushSender it never pretends a push was delivered: any attempt to send
+ * to a device throws, so campaigns and notifications record a real failure.
+ */
+export class UnconfiguredPushSender implements PushSender {
+  async send(
+    tokens: string[],
+    _msg: PushMessage,
+  ): Promise<{ sent: number; invalidTokens: string[] }> {
+    if (tokens.length === 0) return { sent: 0, invalidTokens: [] };
+    throw new Error(
+      'سرویس Push پیکربندی نشده است: Secret با نام FCM_SERVICE_ACCOUNT_JSON روی این Worker (یا محیط Preview آن) تنظیم نشده یا نامعتبر است.',
+    );
+  }
+}
