@@ -32,7 +32,8 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   // the next mentor question re-indexes it (incremental — unchanged items cost nothing).
   r.use('/admin', (req, _res, next) => {
     const write =
-      req.method !== 'GET' && !/^\/admin\/(jobs|mentor|knowledge\/reindex|push-campaigns)/.test(req.path ?? '');
+      req.method !== 'GET' &&
+      !/^\/admin\/(jobs|mentor|knowledge\/reindex|push-campaigns)/.test(req.path ?? '');
     if (!write) return next();
     void knowledge.markKnowledgeDirty(d).finally(() => next());
   });
