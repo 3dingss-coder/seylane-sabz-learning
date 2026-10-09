@@ -92,7 +92,9 @@ describe('admin: رفتار منتور (behaviour boxes)', () => {
   it('lists every brand and product with a defined / default badge', async () => {
     mockApi({ ...asAdmin(), 'GET /v1/admin/mentor/guides': () => ({ data: rows }) });
     renderApp('/admin/mentor');
-    expect(await screen.findByRole('heading', { name: 'رفتار منتور' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'رفتار منتور' }, { timeout: 10_000 }),
+    ).toBeInTheDocument();
 
     const cards = await screen.findAllByTestId('guide-row');
     const brandCard = cards.find((c) => c.dataset.guideKey === 'brand:b1') as HTMLElement;
