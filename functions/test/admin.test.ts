@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createCtx, fakeMp4, type TestCtx } from './support/ctx';
@@ -233,11 +234,12 @@ describe('admin push provider status', () => {
     expect(JSON.stringify(response.body)).not.toContain('private_key');
   });
 
-  it('reports configured when the Worker has the real FCM sender type', async () => {
+  it('reports configured only when the sender signing key can be imported', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
     ctx.deps.push = new FcmHttpPushSender({
       project_id: 'test-project',
       client_email: 'test@example.invalid',
-      private_key: 'not-a-real-key',
+      private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
     });
     const response = await ctx.api(admin.token).get('/v1/admin/push-provider-status');
     expect(response.status).toBe(200);
