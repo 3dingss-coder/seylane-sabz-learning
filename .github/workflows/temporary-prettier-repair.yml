@@ -1,0 +1,34 @@
+name: Temporary Prettier repair
+on:
+  push:
+    branches:
+      - feat/admin-push-campaign-studio
+    paths:
+      - .github/workflows/temporary-prettier-repair.yml
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/admin-push-campaign-studio
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prettier --write apps/web/src/pages/admin/NotificationsPage.tsx functions/src/routes/admin.ts functions/src/services/notify.ts functions/src/services/push-campaigns.ts
+      - name: Commit formatted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/pages/admin/NotificationsPage.tsx functions/src/routes/admin.ts functions/src/services/notify.ts functions/src/services/push-campaigns.ts
+          if git diff --cached --quiet; then
+            echo "No formatting changes needed"
+          else
+            git commit -m "style: apply Prettier to push campaign files"
+            git push origin HEAD:feat/admin-push-campaign-studio
+          fi
