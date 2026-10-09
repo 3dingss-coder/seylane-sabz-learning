@@ -6,7 +6,8 @@ import { StoreConflictError } from '../store/types';
 import { audit, type Actor, type Deps } from './context';
 import { notifyUsers } from './notify';
 
-type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'partial' | 'failed' | 'cancelled';
+type CampaignStatus =
+  'draft' | 'scheduled' | 'sending' | 'sent' | 'partial' | 'failed' | 'cancelled';
 type Audience = 'all' | 'team' | 'user' | 'role';
 
 interface Campaign {
@@ -115,9 +116,7 @@ export async function listCampaigns(d: Deps) {
         0,
       ),
       failed: items.filter(
-        (c) =>
-          c.status === 'failed' ||
-          (c.status === 'partial' && (c.pushFailed ?? 0) > 0),
+        (c) => c.status === 'failed' || (c.status === 'partial' && (c.pushFailed ?? 0) > 0),
       ).length,
     },
   };
