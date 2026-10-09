@@ -101,7 +101,7 @@ cd functions && npx wrangler deploy --dry-run --outdir /tmp/wr-dry
 ```
 
 تست‌های اختصاصی:
-- بک‌اند: `functions/test/push-campaigns.test.ts` (۲۰ تست: دسترسی، اعتبارسنجی، قواعد URL، پیش‌نویس بدون ارسال، ارسال با سرویس واقعی، لاگ خطا، retry بدون تکرار، کمپین لغوشده، زمان‌بندی، اجرای دوباره بدون تکرار، داشبورد)
+- بک‌اند: `functions/test/push-campaigns.test.ts` (۲۱ تست: دسترسی، اعتبارسنجی، قواعد URL، پیش‌نویس بدون ارسال، ارسال با سرویس واقعی، لاگ خطا، retry بدون تکرار، کمپین لغوشده، زمان‌بندی، اجرای دوباره بدون تکرار، داشبورد)
 - کلاینت: `apps/web/src/pages/admin/pushCampaigns.test.tsx` و `pushCampaignModel.test.ts`
 
 ---
