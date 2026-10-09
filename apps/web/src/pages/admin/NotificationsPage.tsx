@@ -370,11 +370,17 @@ function ManualSend() {
           <img src="/icons/icon-192.png" alt="" className="size-9 shrink-0 rounded-lg" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-text">{title.trim() || 'عنوان اعلان شما'}</p>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-secondary">{body.trim() || 'متن اعلان اینجا نمایش داده می‌شود.'}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-secondary">
+              {body.trim() || 'متن اعلان اینجا نمایش داده می‌شود.'}
+            </p>
           </div>
         </div>
         {imageUrl.trim() && /^https:\/\//i.test(imageUrl.trim()) && (
-          <img src={imageUrl.trim()} alt="پیش‌نمایش تصویر اعلان" className="mt-3 max-h-48 w-full rounded-lg border border-border object-cover" />
+          <img
+            src={imageUrl.trim()}
+            alt="پیش‌نمایش تصویر اعلان"
+            className="mt-3 max-h-48 w-full rounded-lg border border-border object-cover"
+          />
         )}
       </div>
       <Button
