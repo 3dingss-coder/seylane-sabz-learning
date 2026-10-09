@@ -5,10 +5,12 @@ import { rebuildKnowledgeIndex } from './knowledge';
 import { extractPendingMedia } from './media-ingest';
 import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
+import { runScheduledCampaigns } from './push-campaigns';
 import type { Deps } from './context';
 
 export type JobName =
   | 'flush-push'
+  | 'push-campaigns'
   | 'deadline-sweep'
   | 'weekly-digest'
   | 'daily-reminders'
@@ -24,6 +26,7 @@ export interface JobOptions {
 /** The one job table: cron triggers and `POST /admin/jobs/:name` both run through it. */
 export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>> = {
   'flush-push': (d) => flushDeferredPush(d).then((sent) => ({ sent })),
+  'push-campaigns': (d) => runScheduledCampaigns(d),
   'deadline-sweep': (d) => runDeadlineSweep(d),
   'weekly-digest': (d, o) => runWeeklyDigest(d, Boolean(o?.force)),
   'daily-reminders': (d) => runDailyReminders(d),
@@ -64,7 +67,7 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
-  '*/15 * * * *': ['flush-push', 'knowledge-reindex', 'migrate-blobs'],
+  '*/15 * * * *': ['flush-push', 'push-campaigns', 'knowledge-reindex', 'migrate-blobs'],
   '0 * * * *': ['deadline-sweep', 'weekly-digest'],
   '30 4 * * *': ['mentor-daily'],
   '30 6 * * *': ['daily-reminders'],

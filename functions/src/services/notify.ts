@@ -170,6 +170,8 @@ export interface NotifyOptions {
   throttleKey?: string;
   throttleMs?: number;
   push?: boolean;
+  imageUrl?: string | null;
+  campaignId?: string | null;
 }
 
 async function throttled(d: Deps, userId: string, key: string, windowMs: number): Promise<boolean> {
@@ -204,9 +206,15 @@ async function sendPush(
     const res = await d.push.send(
       tokens.map((t) => t.token),
       {
-        title: g?.title ?? n.title,
-        body: g?.body ?? n.body,
-        data: { notificationId: n.id, link: n.actionRef ?? '/messages', type },
+        title: type === 'manual' ? n.title : (g?.title ?? n.title),
+        body: type === 'manual' ? n.body : (g?.body ?? n.body),
+        data: {
+          notificationId: n.id,
+          link: n.actionRef ?? '/messages',
+          type,
+          ...(n.imageUrl ? { imageUrl: n.imageUrl } : {}),
+        },
+        imageUrl: n.imageUrl ?? undefined,
       },
     );
     for (const bad of res.invalidTokens) await d.store.delete(`device_tokens/${ids.hash(bad)}`);
@@ -249,6 +257,8 @@ export async function notifyUsers(
           title: content.title,
           body: content.body,
           actionRef: opts.actionRef ?? null,
+          imageUrl: opts.imageUrl ?? null,
+          campaignId: opts.campaignId ?? null,
           readAt: null,
           pushStatus: wantPush ? (deferred ? 'deferred' : 'none') : 'none',
           deliverAfter: deferred
@@ -381,6 +391,21 @@ export const manualSendSchema = z
     targetId: z.string().max(80).nullable().optional(),
     title: text(2, 80, 'عنوان'),
     body: text(2, 300, 'متن'),
+    imageUrl: z
+      .string()
+      .trim()
+      .url()
+      .max(2048)
+      .refine((v) => v.startsWith('https://'), 'آدرس تصویر باید HTTPS باشد.')
+      .nullable()
+      .optional(),
+    actionRef: z
+      .string()
+      .trim()
+      .max(500)
+      .refine((v) => v.startsWith('/') && !v.startsWith('//'), 'لینک باید مسیر داخلی سایت باشد.')
+      .nullable()
+      .optional(),
   })
   .refine((v) => v.audience === 'all' || !!v.targetId, {
     message: 'مخاطب را انتخاب کنید.',
@@ -399,7 +424,11 @@ export async function manualSend(d: Deps, actor: Actor, input: z.infer<typeof ma
     users.map((u) => u.id),
     'manual',
     { title: input.title, body: input.body },
-    { priority: 'normal' },
+    {
+      priority: 'normal',
+      imageUrl: input.imageUrl ?? null,
+      actionRef: input.actionRef ?? '/home',
+    },
   );
   await audit(d, actor, 'notification.manual_sent', 'notifications', input.audience, null, {
     ...input,

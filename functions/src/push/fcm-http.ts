@@ -1,4 +1,3 @@
-import { webpushLink } from './fcm';
 import type { PushMessage, PushSender } from './types';
 
 /**
@@ -22,11 +21,22 @@ export function parseServiceAccount(raw: string | undefined): ServiceAccount | n
   if (!raw || !raw.trim()) return null;
   try {
     const j = JSON.parse(raw) as Partial<ServiceAccount>;
-    if (j.project_id && j.client_email && j.private_key) {
+    const privateKey =
+      typeof j.private_key === 'string' ? j.private_key.replace(/\\n/g, '\n').trim() : '';
+    const pemLooksValid =
+      privateKey.startsWith('-----BEGIN PRIVATE KEY-----') &&
+      privateKey.includes('-----END PRIVATE KEY-----');
+    if (
+      typeof j.project_id === 'string' &&
+      j.project_id.trim() &&
+      typeof j.client_email === 'string' &&
+      j.client_email.includes('@') &&
+      pemLooksValid
+    ) {
       return {
-        project_id: j.project_id,
-        client_email: j.client_email,
-        private_key: j.private_key,
+        project_id: j.project_id.trim(),
+        client_email: j.client_email.trim(),
+        private_key: privateKey,
       };
     }
   } catch {
@@ -61,10 +71,20 @@ export class FcmHttpPushSender implements PushSender {
 
   constructor(
     private readonly sa: ServiceAccount,
-    private readonly appUrl = '',
+    _appUrl = '',
     private readonly fetchImpl: FetchLike = (i, init) => fetch(i, init),
     private readonly now: () => number = () => Date.now(),
   ) {}
+
+  /** Checks whether the configured PEM can be imported; it does not verify Google IAM/API access. */
+  async isConfigured(): Promise<boolean> {
+    try {
+      await this.signingKey();
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   private signingKey(): Promise<SigningKey> {
     this.key ??= crypto.subtle.importKey(
@@ -128,17 +148,18 @@ export class FcmHttpPushSender implements PushSender {
   }
 
   private body(token: string, msg: PushMessage) {
-    const link = webpushLink(this.appUrl, msg.data?.link);
     return {
+      // Data-only payload: push-sw.js owns display, preventing the browser/FCM from
+      // auto-displaying a notification and the service worker displaying it a second time.
       message: {
         token,
-        notification: { title: msg.title, body: msg.body },
-        data: msg.data ?? {},
-        android: { priority: 'HIGH' },
-        webpush: {
-          notification: { icon: '/icons/icon-192.png', dir: 'rtl', lang: 'fa' },
-          ...(link ? { fcm_options: { link } } : {}),
+        data: {
+          ...(msg.data ?? {}),
+          title: msg.title,
+          body: msg.body,
+          ...(msg.imageUrl ? { imageUrl: msg.imageUrl } : {}),
         },
+        android: { priority: 'HIGH' },
       },
     };
   }
@@ -170,7 +191,7 @@ export class FcmHttpPushSender implements PushSender {
       // non-JSON error body
     }
     // Only prune when FCM says the token itself is dead, never for a bad message/link.
-    if (code === 'UNREGISTERED' || res.status === 404) return 'invalid';
+    if (code === 'UNREGISTERED') return 'invalid';
     if (code === 'INVALID_ARGUMENT' && /registration token/i.test(message)) return 'invalid';
     return 'failed';
   }

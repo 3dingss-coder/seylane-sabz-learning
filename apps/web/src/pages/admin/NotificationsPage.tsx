@@ -37,7 +37,7 @@ const KEY_LABEL: Record<string, string> = {
 
 /** A7 — اعلان‌ها: editable templates + manual broadcast. */
 export function NotificationsPage() {
-  const [tab, setTab] = useState<'inbox' | 'templates' | 'send'>('inbox');
+  const [tab, setTab] = useState<'inbox' | 'templates' | 'send' | 'campaigns'>('inbox');
   const inbox = useNotifications();
   return (
     <div className="flex flex-col gap-4">
@@ -50,9 +50,18 @@ export function NotificationsPage() {
           { value: 'inbox', label: 'صندوق من', count: inbox.data?.unread },
           { value: 'templates', label: 'قالب‌ها' },
           { value: 'send', label: 'ارسال دستی' },
+          { value: 'campaigns', label: 'کمپین‌های Push' },
         ]}
       />
-      {tab === 'inbox' ? <Inbox /> : tab === 'templates' ? <Templates /> : <ManualSend />}
+      {tab === 'inbox' ? (
+        <Inbox />
+      ) : tab === 'templates' ? (
+        <Templates />
+      ) : tab === 'campaigns' ? (
+        <PushCampaigns />
+      ) : (
+        <ManualSend />
+      )}
     </div>
   );
 }
@@ -244,6 +253,414 @@ function TemplateDialog({ t, onClose }: { t: NotificationTemplate; onClose: () =
   );
 }
 
+type PushCampaign = {
+  id: string;
+  name: string;
+  title: string;
+  body: string;
+  imageUrl: string | null;
+  actionRef: string;
+  audience: 'all' | 'team' | 'user' | 'role';
+  targetId: string | null;
+  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'partial' | 'failed' | 'cancelled';
+  scheduledAt: string | null;
+  updatedAt: string;
+  targetCount: number | null;
+  createdNotifications: number;
+  pushSent: number | null;
+  pushFailed: number | null;
+  pushSkipped: number | null;
+  pushNoDevice?: number | null;
+  pushDeferred: number | null;
+  lastError: string | null;
+};
+
+const CAMPAIGN_STATUS: Record<PushCampaign['status'], string> = {
+  draft: 'پیش‌نویس',
+  scheduled: 'زمان‌بندی‌شده',
+  sending: 'در حال ارسال',
+  sent: 'ارسال‌شده',
+  partial: 'ارسال ناقص',
+  failed: 'ناموفق',
+  cancelled: 'لغوشده',
+};
+
+function campaignStatusLabel(c: PushCampaign): string {
+  if (
+    c.status === 'sent' &&
+    (c.pushSent ?? 0) === 0 &&
+    (c.pushNoDevice ?? c.pushSkipped ?? 0) > 0
+  ) {
+    return 'بدون دستگاه';
+  }
+  return CAMPAIGN_STATUS[c.status];
+}
+
+export function PushProviderStatus() {
+  const provider = useQuery({
+    queryKey: ['admin', 'push-provider-status'],
+    queryFn: ({ signal }) =>
+      api.get<{ configured: boolean }>('/admin/push-provider-status', signal),
+    retry: false,
+  });
+  if (provider.isSuccess && !provider.data.configured) {
+    return (
+      <Card className="border border-danger/40 bg-background">
+        <p className="font-bold text-danger-fg">ارسال Push پیکربندی نشده است</p>
+        <p className="text-sm text-text-secondary">
+          ارسال به دستگاه‌ها تا زمان تنظیم معتبر حساب سرویس FCM در محیط Preview غیرفعال است. مقدار
+          Secret را در کد یا گفتگو وارد نکنید؛ فقط تنظیمات محیط را در داشبورد بررسی کنید.
+        </p>
+      </Card>
+    );
+  }
+  if (provider.isError) {
+    return (
+      <p className="text-sm text-text-secondary">
+        وضعیت پیکربندی Push قابل بررسی نیست؛ قبل از ارسال، اتصال API و مجوز ادمین را بررسی کنید.
+      </p>
+    );
+  }
+  return null;
+}
+
+function PushCampaigns() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const teams = useTeams();
+  const users = useUsers();
+  const q = useQuery({
+    queryKey: ['admin', 'push-campaigns'],
+    queryFn: ({ signal }) =>
+      api.get<{
+        items: PushCampaign[];
+        stats: {
+          total: number;
+          draft: number;
+          scheduled: number;
+          sent: number;
+          failed: number;
+          noDeviceRecipients: number;
+        };
+      }>('/admin/push-campaigns', signal),
+  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [actionRef, setActionRef] = useState('/home');
+  const [audience, setAudience] = useState<'all' | 'team' | 'user' | 'role'>('all');
+  const [targetId, setTargetId] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [sendTarget, setSendTarget] = useState<PushCampaign | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const reset = () => {
+    setEditingId(null);
+    setName('');
+    setTitle('');
+    setBody('');
+    setImageUrl('');
+    setActionRef('/home');
+    setAudience('all');
+    setTargetId('');
+    setScheduledAt('');
+    setErrors({});
+  };
+  const save = useMutation({
+    mutationFn: () => {
+      const payload = {
+        name: name.trim(),
+        title: title.trim(),
+        body: body.trim(),
+        imageUrl: imageUrl.trim() || null,
+        actionRef: actionRef.trim() || '/home',
+        audience,
+        targetId: audience === 'all' ? null : targetId,
+        scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+      };
+      return editingId
+        ? api.patch(`/admin/push-campaigns/${editingId}`, payload)
+        : api.post('/admin/push-campaigns', payload);
+    },
+    onSuccess: () => {
+      toast.show({ type: 'success', message: 'کمپین ذخیره شد.' });
+      reset();
+      void qc.invalidateQueries({ queryKey: ['admin', 'push-campaigns'] });
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && Object.keys(e.fields).length) setErrors(e.fields);
+      else toast.show({ type: 'error', message: errMsg(e) });
+    },
+  });
+  const send = useMutation({
+    mutationFn: (id: string) => api.post(`/admin/push-campaigns/${id}/send`),
+    onSuccess: (result) => {
+      setSendTarget(null);
+      toast.show({
+        type: 'success',
+        message: 'درخواست ارسال کمپین انجام شد؛ گزارش نهایی را در تاریخچه بررسی کنید.',
+      });
+      void qc.invalidateQueries({ queryKey: ['admin', 'push-campaigns'] });
+      void result;
+    },
+    onError: (e) => {
+      setSendTarget(null);
+      toast.show({ type: 'error', message: errMsg(e) });
+    },
+  });
+  const cancel = useMutation({
+    mutationFn: (id: string) => api.post(`/admin/push-campaigns/${id}/cancel`),
+    onSuccess: () => {
+      toast.show({ type: 'success', message: 'کمپین لغو شد.' });
+      void qc.invalidateQueries({ queryKey: ['admin', 'push-campaigns'] });
+    },
+    onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
+  });
+  const startEdit = (c: PushCampaign) => {
+    setEditingId(c.id);
+    setName(c.name);
+    setTitle(c.title);
+    setBody(c.body);
+    setImageUrl(c.imageUrl ?? '');
+    setActionRef(c.actionRef);
+    setAudience(c.audience);
+    setTargetId(c.targetId ?? '');
+    if (c.scheduledAt) {
+      const date = new Date(c.scheduledAt);
+      date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+      setScheduledAt(date.toISOString().slice(0, 16));
+    } else {
+      setScheduledAt('');
+    }
+    setErrors({});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  return (
+    <div className="flex flex-col gap-4">
+      <PushProviderStatus />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        {[
+          ['کل کمپین‌ها', q.data?.stats.total],
+          ['پیش‌نویس', q.data?.stats.draft],
+          ['زمان‌بندی‌شده', q.data?.stats.scheduled],
+          ['ارسال‌شده', q.data?.stats.sent],
+          ['ناموفق/ناقص', q.data?.stats.failed],
+          ['گیرنده بدون دستگاه', q.data?.stats.noDeviceRecipients],
+        ].map(([label, value]) => (
+          <Card key={String(label)} className="flex flex-col gap-1">
+            <p className="text-xs text-text-secondary">{label}</p>
+            <p className="text-xl font-bold">
+              {value === undefined ? '—' : toPersianDigits(Number(value))}
+            </p>
+          </Card>
+        ))}
+      </div>
+      <Card className="flex max-w-3xl flex-col gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-bold">{editingId ? 'ویرایش کمپین' : 'ساخت کمپین جدید'}</h2>
+          {editingId && (
+            <Button variant="ghost" onClick={reset}>
+              لغو ویرایش
+            </Button>
+          )}
+        </div>
+        <Input
+          label="نام داخلی کمپین"
+          value={name}
+          maxLength={100}
+          onChange={(e) => setName(e.target.value)}
+          error={errors.name}
+        />
+        <Input
+          label="عنوان اعلان"
+          value={title}
+          maxLength={80}
+          onChange={(e) => setTitle(e.target.value)}
+          error={errors.title}
+        />
+        <Textarea
+          label="متن اعلان"
+          value={body}
+          maxLength={300}
+          onChange={(e) => setBody(e.target.value)}
+          error={errors.body}
+          hint={`${toPersianDigits(body.length)} / ۳۰۰`}
+        />
+        <Input
+          label="تصویر (اختیاری، HTTPS)"
+          value={imageUrl}
+          maxLength={2048}
+          onChange={(e) => setImageUrl(e.target.value)}
+          error={errors.imageUrl}
+        />
+        <Input
+          label="مسیر داخلی مقصد کلیک"
+          value={actionRef}
+          maxLength={500}
+          onChange={(e) => setActionRef(e.target.value)}
+          error={errors.actionRef}
+          hint="مثلاً /home یا /messages"
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Select
+            label="مخاطبان هدف"
+            value={audience}
+            onChange={(e) => {
+              setAudience(e.target.value as typeof audience);
+              setTargetId('');
+            }}
+          >
+            <option value="all">همه کاربران فعال</option>
+            <option value="role">یک نقش</option>
+            <option value="team">یک تیم</option>
+            <option value="user">یک کاربر</option>
+          </Select>
+          {audience !== 'all' && (
+            <Select
+              label="انتخاب مخاطب"
+              value={targetId}
+              onChange={(e) => setTargetId(e.target.value)}
+              error={errors.targetId}
+            >
+              <option value="">انتخاب کنید</option>
+              {audience === 'role' &&
+                ['marketer', 'manager', 'admin', 'superadmin'].map((role) => (
+                  <option key={role} value={role}>
+                    {ROLE_LABEL[role]}
+                  </option>
+                ))}
+              {audience === 'team' &&
+                (teams.data ?? []).map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              {audience === 'user' &&
+                (users.data ?? [])
+                  .filter((user) => user.status === 'active')
+                  .map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name}
+                    </option>
+                  ))}
+            </Select>
+          )}
+        </div>
+        <Input
+          label="زمان ارسال (اختیاری؛ خالی = پیش‌نویس)"
+          type="datetime-local"
+          value={scheduledAt}
+          onChange={(e) => setScheduledAt(e.target.value)}
+          error={errors.scheduledAt}
+        />
+        <div className="rounded-card border border-border bg-background p-4" dir="rtl">
+          <p className="mb-2 text-xs font-bold text-text-secondary">پیش‌نمایش زنده</p>
+          <div className="rounded-xl border border-border bg-surface p-3">
+            <p className="font-bold">{title.trim() || 'عنوان اعلان شما'}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-secondary">
+              {body.trim() || 'متن اعلان اینجا نمایش داده می‌شود.'}
+            </p>
+            {imageUrl.trim().startsWith('https://') && (
+              <img
+                src={imageUrl.trim()}
+                alt="پیش‌نمایش تصویر"
+                className="mt-3 max-h-48 w-full rounded-lg object-cover"
+              />
+            )}
+          </div>
+          <p className="mt-2 text-xs text-text-secondary">
+            مقصد: <span dir="ltr">{actionRef || '/home'}</span>
+          </p>
+        </div>
+        <Button
+          loading={save.isPending}
+          disabled={
+            name.trim().length < 2 ||
+            title.trim().length < 2 ||
+            body.trim().length < 2 ||
+            (audience !== 'all' && !targetId)
+          }
+          onClick={() => save.mutate()}
+        >
+          {editingId ? 'ذخیره تغییرات' : scheduledAt ? 'ذخیره و زمان‌بندی' : 'ذخیره پیش‌نویس'}
+        </Button>
+      </Card>
+      <div className="flex flex-col gap-3">
+        <h2 className="font-bold">تاریخچه کمپین‌ها</h2>
+        {q.isLoading ? (
+          <TableSkeleton rows={4} />
+        ) : q.isError ? (
+          <p className="text-sm text-danger-fg">بارگذاری کمپین‌ها ناموفق بود.</p>
+        ) : (q.data?.items ?? []).length === 0 ? (
+          <EmptyState title="هنوز کمپینی ثبت نشده است" icon={<Bell className="size-8" />} />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {(q.data?.items ?? []).map((c) => (
+              <Card key={c.id} className="flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold">{c.name}</p>
+                    <p className="text-sm text-text-secondary">{c.title}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-background px-2 py-1 text-xs">
+                    {campaignStatusLabel(c)}
+                  </span>
+                </div>
+                <p className="whitespace-pre-wrap text-sm">{c.body}</p>
+                <p className="text-xs text-text-secondary">
+                  به‌روزرسانی: {faRelative(c.updatedAt)}
+                  {c.scheduledAt
+                    ? ` • زمان ارسال: ${new Date(c.scheduledAt).toLocaleString('fa-IR')}`
+                    : ''}
+                </p>
+                {c.status === 'sent' || c.status === 'partial' || c.status === 'failed' ? (
+                  <p className="text-xs text-text-secondary">
+                    مخاطب: {c.targetCount ?? '—'} • اعلان ساخته‌شده: {c.createdNotifications} • Push
+                    موفق: {c.pushSent ?? '—'} • شکست: {c.pushFailed ?? '—'} • بدون دستگاه:{' '}
+                    {c.pushNoDevice ?? c.pushSkipped ?? '—'} • در صف انتظار: {c.pushDeferred ?? '—'}
+                  </p>
+                ) : null}
+                {c.lastError && <p className="text-sm text-danger-fg">{c.lastError}</p>}
+                <div className="flex flex-wrap gap-2">
+                  {(c.status === 'draft' || c.status === 'scheduled') && (
+                    <Button variant="secondary" onClick={() => startEdit(c)}>
+                      ویرایش
+                    </Button>
+                  )}
+                  {c.status === 'draft' && (
+                    <Button onClick={() => setSendTarget(c)}>ارسال اکنون</Button>
+                  )}
+                  {(c.status === 'draft' || c.status === 'scheduled') && (
+                    <Button
+                      variant="ghost"
+                      loading={cancel.isPending}
+                      onClick={() => cancel.mutate(c.id)}
+                    >
+                      لغو
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+      <ConfirmDialog
+        open={Boolean(sendTarget)}
+        title="ارسال کمپین؟"
+        loading={send.isPending}
+        onClose={() => setSendTarget(null)}
+        onConfirm={() => sendTarget && send.mutate(sendTarget.id)}
+        confirmText="تأیید و ارسال"
+      >
+        کمپین «{sendTarget?.name}» برای مخاطبان انتخاب‌شده ارسال می‌شود. این کار پس از شروع قابل
+        بازگشت نیست.
+      </ConfirmDialog>
+    </div>
+  );
+}
+
 function ManualSend() {
   const teams = useTeams();
   const users = useUsers();
@@ -251,6 +668,8 @@ function ManualSend() {
   const [targetId, setTargetId] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [actionRef, setActionRef] = useState('/messages');
   const [confirm, setConfirm] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const toast = useToast();
@@ -261,6 +680,8 @@ function ManualSend() {
         targetId: audience === 'all' ? null : targetId,
         title: title.trim(),
         body: body.trim(),
+        imageUrl: imageUrl.trim() || null,
+        actionRef: actionRef.trim() || '/messages',
       }),
     onSuccess: (r) => {
       setConfirm(false);
@@ -273,6 +694,8 @@ function ManualSend() {
       });
       setTitle('');
       setBody('');
+      setImageUrl('');
+      setActionRef('/messages');
     },
     onError: (e) => {
       setConfirm(false);
@@ -342,6 +765,41 @@ function ManualSend() {
         error={errors.body}
         hint={`${toPersianDigits(body.length)} / ۳۰۰`}
       />
+      <Input
+        label="آدرس تصویر اعلان (اختیاری)"
+        value={imageUrl}
+        maxLength={2048}
+        onChange={(e) => setImageUrl(e.target.value)}
+        error={errors.imageUrl}
+        hint="لینک مستقیم تصویر عمومی با HTTPS؛ نمایش تصویر به سیستم‌عامل و مرورگر بستگی دارد."
+      />
+      <Input
+        label="مسیر مقصد پس از کلیک"
+        value={actionRef}
+        maxLength={500}
+        onChange={(e) => setActionRef(e.target.value)}
+        error={errors.actionRef}
+        hint="مسیر داخلی مثل /home یا /messages"
+      />
+      <div className="rounded-card border border-border bg-background p-4" dir="rtl">
+        <p className="mb-3 text-xs font-bold text-text-secondary">پیش‌نمایش اعلان</p>
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-surface p-3 shadow-sm">
+          <img src="/icons/icon-192.png" alt="" className="size-9 shrink-0 rounded-lg" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-text">{title.trim() || 'عنوان اعلان شما'}</p>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-secondary">
+              {body.trim() || 'متن اعلان اینجا نمایش داده می‌شود.'}
+            </p>
+          </div>
+        </div>
+        {imageUrl.trim() && /^https:\/\//i.test(imageUrl.trim()) && (
+          <img
+            src={imageUrl.trim()}
+            alt="پیش‌نمایش تصویر اعلان"
+            className="mt-3 max-h-48 w-full rounded-lg border border-border object-cover"
+          />
+        )}
+      </div>
       <Button
         icon={<Send className="size-4" aria-hidden />}
         disabled={

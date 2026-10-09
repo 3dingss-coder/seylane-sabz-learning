@@ -41,7 +41,7 @@ describe('FcmHttpPushSender', () => {
     expect(v.verify(publicKey, Buffer.from(sig, 'base64url'))).toBe(true);
   });
 
-  it('sends one v1 request per token with the HTTPS link and reuses the access token', async () => {
+  it('sends data-only v1 payloads per token and reuses the access token', async () => {
     const { calls, fetchImpl } = harness(() => json(200, { name: 'm' }));
     const s = new FcmHttpPushSender(sa, 'https://academy-seylaneh.site', fetchImpl);
     const r1 = await s.send(['a', 'b'], { title: 't', body: 'b', data: { link: '/messages' } });
@@ -52,7 +52,9 @@ describe('FcmHttpPushSender', () => {
     const sendCall = calls.find((c) => c.url.includes('messages:send'));
     if (!sendCall) throw new Error('no FCM send call');
     const first = JSON.parse(sendCall.body);
-    expect(first.message.webpush.fcm_options.link).toBe('https://academy-seylaneh.site/messages');
+    expect(first.message.notification).toBeUndefined();
+    expect(first.message.webpush).toBeUndefined();
+    expect(first.message.data).toMatchObject({ title: 't', body: 'b', link: '/messages' });
     expect(sendCall.auth).toBe('Bearer ya29.test');
     expect(calls.some((c) => c.url.includes('/v1/projects/proj-1/messages:send'))).toBe(true);
   });

@@ -1,6 +1,9 @@
+import { generateKeyPairSync } from 'node:crypto';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createCtx, fakeMp4, type TestCtx } from './support/ctx';
+import { FcmHttpPushSender } from '../src/push/fcm-http';
+import type { Deps } from '../src/services/context';
 
 let ctx: TestCtx;
 let admin: { id: string; token: string };
@@ -218,5 +221,40 @@ describe('users & roles (PROMPT 007)', () => {
     expect(ok.status).toBe(200);
     const logs = await ctx.api(sa.token).get('/v1/admin/audit-logs?action=policy.updated');
     expect(logs.body.data).toHaveLength(1);
+  });
+});
+
+describe('admin push provider status', () => {
+  it('requires an admin session and returns only a boolean', async () => {
+    const unauthorized = await ctx.api().get('/v1/admin/push-provider-status');
+    expect(unauthorized.status).toBe(401);
+
+    const response = await ctx.api(admin.token).get('/v1/admin/push-provider-status');
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({ configured: false });
+    expect(JSON.stringify(response.body)).not.toContain('private_key');
+  });
+
+  it('reports false for an FCM sender with an invalid signing key', async () => {
+    (ctx.deps as Deps).push = new FcmHttpPushSender({
+      project_id: 'test-project',
+      client_email: 'test@example.invalid',
+      private_key: 'not-a-real-key',
+    });
+    const response = await ctx.api(admin.token).get('/v1/admin/push-provider-status');
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({ configured: false });
+  });
+
+  it('reports configured only when the sender signing key can be imported', async () => {
+    const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+    (ctx.deps as Deps).push = new FcmHttpPushSender({
+      project_id: 'test-project',
+      client_email: 'test@example.invalid',
+      private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    });
+    const response = await ctx.api(admin.token).get('/v1/admin/push-provider-status');
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual({ configured: true });
   });
 });

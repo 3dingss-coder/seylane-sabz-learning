@@ -9,6 +9,7 @@ import * as content from '../services/content';
 import { isJobName, JOB_NAMES, runJob } from '../services/cron';
 import { invalidateIndexCache as invalidateKnowledgeCache } from '../services/retrieval';
 import { ApiError } from '../http/errors';
+import { FcmHttpPushSender } from '../push/fcm-http';
 import * as mentor from '../services/mentor';
 import * as guides from '../services/mentor-guides';
 import * as aiQuality from '../services/mentor-quality';
@@ -16,6 +17,7 @@ import * as knowledge from '../services/knowledge';
 import * as mediaIngest from '../services/media-ingest';
 import * as mediaLibrary from '../services/media-library';
 import * as notify from '../services/notify';
+import * as pushCampaigns from '../services/push-campaigns';
 import * as policies from '../services/policies';
 import * as reports from '../services/reports';
 import * as users from '../services/users';
@@ -31,7 +33,8 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   // the next mentor question re-indexes it (incremental — unchanged items cost nothing).
   r.use('/admin', (req, _res, next) => {
     const write =
-      req.method !== 'GET' && !/^\/admin\/(jobs|mentor|knowledge\/reindex)/.test(req.path ?? '');
+      req.method !== 'GET' &&
+      !/^\/admin\/(jobs|mentor|knowledge\/reindex|push-campaigns)/.test(req.path ?? '');
     if (!write) return next();
     void knowledge.markKnowledgeDirty(d).finally(() => next());
   });
@@ -559,6 +562,51 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
       'ارسال دستی اعلان حداکثر ۵ بار در ساعت ممکن است.',
     ),
     h(async (req) => notify.manualSend(d, actorOf(req), parse(notify.manualSendSchema, req.body))),
+  );
+
+  // Persistent Push campaigns: draft, schedule, send, cancel and report.
+  r.get(
+    '/admin/push-campaigns',
+    h(async () => pushCampaigns.listCampaigns(d)),
+  );
+  r.post(
+    '/admin/push-campaigns',
+    h(
+      async (req) =>
+        pushCampaigns.saveCampaign(
+          d,
+          actorOf(req),
+          parse(pushCampaigns.campaignInputSchema, req.body),
+        ),
+      201,
+    ),
+  );
+  r.patch(
+    '/admin/push-campaigns/:id',
+    h(async (req) =>
+      pushCampaigns.saveCampaign(
+        d,
+        actorOf(req),
+        parse(pushCampaigns.campaignInputSchema, req.body),
+        id(req),
+      ),
+    ),
+  );
+  r.post(
+    '/admin/push-campaigns/:id/send',
+    rateLimit(limiter, 'push-campaign-send', 5, 60 * 60_000, (req) => me(req).id),
+    h(async (req) => pushCampaigns.sendCampaign(d, actorOf(req), id(req))),
+  );
+  r.post(
+    '/admin/push-campaigns/:id/cancel',
+    h(async (req) => pushCampaigns.cancelCampaign(d, actorOf(req), id(req))),
+  );
+
+  r.get(
+    '/admin/push-provider-status',
+    h(async () => ({
+      configured: d.push instanceof FcmHttpPushSender ? await d.push.isConfigured() : false,
+    })),
   );
 
   // Policies & audit
