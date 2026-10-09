@@ -205,6 +205,19 @@ export async function cancelCampaign(d: Deps, actor: Actor, id: string) {
     throw new ApiError('CONFLICT', 'فقط پیش‌نویس یا کمپین زمان‌بندی‌شده قابل لغو است.');
   }
   const now = d.clock().toISOString();
+  // Share the one-time claim namespace with sending so cancel/send races have one winner.
+  try {
+    await d.store.create(`push_campaign_claims/${id}`, {
+      claimedAt: now,
+      actorId: actor.id,
+      action: 'cancel',
+    });
+  } catch (error) {
+    if (error instanceof StoreConflictError) {
+      throw new ApiError('CONFLICT', 'ارسال یا لغو این کمپین قبلاً آغاز شده است.');
+    }
+    throw error;
+  }
   await d.store.update(path, { status: 'cancelled', updatedAt: now });
   await audit(d, actor, 'push_campaign.cancelled', 'push_campaigns', id, current, { status: 'cancelled' });
   return { id, status: 'cancelled' as const };
