@@ -42,10 +42,14 @@ interface Campaign {
   lastError: string | null;
 }
 
-const internalPath = z.string().trim().max(500).refine(
-  (v) => v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/\\'),
-  'مقصد باید یک مسیر داخلی معتبر باشد.',
-);
+const internalPath = z
+  .string()
+  .trim()
+  .max(500)
+  .refine(
+    (v) => v.startsWith('/') && !v.startsWith('//') && !v.startsWith('/\\'),
+    'مقصد باید یک مسیر داخلی معتبر باشد.',
+  );
 const imageUrl = z
   .string()
   .trim()
@@ -55,19 +59,21 @@ const imageUrl = z
   .nullable()
   .optional();
 
-export const campaignInputSchema = z.object({
-  name: text(2, 100, 'نام کمپین'),
-  title: text(2, 80, 'عنوان اعلان'),
-  body: text(2, 300, 'متن اعلان'),
-  imageUrl,
-  actionRef: internalPath,
-  audience: z.enum(['all', 'team', 'user', 'role']),
-  targetId: z.string().trim().max(80).nullable().optional(),
-  scheduledAt: z.string().datetime().nullable().optional(),
-}).refine((v) => v.audience === 'all' || Boolean(v.targetId), {
-  message: 'مخاطب هدف را انتخاب کنید.',
-  path: ['targetId'],
-});
+export const campaignInputSchema = z
+  .object({
+    name: text(2, 100, 'نام کمپین'),
+    title: text(2, 80, 'عنوان اعلان'),
+    body: text(2, 300, 'متن اعلان'),
+    imageUrl,
+    actionRef: internalPath,
+    audience: z.enum(['all', 'team', 'user', 'role']),
+    targetId: z.string().trim().max(80).nullable().optional(),
+    scheduledAt: z.string().datetime().nullable().optional(),
+  })
+  .refine((v) => v.audience === 'all' || Boolean(v.targetId), {
+    message: 'مخاطب هدف را انتخاب کنید.',
+    path: ['targetId'],
+  });
 
 function publicCampaign(id: string, c: Campaign) {
   return { id, ...c };
@@ -125,7 +131,7 @@ export async function saveCampaign(
     imageUrl: input.imageUrl ?? null,
     actionRef: input.actionRef,
     audience: input.audience,
-    targetId: input.audience === 'all' ? null : input.targetId ?? null,
+    targetId: input.audience === 'all' ? null : (input.targetId ?? null),
     status: input.scheduledAt ? 'scheduled' : 'draft',
     scheduledAt: input.scheduledAt ?? null,
     createdAt: before?.createdAt ?? now,
@@ -215,7 +221,12 @@ async function executeCampaign(d: Deps, id: string, actor?: Actor) {
           : 'failed';
     const finishedAt = d.clock().toISOString();
     await d.store.update(path, {
-      status, targetCount: users.length, createdNotifications, pushSent, pushFailed, pushSkipped,
+      status,
+      targetCount: users.length,
+      createdNotifications,
+      pushSent,
+      pushFailed,
+      pushSkipped,
       finishedAt,
       updatedAt: finishedAt,
       lastError: null,
@@ -291,7 +302,10 @@ export async function cancelCampaign(d: Deps, actor: Actor, id: string) {
 export async function runScheduledCampaigns(d: Deps) {
   const due = await d.store.query<Campaign>({
     collection: 'push_campaigns',
-    where: [['status', '==', 'scheduled'], ['scheduledAt', '<=', d.clock().toISOString()]],
+    where: [
+      ['status', '==', 'scheduled'],
+      ['scheduledAt', '<=', d.clock().toISOString()],
+    ],
     orderBy: [['scheduledAt', 'asc']],
     limit: 20,
   });

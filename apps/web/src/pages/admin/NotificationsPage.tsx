@@ -416,7 +416,11 @@ function PushCampaigns() {
       <Card className="flex max-w-3xl flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="font-bold">{editingId ? 'ویرایش کمپین' : 'ساخت کمپین جدید'}</h2>
-          {editingId && <Button variant="ghost" onClick={reset}>لغو ویرایش</Button>}
+          {editingId && (
+            <Button variant="ghost" onClick={reset}>
+              لغو ویرایش
+            </Button>
+          )}
         </div>
         <Input
           label="نام داخلی کمپین"
@@ -607,7 +611,8 @@ function PushCampaigns() {
         onConfirm={() => sendTarget && send.mutate(sendTarget.id)}
         confirmText="تأیید و ارسال"
       >
-        کمپین «{sendTarget?.name}» برای مخاطبان انتخاب‌شده ارسال می‌شود. این کار پس از شروع قابل بازگشت نیست.
+        کمپین «{sendTarget?.name}» برای مخاطبان انتخاب‌شده ارسال می‌شود. این کار پس از شروع قابل
+        بازگشت نیست.
       </ConfirmDialog>
     </div>
   );

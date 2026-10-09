@@ -570,12 +570,13 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   );
   r.post(
     '/admin/push-campaigns',
-    h(async (req) =>
-      pushCampaigns.saveCampaign(
-        d,
-        actorOf(req),
-        parse(pushCampaigns.campaignInputSchema, req.body),
-      ),
+    h(
+      async (req) =>
+        pushCampaigns.saveCampaign(
+          d,
+          actorOf(req),
+          parse(pushCampaigns.campaignInputSchema, req.body),
+        ),
       201,
     ),
   );
