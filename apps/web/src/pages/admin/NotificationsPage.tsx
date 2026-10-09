@@ -264,6 +264,7 @@ type PushCampaign = {
   pushSent: number | null;
   pushFailed: number | null;
   pushSkipped: number | null;
+  pushDeferred: number | null;
   lastError: string | null;
 };
 
@@ -445,7 +446,7 @@ function PushCampaigns() {
                 <p className="whitespace-pre-wrap text-sm">{c.body}</p>
                 <p className="text-xs text-text-secondary">به‌روزرسانی: {faRelative(c.updatedAt)}{c.scheduledAt ? ` • زمان ارسال: ${new Date(c.scheduledAt).toLocaleString('fa-IR')}` : ''}</p>
                 {c.status === 'sent' || c.status === 'partial' || c.status === 'failed' ? (
-                  <p className="text-xs text-text-secondary">مخاطب: {c.targetCount ?? '—'} • اعلان ساخته‌شده: {c.createdNotifications} • Push موفق: {c.pushSent ?? '—'} • ناموفق: {c.pushFailed ?? '—'} • بدون توکن: {c.pushSkipped ?? '—'}</p>
+                  <p className="text-xs text-text-secondary">مخاطب: {c.targetCount ?? '—'} • اعلان ساخته‌شده: {c.createdNotifications} • Push موفق: {c.pushSent ?? '—'} • ناموفق: {c.pushFailed ?? '—'} • بدون توکن: {c.pushSkipped ?? '—'} • در صف انتظار: {c.pushDeferred ?? '—'}</p>
                 ) : null}
                 {c.lastError && <p className="text-sm text-danger-fg">{c.lastError}</p>}
                 <div className="flex flex-wrap gap-2">
