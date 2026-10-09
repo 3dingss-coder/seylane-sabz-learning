@@ -384,8 +384,21 @@ export const manualSendSchema = z
     targetId: z.string().max(80).nullable().optional(),
     title: text(2, 80, 'عنوان'),
     body: text(2, 300, 'متن'),
-    imageUrl: z.string().trim().url().max(2048).refine((v) => v.startsWith('https://'), 'آدرس تصویر باید HTTPS باشد.').nullable().optional(),
-    actionRef: z.string().trim().max(500).refine((v) => v.startsWith('/') && !v.startsWith('//'), 'لینک باید مسیر داخلی سایت باشد.').nullable().optional(),
+    imageUrl: z
+      .string()
+      .trim()
+      .url()
+      .max(2048)
+      .refine((v) => v.startsWith('https://'), 'آدرس تصویر باید HTTPS باشد.')
+      .nullable()
+      .optional(),
+    actionRef: z
+      .string()
+      .trim()
+      .max(500)
+      .refine((v) => v.startsWith('/') && !v.startsWith('//'), 'لینک باید مسیر داخلی سایت باشد.')
+      .nullable()
+      .optional(),
   })
   .refine((v) => v.audience === 'all' || !!v.targetId, {
     message: 'مخاطب را انتخاب کنید.',
