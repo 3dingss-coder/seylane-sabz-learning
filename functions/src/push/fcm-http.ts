@@ -130,24 +130,17 @@ export class FcmHttpPushSender implements PushSender {
   private body(token: string, msg: PushMessage) {
     const link = webpushLink(this.appUrl, msg.data?.link);
     return {
+      // Data-only payload: push-sw.js owns display, preventing the browser/FCM from
+      // auto-displaying a notification and the service worker displaying it a second time.
       message: {
         token,
-        notification: {
+        data: {
+          ...(msg.data ?? {}),
           title: msg.title,
           body: msg.body,
-          ...(msg.imageUrl ? { image: msg.imageUrl } : {}),
+          ...(msg.imageUrl ? { imageUrl: msg.imageUrl } : {}),
         },
-        data: msg.data ?? {},
         android: { priority: 'HIGH' },
-        webpush: {
-          notification: {
-            icon: '/icons/icon-192.png',
-            dir: 'rtl',
-            lang: 'fa',
-            ...(msg.imageUrl ? { image: msg.imageUrl } : {}),
-          },
-          ...(link ? { fcm_options: { link } } : {}),
-        },
       },
     };
   }
@@ -179,7 +172,7 @@ export class FcmHttpPushSender implements PushSender {
       // non-JSON error body
     }
     // Only prune when FCM says the token itself is dead, never for a bad message/link.
-    if (code === 'UNREGISTERED' || res.status === 404) return 'invalid';
+    if (code === 'UNREGISTERED') return 'invalid';
     if (code === 'INVALID_ARGUMENT' && /registration token/i.test(message)) return 'invalid';
     return 'failed';
   }
