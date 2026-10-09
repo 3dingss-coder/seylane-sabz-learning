@@ -19,7 +19,6 @@ export class RecordingPushSender implements PushSender {
   }
 }
 
-
 /**
  * Used by deployed Workers when no valid FCM service account is configured.
  * Unlike RecordingPushSender it never pretends a push was delivered: any attempt to send
