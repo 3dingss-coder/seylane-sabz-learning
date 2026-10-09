@@ -594,8 +594,8 @@ function PushCampaigns() {
                   </div>
                   <span className="shrink-0 rounded-full bg-background px-2 py-1 text-xs">
                     {c.status === 'sent' &&
-                    (c.pushSent ?? 0) === 0 &&
-                    (c.pushNoDevice ?? c.pushSkipped ?? 0) > 0
+                      (c.pushSent ?? 0) === 0 &&
+                      (c.pushNoDevice ?? c.pushSkipped ?? 0) > 0
                       ? 'بدون دستگاه'
                       : CAMPAIGN_STATUS[c.status]}
                   </span>
