@@ -78,7 +78,7 @@
 
 ## تشخیص پیکربندی Provider و تأیید تحویل
 
-- پنل کمپین‌ها از `GET /v1/admin/push-provider-status` فقط `{ configured: boolean }` دریافت می‌کند. این مقدار صرفاً نشان می‌دهد Worker یک `FcmHttpPushSender` ساخته است؛ معتبر بودن مجوز Google، فعال بودن Firebase Cloud Messaging یا تحویل به دستگاه را تضمین نمی‌کند.
+- پنل کمپین‌ها از `GET /v1/admin/push-provider-status` فقط `{ configured: boolean }` دریافت می‌کند. این مقدار فقط نشان می‌دهد Worker کلید PEM را می‌تواند به‌عنوان کلید امضای رمزنگاری وارد کند؛ مجوزهای IAM، فعال بودن Firebase Cloud Messaging، تطابق پروژه یا تحویل به دستگاه را تضمین نمی‌کند.
 - Secret مورد انتظار کد `FCM_SERVICE_ACCOUNT_JSON` است. نام دقیق و محیط (Preview در برابر Production) را با تنظیمات Worker فعلی تطبیق دهید؛ مقدار Secret را در لاگ یا گفتگو قرار ندهید.
 - برای Preview، در صورت پشتیبانی CLI/پیکربندی پروژه از دستور `wrangler preview base-config secret put FCM_SERVICE_ACCOUNT_JSON` استفاده کنید و قبل از اجرا syntax را با نسخه فعلی Wrangler پروژه تطبیق دهید. اگر این دستور در نسخه نصب‌شده موجود نیست، از مسیر Secrets مربوط به محیط Preview در داشبورد استفاده کنید؛ مسیر دقیق UI باید با نسخه‌ی فعلی داشبورد تطبیق داده شود.
 - پس از تغییر Secret، Preview را مجدداً Deploy کنید، `GET /v1/admin/push-provider-status` را با حساب ادمین بررسی کنید و یک کمپین کوچک برای دستگاه آزمایشی ثبت‌شده بفرستید.
