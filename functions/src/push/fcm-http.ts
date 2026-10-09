@@ -76,6 +76,16 @@ export class FcmHttpPushSender implements PushSender {
     private readonly now: () => number = () => Date.now(),
   ) {}
 
+  /** Checks whether the configured PEM can be imported; it does not verify Google IAM/API access. */
+  async isConfigured(): Promise<boolean> {
+    try {
+      await this.signingKey();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private signingKey(): Promise<SigningKey> {
     this.key ??= crypto.subtle.importKey(
       'pkcs8',
