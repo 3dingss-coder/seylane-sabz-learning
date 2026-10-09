@@ -19,8 +19,10 @@ describe('campaignInputSchema', () => {
 
   it('rejects non-HTTPS campaign images', () => {
     expect(
-      campaignInputSchema.safeParse({ ...validCampaign, imageUrl: 'http://cdn.example.com/push.jpg' })
-        .success,
+      campaignInputSchema.safeParse({
+        ...validCampaign,
+        imageUrl: 'http://cdn.example.com/push.jpg',
+      }).success,
     ).toBe(false);
   });
 
@@ -38,8 +40,11 @@ describe('campaignInputSchema', () => {
       campaignInputSchema.safeParse({ ...validCampaign, audience: 'team', targetId: null }).success,
     ).toBe(false);
     expect(
-      campaignInputSchema.safeParse({ ...validCampaign, audience: 'team', targetId: 'team-1' })
-        .success,
+      campaignInputSchema.safeParse({
+        ...validCampaign,
+        audience: 'team',
+        targetId: 'team-1',
+      }).success,
     ).toBe(true);
   });
 
