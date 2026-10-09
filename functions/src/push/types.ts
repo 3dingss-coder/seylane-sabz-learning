@@ -2,6 +2,8 @@ export interface PushMessage {
   title: string;
   body: string;
   data?: Record<string, string>;
+  /** Optional HTTPS image URL for rich push notifications. */
+  imageUrl?: string;
 }
 export interface PushSender {
   /** Returns tokens that are permanently invalid and should be removed. */
