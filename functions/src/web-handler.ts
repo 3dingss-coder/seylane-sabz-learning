@@ -10,7 +10,7 @@ import { systemClock } from './lib/time';
 import { GeminiClient } from './llm/gemini';
 import { DisabledMailer } from './mail/types';
 import { FcmHttpPushSender, parseServiceAccount } from './push/fcm-http';
-import { RecordingPushSender, type PushSender } from './push/types';
+import { UnconfiguredPushSender, type PushSender } from './push/types';
 import { adminRouter } from './routes/admin';
 import { authRouter } from './routes/auth';
 import { healthRouter } from './routes/health';
@@ -95,14 +95,17 @@ export async function buildCloudflareDeps(
   };
 }
 
-/** Real FCM delivery only when a valid service account is configured; never blocks startup. */
+/** Real FCM delivery only when a valid service account is configured; never blocks startup.
+ * Without one, sends fail loudly instead of being silently recorded as delivered. */
 function buildPushSender(env: Record<string, string | undefined>): PushSender {
   const sa = parseServiceAccount(env.FCM_SERVICE_ACCOUNT_JSON);
   if (!sa) {
-    if (env.FCM_SERVICE_ACCOUNT_JSON) {
-      console.warn('[push] FCM_SERVICE_ACCOUNT_JSON is set but invalid; push is disabled');
-    }
-    return new RecordingPushSender();
+    console.warn(
+      env.FCM_SERVICE_ACCOUNT_JSON
+        ? '[push] FCM_SERVICE_ACCOUNT_JSON is set but invalid; push sends will fail'
+        : '[push] FCM_SERVICE_ACCOUNT_JSON is missing; push sends will fail',
+    );
+    return new UnconfiguredPushSender();
   }
   return new FcmHttpPushSender(sa, env.APP_URL ?? '');
 }
