@@ -285,11 +285,11 @@ const CAMPAIGN_STATUS: Record<PushCampaign['status'], string> = {
   cancelled: 'لغوشده',
 };
 
-
 export function PushProviderStatus() {
   const provider = useQuery({
     queryKey: ['admin', 'push-provider-status'],
-    queryFn: ({ signal }) => api.get<{ configured: boolean }>('/admin/push-provider-status', signal),
+    queryFn: ({ signal }) =>
+      api.get<{ configured: boolean }>('/admin/push-provider-status', signal),
     retry: false,
   });
   if (provider.isSuccess && !provider.data.configured) {
@@ -604,7 +604,7 @@ function PushCampaigns() {
                 {c.status === 'sent' || c.status === 'partial' || c.status === 'failed' ? (
                   <p className="text-xs text-text-secondary">
                     مخاطب: {c.targetCount ?? '—'} • اعلان ساخته‌شده: {c.createdNotifications} • Push
-                    موفق: {c.pushSent ?? '—'} • شکست ارسال: {c.pushFailed ?? '—'} • بدون دستگاه:{' '}
+                    موفق: {c.pushSent ?? '—'} • شکست: {c.pushFailed ?? '—'} • بدون دستگاه:{' '}
                     {c.pushNoDevice ?? c.pushSkipped ?? '—'} • در صف انتظار: {c.pushDeferred ?? '—'}
                   </p>
                 ) : null}
