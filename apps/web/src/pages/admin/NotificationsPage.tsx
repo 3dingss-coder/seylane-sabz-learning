@@ -308,8 +308,8 @@ export function PushProviderStatus() {
       <Card className="border border-danger/40 bg-background">
         <p className="font-bold text-danger-fg">ارسال Push پیکربندی نشده است</p>
         <p className="text-sm text-text-secondary">
-          ارسال به دستگاه‌ها تا زمان تنظیم معتبر حساب سرویس FCM در محیط Preview غیرفعال است.
-          مقدار Secret را در کد یا گفتگو وارد نکنید؛ فقط تنظیمات محیط را در داشبورد بررسی کنید.
+          ارسال به دستگاه‌ها تا زمان تنظیم معتبر حساب سرویس FCM در محیط Preview غیرفعال است. مقدار
+          Secret را در کد یا گفتگو وارد نکنید؛ فقط تنظیمات محیط را در داشبورد بررسی کنید.
         </p>
       </Card>
     );
