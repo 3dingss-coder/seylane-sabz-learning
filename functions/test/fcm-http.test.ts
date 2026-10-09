@@ -49,22 +49,37 @@ describe('FcmHttpPushSender', () => {
     expect(r1).toEqual({ sent: 2, invalidTokens: [] });
     expect(r2.sent).toBe(1);
     expect(calls.filter((c) => c.url.includes('oauth2')).length).toBe(1);
-    const first = JSON.parse(calls.find((c) => c.url.includes('messages:send'))!.body);
+    const sendCall = calls.find((c) => c.url.includes('messages:send'));
+    expect(sendCall).toBeDefined();
+    const first = JSON.parse(sendCall?.body ?? '{}');
     expect(first.message.webpush.fcm_options.link).toBe('https://academy-seylaneh.site/messages');
-    expect(calls.find((c) => c.url.includes('messages:send'))!.auth).toBe('Bearer ya29.test');
+    expect(sendCall?.auth).toBe('Bearer ya29.test');
     expect(calls.some((c) => c.url.includes('/v1/projects/proj-1/messages:send'))).toBe(true);
   });
 
   it('prunes only dead tokens, never tokens that failed for other reasons', async () => {
     const { fetchImpl } = harness((t) => {
-      if (t === 'dead') return json(404, { error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] } });
-      if (t === 'badtoken') return json(400, { error: { status: 'INVALID_ARGUMENT', message: 'The registration token is not a valid FCM registration token' } });
-      if (t === 'badmsg') return json(400, { error: { status: 'INVALID_ARGUMENT', message: 'Invalid link' } });
+      if (t === 'dead')
+        return json(404, {
+          error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] },
+        });
+      if (t === 'badtoken')
+        return json(400, {
+          error: {
+            status: 'INVALID_ARGUMENT',
+            message: 'The registration token is not a valid FCM registration token',
+          },
+        });
+      if (t === 'badmsg')
+        return json(400, { error: { status: 'INVALID_ARGUMENT', message: 'Invalid link' } });
       if (t === 'quota') return json(429, { error: { status: 'RESOURCE_EXHAUSTED' } });
       return json(200, {});
     });
     const s = new FcmHttpPushSender(sa, '', fetchImpl);
-    const r = await s.send(['ok', 'dead', 'badtoken', 'badmsg', 'quota'], { title: 't', body: 'b' });
+    const r = await s.send(['ok', 'dead', 'badtoken', 'badmsg', 'quota'], {
+      title: 't',
+      body: 'b',
+    });
     expect(r.sent).toBe(1);
     expect(r.invalidTokens.sort()).toEqual(['badtoken', 'dead']);
   });

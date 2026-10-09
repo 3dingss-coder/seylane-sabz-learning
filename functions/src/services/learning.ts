@@ -2,7 +2,9 @@ import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { ids } from '../lib/ids';
 import { DAY, HOUR } from '../lib/time';
-import { newOpTrace, type Doc } from '../store/types';
+import { Deadline, DeadlineError } from '../lib/bounded';
+import { StoreBusyError } from '../store/d1';
+import { newOpTrace, type Doc, type OpTrace } from '../store/types';
 import type {
   Attempt,
   AttemptSnapshotItem,
@@ -275,12 +277,45 @@ export async function getProgress(d: Deps, user: Doc<User>, sectionId: string) {
 /** Log a progress request when it failed, hit a limit, or was slow; healthy fast beats stay silent. */
 const PROGRESS_SLOW_LOG_MS = 1_500;
 
+export interface ProgressOptions {
+  skipBudget?: boolean;
+  requestId?: string;
+  /** Epoch-ms after which this request must not START any new read or write. */
+  deadlineAtMs?: number | null;
+}
+
+/** Did the durable write happen? `unknown` = the commit was sent but its outcome was never seen. */
+type Committed = 'no' | 'yes' | 'unknown';
+
+function classifyFailure(e: unknown): string {
+  if (e instanceof ApiError) return e.status < 500 ? 'client_error' : 'server_error';
+  if (e instanceof DeadlineError) return e.kind === 'deadline' ? 'request_deadline' : 'd1_timeout';
+  if (e instanceof StoreBusyError) return 'tx_conflict_exhausted';
+  return 'server_error';
+}
+
 /**
- * Progress heartbeat with one structured log line per failed/slow/limited request, carrying the
- * request ID so it can be matched with the Cloudflare trace and the `X-Request-Id` response header.
- * `queueWaitMs` / `d1DurationMs` / `d1Calls` cover the durable path (the transaction and the two
- * writes after it); the reads in front of it and the analytics writes behind it are inside
- * `totalDurationMs` only. Nothing sensitive is logged: no tokens, no request body.
+ * Progress heartbeat.
+ *
+ * WHAT IS AUTHORITATIVE. `section_progress` (position, played seconds, completion and the
+ * `recentKeys` idempotency list) and the `playback_events` row that describes the same accepted
+ * delta are written in ONE atomic, compare-and-swap commit (see D1Store.runTransaction). They exist
+ * together or not at all, and the same Idempotency-Key is applied at most once, also across Worker
+ * isolates, because the key list lives in the document the commit guards.
+ *
+ * WHAT IS BEST-EFFORT. `users.lastActiveAt`, analytics events and the first-play nudge run after the
+ * commit. If one fails or the deadline has passed it is skipped and logged
+ * (`progress_side_effect_failed` / `_skipped`); the beat itself stays successful, because turning a
+ * committed beat into an error would only make the client replay it.
+ *
+ * DEADLINE SEMANTICS. `deadlineAtMs` stops the request from STARTING new work. It cannot recall a
+ * call already sent to D1. So a request that fails on the deadline BEFORE the commit has provably
+ * written nothing, and the only way to answer an error after a write is a commit whose result was
+ * never seen (`committed: "unknown"` in the log). That case is safe to retry: replaying the same
+ * Idempotency-Key is a no-op if the commit landed and applies once if it did not.
+ *
+ * One structured log line is written for failed, slow, limited or retried requests, carrying the
+ * request ID (the `X-Request-Id` response header). No token, password or request body is logged.
  */
 export async function recordProgress(
   d: Deps,
@@ -288,31 +323,46 @@ export async function recordProgress(
   sectionId: string,
   input: z.infer<typeof heartbeatSchema>,
   idempotencyKey: string | undefined,
-  opts: { skipBudget?: boolean; requestId?: string } = {},
+  opts: ProgressOptions = {},
 ) {
-  const trace = newOpTrace(opts.requestId ?? 'none');
+  const trace = newOpTrace(opts.requestId ?? 'none', opts.deadlineAtMs ?? null);
   const store = d.store.scoped?.(trace) ?? d.store;
   const started = Date.now();
+  const state: { committed: Committed; sideEffectFailures: number } = {
+    committed: 'no',
+    sideEffectFailures: 0,
+  };
   let outcome: 'success' | 'duplicate' | 'failure' = 'failure';
+  let failure: string | undefined;
   let errorName: string | undefined;
-  let clientError = false;
   try {
-    const res = await recordProgressInner(d, store, user, sectionId, input, idempotencyKey, opts);
+    const res = await recordProgressInner(
+      d,
+      store,
+      trace,
+      state,
+      user,
+      sectionId,
+      input,
+      idempotencyKey,
+      opts,
+    );
     outcome = res.duplicate ? 'duplicate' : 'success';
     return res;
   } catch (e) {
     errorName = e instanceof Error ? e.name : 'unknown';
-    clientError = e instanceof ApiError && e.status < 500;
+    failure = classifyFailure(e);
     throw e;
   } finally {
     const totalDurationMs = Date.now() - started;
-    const limited = trace.d1Timeouts > 0 || trace.queueTimeouts > 0;
-    // Client mistakes (validation, locked section) are not incidents; only log what needs a look.
-    const incident = outcome === 'failure' && !clientError;
+    const limited =
+      trace.d1Timeouts + trace.queueTimeouts + trace.txRetries + trace.lateCompletions > 0 ||
+      state.sideEffectFailures > 0;
+    const incident = outcome === 'failure' && failure !== 'client_error';
     if (incident || limited || totalDurationMs >= PROGRESS_SLOW_LOG_MS) {
       console.warn(
         JSON.stringify({
-          level: 'warn',
+          level: failure === 'server_error' ? 'error' : 'warn',
           msg: 'progress',
           operationName: 'recordProgress',
           requestId: trace.requestId,
@@ -320,77 +370,154 @@ export async function recordProgress(
           sectionId,
           outcome,
           success: outcome !== 'failure',
-          failure: outcome === 'failure',
-          timeout: limited || errorName === 'DeadlineError',
+          failure: failure ?? null,
           error: errorName,
+          committed: state.committed,
+          timeout: failure === 'd1_timeout' || failure === 'request_deadline',
           totalDurationMs,
           queueWaitMs: trace.queueWaitMs,
           d1DurationMs: trace.d1DurationMs,
           d1Calls: trace.d1Calls,
           d1Timeouts: trace.d1Timeouts,
           queueTimeouts: trace.queueTimeouts,
+          txRetries: trace.txRetries,
+          lateCompletions: trace.lateCompletions,
+          sideEffectFailures: state.sideEffectFailures,
         }),
       );
     }
   }
 }
 
+/** Runs one post-commit step. Never throws; skips (and logs) once the deadline has passed. */
+async function bestEffort(
+  name: string,
+  trace: OpTrace,
+  state: { sideEffectFailures: number },
+  deadline: Deadline,
+  fn: () => Promise<unknown>,
+): Promise<boolean> {
+  if (state.sideEffectFailures > 0) return false; // a stalled store: do not stack more waits
+  if (deadline.expired()) {
+    state.sideEffectFailures++;
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        msg: 'progress_side_effect_skipped',
+        step: name,
+        reason: 'deadline',
+        requestId: trace.requestId,
+      }),
+    );
+    return false;
+  }
+  try {
+    await fn();
+    return true;
+  } catch (e) {
+    state.sideEffectFailures++;
+    console.warn(
+      JSON.stringify({
+        level: 'warn',
+        msg: 'progress_side_effect_failed',
+        step: name,
+        requestId: trace.requestId,
+        error: e instanceof Error ? e.name : 'unknown',
+        message: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
+      }),
+    );
+    return false;
+  }
+}
+
 async function recordProgressInner(
   d: Deps,
   store: Deps['store'],
+  trace: OpTrace,
+  state: { committed: Committed; sideEffectFailures: number },
   user: Doc<User>,
   sectionId: string,
   input: z.infer<typeof heartbeatSchema>,
   idempotencyKey: string | undefined,
-  opts: { skipBudget?: boolean },
+  opts: ProgressOptions,
 ) {
+  const deadline = new Deadline(opts.deadlineAtMs ?? null);
   const { section, pkg, sv } = await sectionForUser(d, user, sectionId);
   if (sv.state === 'locked') throw new ApiError('FORBIDDEN', LOCKED);
   const policy = await getPolicy(d);
+  // Everything above is read-only. From here on a deadline failure still means "nothing written".
+  deadline.check('progress commit');
   const now = d.clock().toISOString();
   const path = `section_progress/${ids.progress(user.id, sectionId)}`;
   const key = idempotencyKey?.slice(0, 80);
-  const result = await store.runTransaction(async (tx) => {
-    const prev = await tx.get<SectionProgress>(path);
-    if (key && prev?.recentKeys?.includes(key)) return { duplicate: true, prev, next: null };
-    let playedDeltaSec = input.playedDeltaSec;
-    if (!opts.skipBudget) {
-      const budgetPath = `playback_budgets/${user.id}`;
-      const spent = spendBudget(
-        await tx.get<PlaybackBudget>(budgetPath),
-        d.clock().getTime(),
-        Math.min(MAX_DELTA, playedDeltaSec),
+  // Fixed once per request so a conflict retry rewrites the same event row instead of adding one.
+  const eventId = store.newId();
+  let result;
+  try {
+    result = await store.runTransaction(async (tx) => {
+      // The callback may run again after a conflict; it only reads through `tx` and writes through `tx`.
+      const prev = await tx.get<SectionProgress>(path);
+      if (key && prev?.recentKeys?.includes(key))
+        return { duplicate: true as const, prev, next: null };
+      let playedDeltaSec = input.playedDeltaSec;
+      if (!opts.skipBudget) {
+        const budgetPath = `playback_budgets/${user.id}`;
+        const spent = spendBudget(
+          await tx.get<PlaybackBudget>(budgetPath),
+          d.clock().getTime(),
+          Math.min(MAX_DELTA, playedDeltaSec),
+        );
+        playedDeltaSec = spent.acceptedSec;
+        tx.set(budgetPath, spent.next as unknown as Record<string, unknown>);
+      }
+      const next = applyHeartbeat(
+        prev,
+        { ...input, playedDeltaSec },
+        section.durationSec,
+        policy.completionThreshold,
       );
-      playedDeltaSec = spent.acceptedSec;
-      tx.set(budgetPath, spent.next as unknown as Record<string, unknown>);
-    }
-    const next = applyHeartbeat(
-      prev,
-      { ...input, playedDeltaSec },
-      section.durationSec,
-      policy.completionThreshold,
-    );
-    const recentKeys = key
-      ? [...(prev?.recentKeys ?? []), key].slice(-30)
-      : (prev?.recentKeys ?? []);
-    const doc: SectionProgress = {
-      userId: user.id,
-      sectionId,
-      packageId: pkg.id,
-      playedSeconds: next.playedSeconds,
-      percent: next.percent,
-      completed: next.completed,
-      completedAt: prev?.completedAt ?? (next.justCompleted ? now : null),
-      lastPositionSec: next.lastPositionSec,
-      quizPassed: prev?.quizPassed ?? false,
-      quizPassedAt: prev?.quizPassedAt ?? null,
-      recentKeys,
-      startedAt: prev?.startedAt ?? now,
-      updatedAt: now,
-    };
-    tx.set(path, doc as unknown as Record<string, unknown>);
-    return { duplicate: false, prev, next: doc, justCompleted: next.justCompleted };
-  });
+      const recentKeys = key
+        ? [...(prev?.recentKeys ?? []), key].slice(-30)
+        : (prev?.recentKeys ?? []);
+      const doc: SectionProgress = {
+        userId: user.id,
+        sectionId,
+        packageId: pkg.id,
+        playedSeconds: next.playedSeconds,
+        percent: next.percent,
+        completed: next.completed,
+        completedAt: prev?.completedAt ?? (next.justCompleted ? now : null),
+        lastPositionSec: next.lastPositionSec,
+        quizPassed: prev?.quizPassed ?? false,
+        quizPassedAt: prev?.quizPassedAt ?? null,
+        recentKeys,
+        startedAt: prev?.startedAt ?? now,
+        updatedAt: now,
+      };
+      tx.set(path, doc as unknown as Record<string, unknown>);
+      tx.set(`playback_events/${eventId}`, {
+        userId: user.id,
+        sectionId,
+        positionSec: input.positionSec,
+        playedDeltaSec: input.playedDeltaSec,
+        acceptedDeltaSec: Math.round((doc.playedSeconds - (prev?.playedSeconds ?? 0)) * 10) / 10,
+        clientTs: input.ts ?? null,
+        ts: now,
+        deviceId: input.deviceId ?? null,
+        expireAt: new Date(d.clock().getTime() + 90 * DAY),
+      });
+      return { duplicate: false as const, prev, next: doc, justCompleted: next.justCompleted };
+    });
+  } catch (e) {
+    // Only a commit whose outcome was never seen can have written something.
+    const knownNotCommitted =
+      e instanceof ApiError ||
+      e instanceof StoreBusyError ||
+      (e instanceof DeadlineError && e.kind === 'deadline');
+    state.committed = knownNotCommitted ? 'no' : 'unknown';
+    throw e;
+  }
+  state.committed = 'yes';
   if (result.duplicate || !result.next) {
     const p = result.prev;
     return {
@@ -401,45 +528,40 @@ async function recordProgressInner(
       duplicate: true,
     };
   }
-  const nowD = d.clock();
-  await store.set(`playback_events/${store.newId()}`, {
-    userId: user.id,
-    sectionId,
-    positionSec: input.positionSec,
-    playedDeltaSec: input.playedDeltaSec,
-    acceptedDeltaSec:
-      Math.round((result.next.playedSeconds - (result.prev?.playedSeconds ?? 0)) * 10) / 10,
-    clientTs: input.ts ?? null,
-    ts: now,
-    deviceId: input.deviceId ?? null,
-    expireAt: new Date(nowD.getTime() + 90 * DAY),
-  });
-  await store.update(`users/${user.id}`, { lastActiveAt: now });
+  const next = result.next;
+  const step = (name: string, fn: () => Promise<unknown>) =>
+    bestEffort(name, trace, state, deadline, fn);
+  await step('touch_user', () => store.update(`users/${user.id}`, { lastActiveAt: now }));
   if (!result.prev) {
-    await track(d, 'section_played', user.id, { sectionId, mediaType: section.mediaType });
-    const minutes = Math.max(1, Math.round(section.durationSec / 60));
-    await createNudge(
-      d,
-      user.id,
-      'R5',
-      `این قسمت حدود ${minutes} دقیقه است — می‌توانی در مسیر گوش بدهی.`,
-      `/sections/${sectionId}`,
-      sectionId,
+    await step('section_played', () =>
+      track(d, 'section_played', user.id, { sectionId, mediaType: section.mediaType }),
     );
-    await maybeReengaged(d, user.id);
-  }
-  await track(d, 'playback_heartbeat', user.id, { sectionId, deltaSec: input.playedDeltaSec });
-  if ('justCompleted' in result && result.justCompleted) {
-    await track(d, 'section_completed', user.id, {
-      sectionId,
-      elapsedSec: result.next.playedSeconds,
+    await step('first_play_nudge', async () => {
+      const minutes = Math.max(1, Math.round(section.durationSec / 60));
+      await createNudge(
+        d,
+        user.id,
+        'R5',
+        `این قسمت حدود ${minutes} دقیقه است — می‌توانی در مسیر گوش بدهی.`,
+        `/sections/${sectionId}`,
+        sectionId,
+      );
+      await maybeReengaged(d, user.id);
     });
   }
+  await step('heartbeat_event', () =>
+    track(d, 'playback_heartbeat', user.id, { sectionId, deltaSec: input.playedDeltaSec }),
+  );
+  if (result.justCompleted) {
+    await step('section_completed', () =>
+      track(d, 'section_completed', user.id, { sectionId, elapsedSec: next.playedSeconds }),
+    );
+  }
   return {
-    percent: result.next.percent,
-    completed: result.next.completed,
-    lastPositionSec: result.next.lastPositionSec,
-    playedSeconds: result.next.playedSeconds,
+    percent: next.percent,
+    completed: next.completed,
+    lastPositionSec: next.lastPositionSec,
+    playedSeconds: next.playedSeconds,
     duplicate: false,
   };
 }

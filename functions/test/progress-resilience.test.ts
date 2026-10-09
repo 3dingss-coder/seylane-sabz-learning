@@ -135,15 +135,16 @@ describe('failure injection on the progress path', () => {
     vi.useFakeTimers();
   });
 
-  const isProgressWrite = (sql: string) =>
-    sql.includes('INSERT INTO docs') || sql.includes('UPDATE docs');
+  /** The progress commit is one guarded D1 batch (progress doc + playback event, atomically). */
+  const isProgressCommit = (kind: string, sql: string) =>
+    kind === 'batch' && sql.includes('json(CASE');
 
   it('A. slow D1 (below the limit): the request still succeeds and the queue stays usable', async () => {
     const u = await env.marketer();
     const sec = env.fx.sections[0]?.id ?? '';
     let slowed = false;
     hook = (kind, sql) => {
-      if (!slowed && kind === 'run' && isProgressWrite(sql)) {
+      if (!slowed && isProgressCommit(kind, sql)) {
         slowed = true;
         return { delayMs: 3_000 };
       }
@@ -160,7 +161,7 @@ describe('failure injection on the progress path', () => {
     const sec = env.fx.sections[0]?.id ?? '';
     let threw = false;
     hook = (kind, sql) => {
-      if (!threw && kind === 'run' && isProgressWrite(sql)) {
+      if (!threw && isProgressCommit(kind, sql)) {
         threw = true;
         return 'throw';
       }
@@ -175,7 +176,7 @@ describe('failure injection on the progress path', () => {
     const sec = env.fx.sections[0]?.id ?? '';
     let hung = false;
     hook = (kind, sql) => {
-      if (!hung && kind === 'run' && isProgressWrite(sql)) {
+      if (!hung && isProgressCommit(kind, sql)) {
         hung = true;
         return 'hang';
       }
@@ -190,14 +191,14 @@ describe('failure injection on the progress path', () => {
     expect((await next).duplicate).toBe(false);
   });
 
-  it('D. A hangs, B and C are queued behind it: A terminates, B and C proceed', async () => {
+  it('D. A commit hangs: A ends as a bounded timeout, B and C (same section) are not blocked', async () => {
     const a = await env.marketer();
     const b = await env.marketer();
     const c = await env.marketer();
     const sec = env.fx.sections[0]?.id ?? '';
     let hung = false;
     hook = (kind, sql) => {
-      if (!hung && kind === 'run' && isProgressWrite(sql)) {
+      if (!hung && isProgressCommit(kind, sql)) {
         hung = true;
         return 'hang';
       }
@@ -207,7 +208,7 @@ describe('failure injection on the progress path', () => {
     const aDone = expect(pa).rejects.toBeInstanceOf(DeadlineError);
     const pb = env.beat(b, sec, 5, 'd-b');
     const pc = env.beat(c, sec, 5, 'd-c');
-    await vi.advanceTimersByTimeAsync(D1_CALL_TIMEOUT_MS + D1_TX_QUEUE_WAIT_MS + 500);
+    await vi.advanceTimersByTimeAsync(D1_CALL_TIMEOUT_MS + 500);
     await aDone;
     expect((await pb).duplicate).toBe(false);
     expect((await pc).duplicate).toBe(false);
@@ -215,7 +216,7 @@ describe('failure injection on the progress path', () => {
 });
 
 describe('isolation between users', () => {
-  it("one user's stalled progress delays other users only up to the queue wait bound", async () => {
+  it("one user's hung commit delays other users only up to the waiter-owned queue bound", async () => {
     const env = await setup();
     vi.useFakeTimers();
     const slowUser = await env.marketer();
@@ -223,27 +224,28 @@ describe('isolation between users', () => {
     const sec = env.fx.sections[0]?.id ?? '';
     let hung = false;
     hook = (kind, sql) => {
-      if (
-        !hung &&
-        kind === 'run' &&
-        (sql.includes('INSERT INTO docs') || sql.includes('UPDATE docs'))
-      ) {
+      if (!hung && kind === 'batch' && sql.includes('json(CASE')) {
         hung = true;
         return 'hang';
       }
       return 'ok';
     };
     void env.beat(slowUser, sec, 5, 'iso-slow').catch(() => undefined);
+    // Let the slow user reach (and hang on) its commit before the other user starts.
+    await vi.advanceTimersByTimeAsync(20);
+    expect(hung).toBe(true);
     const other = env.beat(otherUser, sec, 5, 'iso-other');
     let settled = false;
     void other.then(
       () => (settled = true),
       () => (settled = true),
     );
-    // Without the bound this never settles; with it, it is released after the transaction wait.
+    // The per-isolate call queue is a throttle, not a lock: a waiter gives up on a stuck predecessor
+    // after its OWN bounded waits (tx queue + call queue). Safety does not depend on the queue (writes are guarded CAS).
     await vi.advanceTimersByTimeAsync(D1_TX_QUEUE_WAIT_MS + D1_QUEUE_WAIT_MS + 200);
     expect(settled).toBe(true);
     expect((await other).duplicate).toBe(false);
+    await vi.advanceTimersByTimeAsync(D1_CALL_TIMEOUT_MS + 100);
   });
 });
 

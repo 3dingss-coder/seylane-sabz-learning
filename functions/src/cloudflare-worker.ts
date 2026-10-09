@@ -1,7 +1,12 @@
-import { buildCloudflareDeps, createFetchHandler, type CloudflareEnv } from './web-handler';
+import {
+  buildCloudflareDeps,
+  createFetchHandler,
+  type CloudflareEnv,
+  type RequestContext,
+} from './web-handler';
 import { DeadlineError, withTimeout } from './lib/bounded';
 import { randomBytesBase64Url } from './lib/crypto';
-import { runCron } from './services/cron';
+import { CRON_BUDGET_MS, runCron } from './services/cron';
 import type { Deps } from './services/context';
 import type { Data } from './store/types';
 import seedSnapshotJson from '../lib/seed-snapshot.json';
@@ -21,61 +26,85 @@ interface ExecutionContextLike {
 }
 
 /**
- * Whole-request ceiling for the progress heartbeat. It sits above one D1 call (15s) so a single
- * slow call is reported by the store first, and below what a client would wait. Provisional: tune
- * it from the `progress` log lines. Only this route is capped: uploads, media streaming and AI
- * calls legitimately run longer and keep their own limits.
+ * Deadline for the progress heartbeat. It is NOT a race around the handler (a race cannot cancel the
+ * handler, so a timed-out request could still commit afterwards). It is passed into the workflow,
+ * which checks it before starting each new read or write; once it has passed, nothing further is
+ * started. A commit already sent to D1 is bounded by the store's own per-call limit and its outcome is
+ * reported as unknown; the client's retry is safe because the write is idempotent (see learning.ts).
+ * Only this route is bounded: uploads, media streaming and AI calls keep their own limits.
  */
 export const PROGRESS_BUDGET_MS = 25_000;
-/**
- * How long one request waits for the shared startup promise before it gives up and retries fresh.
- * It is above the store's own init limit (30s) so a slow-but-alive init is judged by that limit,
- * and this one only catches a startup whose starting request was cancelled.
- */
+/** How long ONE caller waits for the shared startup before giving up. Each caller owns its own timer. */
 export const STARTUP_WAIT_MS = 35_000;
 
-/** Budget for a request, or null when the route has no whole-request cap. */
-export function requestBudgetMs(method: string, pathname: string): number | null {
+/** Deadline (epoch ms) for a request, or null when the route has none. */
+export function progressDeadlineMs(
+  method: string,
+  pathname: string,
+  now: number = Date.now(),
+): number | null {
   if (method === 'POST' && /^\/v1\/me\/sections\/[^/]+\/progress\/?$/.test(pathname)) {
-    return PROGRESS_BUDGET_MS;
+    return now + PROGRESS_BUDGET_MS;
   }
   return null;
 }
 
-let cachedDeps: Promise<Deps> | null = null;
-let cachedHasD1: boolean | null = null;
-
-/** Deps (store + services) are built once per isolate and reused by the fetch and cron entrypoints. */
-function getDeps(env: CloudflareEnv): Promise<Deps> {
-  const hasD1 = Boolean(env.DB && typeof env.DB.prepare === 'function');
-  if (!cachedDeps || cachedHasD1 !== hasD1) {
-    cachedHasD1 = hasD1;
-    cachedDeps = buildCloudflareDeps(env, seedSnapshot).catch((err) => {
-      cachedDeps = null;
-      throw err;
-    });
-  }
-  return cachedDeps;
+type FetchHandler = (request: Request, rctx?: RequestContext) => Promise<Response>;
+interface Runtime {
+  deps: Deps;
+  handler: FetchHandler;
+}
+interface Startup {
+  hasD1: boolean;
+  promise: Promise<Runtime>;
 }
 
-type FetchHandler = (request: Request, requestId?: string) => Promise<Response>;
-let cachedHandler: { deps: Promise<Deps>; handler: Promise<FetchHandler> } | null = null;
-
 /**
- * The router and its rate limiter are built once per isolate (not per request), so route setup
- * is not repeated and the in-memory rate limits actually accumulate across requests.
+ * The single startup mechanism for fetch AND scheduled. One shared promise per isolate builds deps
+ * and the router. If the request that started it is cancelled the promise may never settle, so no
+ * caller waits on it unbounded: each waits with its own timer, and on failure drops the startup only
+ * if it is still the current one (identity guard), so a late result from an abandoned startup can
+ * never clear or overwrite a newer one.
  */
-function getHandler(env: CloudflareEnv): Promise<FetchHandler> {
-  const deps = getDeps(env);
-  if (!cachedHandler || cachedHandler.deps !== deps) {
-    const handler = deps.then((d) => createFetchHandler(d));
-    cachedHandler = { deps, handler };
-    handler.catch(() => {
-      if (cachedHandler?.handler === handler) cachedHandler = null;
-      cachedDeps = null;
-    });
+let starting: Startup | null = null;
+
+export function resetRuntimeForTests(): void {
+  starting = null;
+}
+
+function startRuntime(env: CloudflareEnv): Startup {
+  const hasD1 = Boolean(env.DB && typeof env.DB.prepare === 'function');
+  const promise = buildCloudflareDeps(env, seedSnapshot).then((deps) => ({
+    deps,
+    handler: createFetchHandler(deps),
+  }));
+  const startup: Startup = { hasD1, promise };
+  // A failed startup must not stay cached; clear only if still current.
+  promise.catch(() => {
+    if (starting === startup) starting = null;
+  });
+  return startup;
+}
+
+export async function acquireRuntime(
+  env: CloudflareEnv,
+  opts: { waitMs?: number; attempts?: number } = {},
+): Promise<Runtime> {
+  const waitMs = opts.waitMs ?? STARTUP_WAIT_MS;
+  const attempts = opts.attempts ?? 1;
+  const hasD1 = Boolean(env.DB && typeof env.DB.prepare === 'function');
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    if (!starting || starting.hasD1 !== hasD1) starting = startRuntime(env);
+    const mine = starting;
+    try {
+      return await withTimeout(mine.promise, waitMs, 'worker startup');
+    } catch (err) {
+      lastErr = err;
+      if (starting === mine) starting = null;
+    }
   }
-  return cachedHandler.handler;
+  throw lastErr;
 }
 
 function unavailable(requestId?: string): Response {
@@ -137,22 +166,18 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/v1' || url.pathname.startsWith('/v1/')) {
       const requestId = requestIdFor(request);
-      let handler: FetchHandler;
+      let runtime: Runtime;
       try {
-        // The startup promise is shared by every request in the isolate. Wait for it with a timer
-        // of this request's own: if the request that started it was cancelled it never settles.
-        handler = await withTimeout(getHandler(env ?? {}), STARTUP_WAIT_MS, 'worker startup');
+        runtime = await acquireRuntime(env ?? {});
       } catch (err) {
-        cachedHandler = null;
-        cachedDeps = null;
         logFailure('startup', request, err, requestId);
         return unavailable(requestId);
       }
       try {
-        // Every request ends as a response, a controlled error, or a controlled timeout.
-        const budget = requestBudgetMs(request.method, url.pathname);
-        const pending = handler(request, requestId);
-        const res = budget === null ? await pending : await withTimeout(pending, budget, 'request');
+        const res = await runtime.handler(request, {
+          requestId,
+          deadlineAtMs: progressDeadlineMs(request.method, url.pathname),
+        });
         return withRequestId(res, requestId);
       } catch (err) {
         logFailure('request', request, err, requestId);
@@ -187,11 +212,16 @@ export default {
     env: CloudflareEnv,
     ctx: ExecutionContextLike,
   ): Promise<void> {
-    ctx.waitUntil(
-      getDeps(env ?? {})
-        .then((deps) => runCron(deps, event.cron))
-        .then((r) => console.info('[cron]', JSON.stringify(r)))
-        .catch((err) => console.error('[cron] startup/run failed', err)),
-    );
+    void ctx;
+    const startedAt = Date.now();
+    // Startup is bounded per caller like fetch; cron may retry once because nobody is waiting on it.
+    const runtime = await acquireRuntime(env ?? {}, { attempts: 2 });
+    const result = await runCron(runtime.deps, event.cron, {
+      deadlineAtMs: startedAt + CRON_BUDGET_MS,
+    });
+    console.info('[cron]', JSON.stringify(result));
+    const failed = Object.entries(result.jobs).filter(([, j]) => !j.ok);
+    // Fail the invocation so it shows as an error in the dashboard instead of a silent success.
+    if (failed.length) throw new Error(`cron jobs failed: ${failed.map(([n]) => n).join(',')}`);
   },
 };

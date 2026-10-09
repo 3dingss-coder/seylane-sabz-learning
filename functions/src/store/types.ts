@@ -53,6 +53,8 @@ export interface TxOps {
  */
 export interface OpTrace {
   requestId: string;
+  /** Absolute epoch-ms deadline for NEW D1 work started by this request; null = none. */
+  deadlineAtMs: number | null;
   /** Time spent waiting behind other calls/transactions in the isolate. */
   queueWaitMs: number;
   /** Time spent inside D1 calls. */
@@ -62,16 +64,23 @@ export interface OpTrace {
   d1Timeouts: number;
   /** Waits that gave up on a predecessor that never finished (slow or abandoned request). */
   queueTimeouts: number;
+  /** Transaction attempts that lost an optimistic-concurrency check and were re-run. */
+  txRetries: number;
+  /** D1 calls that finished only after their caller had already been told they timed out. */
+  lateCompletions: number;
 }
 
-export function newOpTrace(requestId: string): OpTrace {
+export function newOpTrace(requestId: string, deadlineAtMs: number | null = null): OpTrace {
   return {
     requestId,
+    deadlineAtMs,
     queueWaitMs: 0,
     d1DurationMs: 0,
     d1Calls: 0,
     d1Timeouts: 0,
     queueTimeouts: 0,
+    txRetries: 0,
+    lateCompletions: 0,
   };
 }
 

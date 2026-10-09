@@ -57,7 +57,9 @@ export interface AppConfig {
   mailFrom: string;
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+export function loadConfig(
+  env: Record<string, string | undefined> = typeof process !== 'undefined' ? process.env : {},
+): AppConfig {
   const rawEnv = env.APP_ENV ?? (env.NODE_ENV === 'test' ? 'test' : 'dev');
   const appEnv: AppEnv = rawEnv === 'prod' || rawEnv === 'test' ? rawEnv : 'dev';
   const allowedOrigins = [

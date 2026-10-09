@@ -17,7 +17,8 @@ import { healthRouter } from './routes/health';
 import { managerRouter } from './routes/manager';
 import { meRouter } from './routes/me';
 import type { Deps } from './services/context';
-import { D1Store, type D1Database } from './store/d1';
+import { DeadlineError } from './lib/bounded';
+import { D1Store, StoreBusyError, type D1Database } from './store/d1';
 import { InMemoryStore } from './store/helpers';
 import type { Data, DocStore } from './store/types';
 
@@ -201,6 +202,14 @@ function serveBytes(
   });
 }
 
+/** Per-request values the Worker entry point decides (the handler itself has no clock policy). */
+export interface RequestContext {
+  /** Correlation ID: Cloudflare's ray ID when there is one. Always echoed as `X-Request-Id`. */
+  requestId?: string;
+  /** Epoch-ms after which the request must not start new work (deadline-bounded routes only). */
+  deadlineAtMs?: number | null;
+}
+
 /**
  * Creates a zero-socket Web Fetch handler (`(request: Request) => Promise<Response>`)
  * that executes all `/v1/*` API routes directly in memory.
@@ -208,7 +217,7 @@ function serveBytes(
 export function createFetchHandler(
   deps: Deps,
   handles: { limiter?: RateLimiter } = {},
-): (request: Request, requestId?: string) => Promise<Response> {
+): (request: Request, rctx?: RequestContext) => Promise<Response> {
   const config = deps.config;
   const limiter =
     handles.limiter ?? new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale);
@@ -225,8 +234,8 @@ export function createFetchHandler(
   v1.use(managerRouter(deps, limiter));
   v1.use(adminRouter(deps, limiter));
 
-  return async (request: Request, givenRequestId?: string): Promise<Response> => {
-    const requestId = givenRequestId ?? request.headers.get('cf-ray') ?? randomBytesBase64Url(9);
+  return async (request: Request, rctx: RequestContext = {}): Promise<Response> => {
+    const requestId = rctx.requestId ?? request.headers.get('cf-ray') ?? randomBytesBase64Url(9);
     const url = new URL(request.url);
     const origin = request.headers.get('origin');
     const baseHeaders = securityHeaders(origin, url, config);
@@ -405,6 +414,7 @@ export function createFetchHandler(
         body: parsedBody,
         ip: clientIp,
         requestId,
+        deadlineAtMs: rctx.deadlineAtMs ?? null,
         get(name: string) {
           return headersObj[name.toLowerCase()];
         },
@@ -501,6 +511,33 @@ export function createFetchHandler(
           }
           if (err instanceof ApiError) {
             resolve(jsonResponse(toErrorBody(err), err.status, outHeaders));
+            return;
+          }
+          if (err instanceof DeadlineError || err instanceof StoreBusyError) {
+            // A controlled "try again": the store was too slow or too contended. Never a bare 500.
+            console.warn(
+              JSON.stringify({
+                level: 'warn',
+                msg: 'api-unavailable',
+                requestId,
+                path: subPath,
+                kind: err instanceof DeadlineError ? err.kind : 'conflict',
+                error: err.message.slice(0, 200),
+              }),
+            );
+            outHeaders.set('Retry-After', '2');
+            resolve(
+              jsonResponse(
+                {
+                  error: {
+                    code: 'INTERNAL',
+                    message: 'سرور موقتاً شلوغ است. کمی بعد دوباره تلاش کنید.',
+                  },
+                },
+                503,
+                outHeaders,
+              ),
+            );
             return;
           }
           console.error('Unhandled API error', err);

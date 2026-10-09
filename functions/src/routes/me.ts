@@ -114,7 +114,11 @@ export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
         String(req.params.id),
         parse(learning.heartbeatSchema, req.body),
         req.get('Idempotency-Key') ?? undefined,
-        { skipBudget: !d.config.playbackBudget, requestId: req.requestId },
+        {
+          skipBudget: !d.config.playbackBudget,
+          requestId: req.requestId,
+          deadlineAtMs: req.deadlineAtMs ?? null,
+        },
       ),
     ),
   );

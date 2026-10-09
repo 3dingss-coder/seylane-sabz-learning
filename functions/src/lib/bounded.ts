@@ -7,24 +7,69 @@
  * that was registered by the cancelled request never fires. Any other request awaiting that shared
  * promise has no events left in its own loop and the runtime reports "Worker code hung". So every
  * wait on shared state must race a timer created by the request that is waiting.
+ *
+ * What a timeout does NOT do: it never cancels the work. D1 and `fetch` offer no cancellation, so
+ * after `withTimeout` rejects the underlying operation may still finish later ("late completion").
+ * Every call site therefore has to be safe against that, either because the work is idempotent, or
+ * because its write is a compare-and-swap that a stale writer cannot win (see D1Store.runTransaction),
+ * or because the caller reports the outcome as unknown. `onLate` makes late completions visible.
  */
+
+export type DeadlineKind = 'timeout' | 'deadline';
 
 export class DeadlineError extends Error {
   constructor(
     readonly label: string,
     readonly ms: number,
+    readonly kind: DeadlineKind = 'timeout',
   ) {
-    super(`${label} timed out after ${ms}ms`);
+    super(
+      kind === 'deadline'
+        ? `${label}: request deadline reached`
+        : `${label} timed out after ${ms}ms`,
+    );
     this.name = 'DeadlineError';
   }
 }
 
+export interface LateOutcome {
+  ok: boolean;
+  /** How long after the timeout fired the work finished. */
+  lateMs: number;
+  error?: unknown;
+}
+
+export interface TimeoutOptions {
+  /** Called when the work settles AFTER the timeout already rejected the caller. */
+  onLate?: (outcome: LateOutcome) => void;
+}
+
 /** Rejects with DeadlineError after `ms`; the timer is always cleared. The work itself is not cancelled. */
-export function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+export function withTimeout<T>(
+  work: Promise<T>,
+  ms: number,
+  label: string,
+  opts: TimeoutOptions = {},
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let firedAt: number | null = null;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new DeadlineError(label, ms)), ms);
+    timer = setTimeout(() => {
+      firedAt = Date.now();
+      reject(new DeadlineError(label, ms));
+    }, ms);
   });
+  if (opts.onLate) {
+    const onLate = opts.onLate;
+    work.then(
+      () => {
+        if (firedAt !== null) onLate({ ok: true, lateMs: Date.now() - firedAt });
+      },
+      (error: unknown) => {
+        if (firedAt !== null) onLate({ ok: false, lateMs: Date.now() - firedAt, error });
+      },
+    );
+  }
   return Promise.race([work, timeout]).finally(() => {
     if (timer) clearTimeout(timer);
   });
@@ -65,4 +110,29 @@ export function createGate(): { promise: Promise<void>; release: () => void } {
     release = resolve;
   });
   return { promise, release };
+}
+
+/**
+ * A request-level deadline. It does not cancel anything; it is checked before NEW work starts, so
+ * once it has passed no further read or write is begun by that request. Work already in flight is
+ * bounded separately by its own per-call limit.
+ */
+export class Deadline {
+  constructor(readonly atMs: number | null) {}
+  static after(ms: number, now: number = Date.now()): Deadline {
+    return new Deadline(now + ms);
+  }
+  static none(): Deadline {
+    return new Deadline(null);
+  }
+  remainingMs(now: number = Date.now()): number {
+    return this.atMs === null ? Number.POSITIVE_INFINITY : this.atMs - now;
+  }
+  expired(now: number = Date.now()): boolean {
+    return this.remainingMs(now) <= 0;
+  }
+  /** Throws DeadlineError (kind "deadline") if the deadline has passed. Call before starting work. */
+  check(phase: string): void {
+    if (this.expired()) throw new DeadlineError(phase, 0, 'deadline');
+  }
 }

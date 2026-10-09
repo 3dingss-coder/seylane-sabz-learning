@@ -131,14 +131,14 @@ describe('REPRO: shared one-time init promises survive an abandoned starter', ()
   });
 });
 
-describe('request budget scope', () => {
-  it('caps only the progress heartbeat; uploads and AI routes keep their own limits', async () => {
-    const { requestBudgetMs, PROGRESS_BUDGET_MS } = await import('../src/cloudflare-worker');
-    expect(requestBudgetMs('POST', '/v1/me/sections/seed-pkg-formi-s1/progress')).toBe(
-      PROGRESS_BUDGET_MS,
+describe('request deadline scope', () => {
+  it('bounds only the progress heartbeat; uploads and AI routes keep their own limits', async () => {
+    const { progressDeadlineMs, PROGRESS_BUDGET_MS } = await import('../src/cloudflare-worker');
+    expect(progressDeadlineMs('POST', '/v1/me/sections/seed-pkg-formi-s1/progress', 1000)).toBe(
+      1000 + PROGRESS_BUDGET_MS,
     );
-    expect(requestBudgetMs('GET', '/v1/me/sections/seed-pkg-formi-s1/progress')).toBeNull();
-    expect(requestBudgetMs('PUT', '/v1/uploads/abc')).toBeNull();
-    expect(requestBudgetMs('POST', '/v1/me/mentor/ask')).toBeNull();
+    expect(progressDeadlineMs('GET', '/v1/me/sections/seed-pkg-formi-s1/progress')).toBeNull();
+    expect(progressDeadlineMs('PUT', '/v1/uploads/abc')).toBeNull();
+    expect(progressDeadlineMs('POST', '/v1/me/mentor/ask')).toBeNull();
   });
 });

@@ -40,7 +40,11 @@ export function usePlaybackTracker(sectionId: string, onResult: (r: ProgressResu
         });
         cb.current(r);
       } catch (e) {
-        if (e instanceof ApiError && (e.code === 'NETWORK' || e.code === 'RATE_LIMIT'))
+        // 5xx (incl. the server's 503 "try again") is transient; the same Idempotency-Key makes the retry safe.
+        if (
+          e instanceof ApiError &&
+          (e.code === 'NETWORK' || e.code === 'RATE_LIMIT' || e.status >= 500)
+        )
           enqueueBeat({ sectionId, body, key });
       }
     },
