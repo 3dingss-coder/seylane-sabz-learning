@@ -3,6 +3,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createCtx, fakeMp4, type TestCtx } from './support/ctx';
 import { FcmHttpPushSender } from '../src/push/fcm-http';
+import type { Deps } from '../src/services/context';
 
 let ctx: TestCtx;
 let admin: { id: string; token: string };
@@ -235,7 +236,7 @@ describe('admin push provider status', () => {
   });
 
   it('reports false for an FCM sender with an invalid signing key', async () => {
-    ctx.deps.push = new FcmHttpPushSender({
+    (ctx.deps as Deps).push = new FcmHttpPushSender({
       project_id: 'test-project',
       client_email: 'test@example.invalid',
       private_key: 'not-a-real-key',
