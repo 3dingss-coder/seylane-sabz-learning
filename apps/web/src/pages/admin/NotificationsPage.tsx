@@ -270,6 +270,7 @@ type PushCampaign = {
   pushSent: number | null;
   pushFailed: number | null;
   pushSkipped: number | null;
+  pushNoDevice?: number | null;
   pushDeferred: number | null;
   lastError: string | null;
 };
@@ -579,8 +580,8 @@ function PushCampaigns() {
                 {c.status === 'sent' || c.status === 'partial' || c.status === 'failed' ? (
                   <p className="text-xs text-text-secondary">
                     مخاطب: {c.targetCount ?? '—'} • اعلان ساخته‌شده: {c.createdNotifications} • Push
-                    موفق: {c.pushSent ?? '—'} • ناموفق: {c.pushFailed ?? '—'} • بدون توکن:{' '}
-                    {c.pushSkipped ?? '—'} • در صف انتظار: {c.pushDeferred ?? '—'}
+                    موفق: {c.pushSent ?? '—'} • شکست ارسال: {c.pushFailed ?? '—'} • بدون دستگاه:{' '}
+                    {c.pushNoDevice ?? c.pushSkipped ?? '—'} • در صف انتظار: {c.pushDeferred ?? '—'}
                   </p>
                 ) : null}
                 {c.lastError && <p className="text-sm text-danger-fg">{c.lastError}</p>}
