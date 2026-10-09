@@ -11,8 +11,8 @@ self.addEventListener('push', (event) => {
   const data = p.data || {};
   const link = (p.fcmOptions && p.fcmOptions.link) || data.link || '/notifications';
   event.waitUntil(
-    self.registration.showNotification(n.title || 'آکادمی سیلانه', {
-      body: n.body || '',
+    self.registration.showNotification(n.title || data.title || 'آکادمی سیلانه', {
+      body: n.body || data.body || '',
       ...(n.image || data.imageUrl ? { image: n.image || data.imageUrl } : {}),
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
