@@ -1,4 +1,3 @@
-import { webpushLink } from './fcm';
 import type { PushMessage, PushSender } from './types';
 
 /**
@@ -128,7 +127,6 @@ export class FcmHttpPushSender implements PushSender {
   }
 
   private body(token: string, msg: PushMessage) {
-    const link = webpushLink(this.appUrl, msg.data?.link);
     return {
       // Data-only payload: push-sw.js owns display, preventing the browser/FCM from
       // auto-displaying a notification and the service worker displaying it a second time.
