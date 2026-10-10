@@ -1,3 +1,4 @@
+import { createGate, DeadlineError, waitSettled, withTimeout } from '../lib/bounded';
 import { randomBytesBase64Url } from '../lib/crypto';
 import { applyUpdate, cmp, deepMerge, getField, matches, splitPath } from './helpers';
 import {
@@ -7,6 +8,7 @@ import {
   type Doc,
   type DocStore,
   type Input,
+  type OpTrace,
   type QuerySpec,
   type TxOps,
 } from './types';
@@ -69,20 +71,34 @@ function markSchemaReady(db: D1Database): void {
   schemaReady.set(db, Promise.resolve());
 }
 
-/** DDL batch, run at most once per D1 binding per isolate (shared by the store and blob store). */
+/**
+ * DDL batch, run at most once per D1 binding per isolate (shared by the store and blob store).
+ *
+ * The promise is shared by every request in the isolate, so each caller waits on it with a timer of
+ * its own: if the request that started it is cancelled, later callers fail fast and retry fresh.
+ * State transitions are identity-guarded: a stale attempt that settles late (success or failure)
+ * can never delete or replace the entry that a newer attempt has since put there. The DDL is
+ * `IF NOT EXISTS`, so two attempts overlapping is harmless.
+ */
 export function ensureD1Schema(db: D1Database): Promise<void> {
-  let p = schemaReady.get(db);
-  if (!p) {
-    p = db
+  const start = (): Promise<void> => {
+    const promise: Promise<void> = db
       .batch(D1_SCHEMA_STATEMENTS.map((sql) => db.prepare(sql)))
-      .then(() => undefined)
-      .catch((err) => {
-        schemaReady.delete(db);
-        throw err;
-      });
-    schemaReady.set(db, p);
-  }
-  return p;
+      .then(
+        () => undefined,
+        (err: unknown) => {
+          if (schemaReady.get(db) === promise) schemaReady.delete(db);
+          throw err;
+        },
+      );
+    schemaReady.set(db, promise);
+    return promise;
+  };
+  const shared = schemaReady.get(db) ?? start();
+  return withTimeout(shared, D1_CALL_TIMEOUT_MS * 2, 'D1 schema').catch((err) => {
+    if (schemaReady.get(db) === shared) schemaReady.delete(db);
+    throw err;
+  });
 }
 
 function toPlainData(v: Input): Data {
@@ -130,44 +146,96 @@ function mentorGuideSnapshotVersion(snapshot: Record<string, Data>): string {
 const MAX_ROW_JSON = 1_800_000;
 
 /**
- * Upper bound for one D1 call / the one-time init. A stalled call must fail fast: the queue and
- * the init promise are shared by every request in an isolate, so one call that never settles would
- * otherwise freeze them all until the runtime cancels the Worker ("code had hung").
+ * Time limits. They are nested on purpose, not equal:
+ *   request budget (cloudflare-worker.ts)  >  D1 call  >  transaction queue wait  >  call queue wait
+ * Values are provisional: no production latency measurements were available when they were chosen.
+ * Check `queueWaitMs` / `d1DurationMs` in the progress log lines after deploy and tune from those.
+ *
+ * The queues below are a courtesy (they keep one request from opening a 7th D1 connection and
+ * reduce conflicts). They are NOT what makes transactions correct: a waiter that gives up on a
+ * predecessor may overlap with it, and a predecessor's D1 call may still finish late. Correctness
+ * comes from the compare-and-swap commit in `runTransaction`, which works across isolates.
  */
+/** One D1 call (and the one-time init). A stalled call must fail instead of waiting for the runtime. */
 export const D1_CALL_TIMEOUT_MS = 15_000;
+/** How long a D1 call waits behind earlier calls before it stops waiting and goes ahead. */
+export const D1_QUEUE_WAIT_MS = 5_000;
+/** How long a transaction waits behind earlier transactions before it goes ahead. */
+export const D1_TX_QUEUE_WAIT_MS = 10_000;
+/** A transaction that keeps losing the optimistic-concurrency check gives up after this many runs. */
+export const D1_MAX_TX_ATTEMPTS = 6;
 
-function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-  });
-  return Promise.race([work, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
 const GET_MANY_CHUNK = 90;
 
-export class D1Store implements DocStore {
-  private initPromise: Promise<void> | null = null;
-  private queue: Promise<unknown> = Promise.resolve();
+interface SharedState {
+  /** True once init succeeded: the hot path then skips the init wait and its timer. */
+  ready: boolean;
+  initPromise: Promise<void> | null;
+  /** Serializes whole transactions (tail of the chain). Per isolate, shared by all requests. */
+  queue: Promise<void>;
   /** D1 allows 6 connections per invocation and runs one query at a time. Serialize SQL. */
-  private io: Promise<unknown> = Promise.resolve();
+  io: Promise<void>;
+}
+
+export class D1Store implements DocStore {
+  /**
+   * All mutable state lives here so that per-request views (`scoped`) share it instead of shadowing
+   * it. Every wait on this state is bounded by a timer owned by the waiter (see lib/bounded.ts).
+   */
+  private readonly shared: SharedState = {
+    ready: false,
+    initPromise: null,
+    queue: Promise.resolve(),
+    io: Promise.resolve(),
+  };
+  private trace: OpTrace | null = null;
 
   constructor(
     private readonly db: D1Database,
     private readonly seedSnapshot?: Record<string, Record<string, Data>>,
   ) {}
 
+  /** A view of this store that records one request's queue wait and D1 time into `trace`. */
+  scoped(trace: OpTrace): D1Store {
+    const view = Object.create(this) as D1Store;
+    view.trace = trace;
+    return view;
+  }
+
   async ensureReady(): Promise<void> {
-    if (!this.initPromise) {
-      this.initPromise = withTimeout(this.initialize(), D1_CALL_TIMEOUT_MS * 2, 'D1 init').catch(
-        (err) => {
-          this.initPromise = null;
+    const s = this.shared;
+    if (s.ready) return;
+    let init = s.initPromise;
+    if (!init) {
+      // `initialize()` is idempotent (IF NOT EXISTS, INSERT OR IGNORE, upserted markers), so if an
+      // abandoned attempt and a fresh one overlap, or the abandoned one finishes late, the database
+      // ends up in the same valid state. All state changes are identity-guarded for that reason.
+      const promise: Promise<void> = withTimeout(
+        this.initialize(),
+        D1_CALL_TIMEOUT_MS * 2,
+        'D1 init',
+      ).then(
+        () => {
+          s.ready = true;
+        },
+        (err: unknown) => {
+          if (s.initPromise === promise) s.initPromise = null;
           throw err;
         },
       );
+      s.initPromise = promise;
+      init = promise;
     }
-    return this.initPromise;
+    // The init promise belongs to whichever request started it. If that request was cancelled the
+    // promise (and the timer that guards it) never settle, so this caller waits with its own timer
+    // and, on expiry, clears the stale promise (only if it is still the same one) so the next
+    // request starts a fresh init.
+    try {
+      await withTimeout(init, D1_CALL_TIMEOUT_MS * 2, 'D1 init wait');
+    } catch (err) {
+      if (s.initPromise === init) s.initPromise = null;
+      throw err;
+    }
   }
 
   private async initialize(): Promise<void> {
@@ -225,17 +293,80 @@ export class D1Store implements DocStore {
     }
   }
 
-  /** Run one D1 call at a time so a Promise.all of reads cannot open a 7th connection. */
-  private enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.io.then(
-      () => withTimeout(fn(), D1_CALL_TIMEOUT_MS, 'D1 call'),
-      () => withTimeout(fn(), D1_CALL_TIMEOUT_MS, 'D1 call'),
-    );
-    this.io = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+  /**
+   * Run one D1 call at a time so a Promise.all of reads cannot open a 7th connection.
+   *
+   * Lifecycle: take a gate → wait (bounded, own timer) for the previous gate → refuse to START if
+   * the request deadline has passed → run the call under its own time limit → release the gate in
+   * `finally`. A waiter that gives up on a predecessor proceeds anyway (see the note on the
+   * constants); that is safe for reads and for compare-and-swap commits, and plain upserts are
+   * last-writer-wins regardless of any queue.
+   *
+   * `commit: true` marks the single call that makes a transaction durable. It is never cut short by
+   * the request deadline (a commit that was already sent cannot be recalled, so the caller waits for
+   * its real outcome, up to the per-call limit), but it is also never STARTED after the deadline.
+   */
+  private async enqueue<T>(
+    fn: () => Promise<T>,
+    op = 'call',
+    opts: { commit?: boolean } = {},
+  ): Promise<T> {
+    const s = this.shared;
+    const trace = this.trace;
+    const prev = s.io;
+    const gate = createGate();
+    s.io = gate.promise;
+    const started = { at: 0 };
+    try {
+      this.assertWithinDeadline(op);
+      const remaining = this.remainingMs();
+      const wait = await waitSettled(prev, Math.min(D1_QUEUE_WAIT_MS, Math.max(1, remaining)));
+      if (trace) {
+        trace.queueWaitMs += wait.waitedMs;
+        if (wait.timedOut) trace.queueTimeouts++;
+      }
+      if (wait.timedOut) logStore('queue_wait_timeout', { op, waitedMs: wait.waitedMs }, trace);
+      this.assertWithinDeadline(op);
+      const limit = opts.commit
+        ? D1_CALL_TIMEOUT_MS
+        : Math.max(1, Math.min(D1_CALL_TIMEOUT_MS, this.remainingMs()));
+      started.at = Date.now();
+      return await withTimeout(fn(), limit, `D1 ${op}`, {
+        onLate: (o) => {
+          if (trace) trace.lateCompletions++;
+          logStore(
+            'd1_late_completion',
+            { op, ok: o.ok, lateMs: o.lateMs, commit: Boolean(opts.commit) },
+            trace,
+          );
+        },
+      });
+    } catch (err) {
+      if (err instanceof DeadlineError && err.kind === 'timeout') {
+        if (trace) trace.d1Timeouts++;
+        logStore('d1_call_timeout', { op, ms: err.ms, commit: Boolean(opts.commit) }, trace);
+      }
+      throw err;
+    } finally {
+      if (trace && started.at) {
+        trace.d1DurationMs += Date.now() - started.at;
+        trace.d1Calls++;
+      }
+      gate.release();
+    }
+  }
+
+  private remainingMs(): number {
+    const at = this.trace?.deadlineAtMs;
+    return at === null || at === undefined ? Number.POSITIVE_INFINITY : at - Date.now();
+  }
+
+  /** Refuses to start new D1 work once this request's deadline has passed. */
+  private assertWithinDeadline(op: string): void {
+    if (this.remainingMs() <= 0) {
+      logStore('deadline_before_start', { op }, this.trace);
+      throw new DeadlineError(`D1 ${op}`, 0, 'deadline');
+    }
   }
 
   /**
@@ -373,6 +504,20 @@ export class D1Store implements DocStore {
         'INSERT OR IGNORE INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)',
       )
       .bind('mentor_guides', id, 'mentor_guides', JSON.stringify(clean), now);
+  }
+
+  /** The stored JSON text of one document (or null). The exact text is what commits compare against. */
+  private async readRawRow(p: string): Promise<string | null> {
+    const { col, id } = splitPath(p);
+    const row = await this.enqueue(
+      () =>
+        this.db
+          .prepare('SELECT data FROM docs WHERE col = ?1 AND id = ?2')
+          .bind(col, id)
+          .first<{ data: string }>(),
+      'tx_read',
+    );
+    return row ? row.data : null;
   }
 
   private async readRaw(col: string, id: string): Promise<Data | null> {
@@ -615,23 +760,217 @@ export class D1Store implements DocStore {
     }
   }
 
-  runTransaction<R>(fn: (tx: TxOps) => Promise<R>): Promise<R> {
-    const run = async () => {
-      await this.ensureReady();
-      const writes: Array<() => Promise<void>> = [];
-      const tx: TxOps = {
-        get: async <T>(p: string) => this.read<T>(p),
-        query: async <T>(q: QuerySpec) => this.runQuery<T>(q),
-        set: (p, d, o) => writes.push(() => this.write(p, d, o?.merge ? 'merge' : 'set')),
-        create: (p, d) => writes.push(() => this.write(p, d, 'create')),
-        update: (p, d) => writes.push(() => this.write(p, d, 'update')),
-      };
-      const result = await fn(tx);
-      for (const w of writes) await w();
-      return result;
-    };
-    const next = this.queue.then(run, run);
-    this.queue = next.catch(() => undefined);
-    return next;
+  /**
+   * Optimistic transaction, correct across isolates.
+   *
+   * Reads go through `tx.get`, which remembers the exact JSON text it saw (or "absent"). Writes are
+   * buffered. At commit, ONE `db.batch` (a single D1 transaction) first runs a guard per document
+   * that was read, which raises an error unless that document still holds exactly the text we read,
+   * and then applies every write. If any guard fails the whole batch is rolled back and the callback
+   * is run again on fresh data. Consequences:
+   *   - two writers in different isolates can never both commit from the same snapshot, so no
+   *     increment is lost and an Idempotency-Key stored in the same document is applied once;
+   *   - a predecessor that was abandoned and finishes late either commits first (and we then retry
+   *     on top of it) or loses its guard; it can never overwrite newer state;
+   *   - all writes of the transaction are atomic (previously they were applied one by one).
+   * `tx.query` results are NOT guarded (no phantom protection); callers that need it must also
+   * `create` a deterministic document, which IS guarded (see startAttempt).
+   * The callback may run more than once, so it must not have side effects outside `tx`.
+   */
+  async runTransaction<R>(fn: (tx: TxOps) => Promise<R>): Promise<R> {
+    const s = this.shared;
+    const trace = this.trace;
+    // Courtesy queue (bounded wait, gate released in `finally`); not relied on for correctness.
+    const prev = s.queue;
+    const gate = createGate();
+    s.queue = gate.promise;
+    try {
+      this.assertWithinDeadline('transaction');
+      const wait = await waitSettled(
+        prev,
+        Math.min(D1_TX_QUEUE_WAIT_MS, Math.max(1, this.remainingMs())),
+      );
+      if (trace) {
+        trace.queueWaitMs += wait.waitedMs;
+        if (wait.timedOut) trace.queueTimeouts++;
+      }
+      if (wait.timedOut) logStore('tx_queue_wait_timeout', { waitedMs: wait.waitedMs }, trace);
+      for (let attempt = 1; ; attempt++) {
+        this.assertWithinDeadline('transaction attempt');
+        const out = await this.attemptTransaction(fn);
+        if (out.committed) return out.result;
+        if (trace) trace.txRetries++;
+        logStore('tx_conflict_retry', { attempt }, trace);
+        if (attempt >= D1_MAX_TX_ATTEMPTS) throw new StoreBusyError(attempt);
+        await sleep(Math.min(200, 5 * 2 ** attempt + Math.floor(Math.random() * 10)));
+      }
+    } finally {
+      gate.release();
+    }
   }
+
+  private async attemptTransaction<R>(
+    fn: (tx: TxOps) => Promise<R>,
+  ): Promise<{ committed: true; result: R } | { committed: false }> {
+    await this.ensureReady();
+    /** path → JSON text at read time (null = the document did not exist). */
+    const reads = new Map<string, string | null>();
+    const pending: Array<{
+      path: string;
+      mode: 'set' | 'merge' | 'create' | 'update';
+      data: Input;
+    }> = [];
+    const queue = (path: string, mode: 'set' | 'merge' | 'create' | 'update', data: Input) => {
+      pending.push({ path, mode, data });
+    };
+    const tx: TxOps = {
+      get: async <T>(p: string) => {
+        const raw = await this.readRawRow(p);
+        // Two reads of one path that disagree mean the snapshot is not consistent: start over.
+        if (reads.has(p) && reads.get(p) !== raw) throw new TxConflictSignal();
+        reads.set(p, raw);
+        return raw === null ? null : parseRow<T>(splitPath(p).id, raw);
+      },
+      query: async <T>(q: QuerySpec) => this.runQuery<T>(q),
+      set: (p, d, o) => queue(p, o?.merge ? 'merge' : 'set', d),
+      create: (p, d) => queue(p, 'create', d),
+      update: (p, d) => queue(p, 'update', d),
+    };
+
+    let result: R;
+    try {
+      result = await fn(tx);
+    } catch (e) {
+      if (e instanceof TxConflictSignal) return { committed: false };
+      throw e;
+    }
+    if (!pending.length) return { committed: true, result };
+
+    const now = new Date().toISOString();
+    /** What each written path will contain after the writes so far (a later write builds on it). */
+    const projected = new Map<string, string | null>();
+    const current = async (p: string): Promise<string | null> => {
+      if (projected.has(p)) return projected.get(p) ?? null;
+      if (!reads.has(p)) reads.set(p, await this.readRawRow(p)); // guarded below
+      return reads.get(p) ?? null;
+    };
+    const parseData = (raw: string): Data => {
+      const parsed = JSON.parse(raw) as Data;
+      if (typeof parsed.expireAt === 'string') parsed.expireAt = new Date(parsed.expireAt);
+      return parsed;
+    };
+    const upsert = `INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT (col, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`;
+    const writes: D1PreparedStatement[] = [];
+    for (const w of pending) {
+      const { col, id } = splitPath(w.path);
+      const grp = col.split('/').pop() ?? col;
+      const clean = toPlainData(w.data);
+      if (w.mode === 'set') {
+        const json = this.rowJson(w.path, clean);
+        writes.push(this.db.prepare(upsert).bind(col, id, grp, json, now));
+        projected.set(w.path, json);
+      } else if (w.mode === 'merge') {
+        const existing = await current(w.path);
+        const next = existing === null ? clean : toPlainData(deepMerge(parseData(existing), clean));
+        const json = this.rowJson(w.path, next);
+        writes.push(this.db.prepare(upsert).bind(col, id, grp, json, now));
+        projected.set(w.path, json);
+      } else if (w.mode === 'update') {
+        const existing = await current(w.path);
+        if (existing === null) throw new StoreNotFoundError(w.path);
+        const next = toPlainData(applyUpdate(parseData(existing), clean));
+        const json = this.rowJson(w.path, next);
+        writes.push(
+          this.db
+            .prepare('UPDATE docs SET data = ?3, updated_at = ?4 WHERE col = ?1 AND id = ?2')
+            .bind(col, id, json, now),
+        );
+        projected.set(w.path, json);
+      } else {
+        const existing = await current(w.path);
+        if (existing !== null) throw new StoreConflictError(w.path);
+        const json = this.rowJson(w.path, clean);
+        writes.push(
+          this.db
+            .prepare(
+              'INSERT INTO docs (col, id, grp, data, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)',
+            )
+            .bind(col, id, grp, json, now),
+        );
+        projected.set(w.path, json);
+      }
+    }
+
+    const guards = [...reads].map(([p, raw]) => this.guardStatement(p, raw));
+    try {
+      await this.enqueue(() => this.db.batch([...guards, ...writes]), 'tx_commit', {
+        commit: true,
+      });
+    } catch (e) {
+      if (isGuardFailure(e)) return { committed: false };
+      throw e;
+    }
+    return { committed: true, result };
+  }
+
+  /**
+   * A statement that fails the whole batch (and so rolls it back) unless `path` still holds exactly
+   * the JSON text we read (or still does not exist). `json('!')` is the failure: it raises
+   * "malformed JSON". The CASE sits INSIDE the json() argument so SQLite cannot hoist the failing
+   * call out as a constant.
+   */
+  private guardStatement(path: string, raw: string | null): D1PreparedStatement {
+    const { col, id } = splitPath(path);
+    return raw === null
+      ? this.db
+          .prepare(
+            `SELECT json(CASE WHEN NOT EXISTS (SELECT 1 FROM docs WHERE col = ?1 AND id = ?2)
+               THEN '1' ELSE '!' END) AS ok`,
+          )
+          .bind(col, id)
+      : this.db
+          .prepare(
+            `SELECT json(CASE WHEN EXISTS (SELECT 1 FROM docs WHERE col = ?1 AND id = ?2 AND data = ?3)
+               THEN '1' ELSE '!' END) AS ok`,
+          )
+          .bind(col, id, raw);
+  }
+}
+
+/** Internal: a transaction read two different versions of one document. */
+class TxConflictSignal extends Error {
+  constructor() {
+    super('transaction snapshot changed');
+    this.name = 'TxConflictSignal';
+  }
+}
+
+/** The optimistic commit lost its guard check on every attempt: too many concurrent writers. */
+export class StoreBusyError extends Error {
+  constructor(readonly attempts: number) {
+    super(`transaction conflicted ${attempts} times`);
+    this.name = 'StoreBusyError';
+  }
+}
+
+function isGuardFailure(e: unknown): boolean {
+  return /malformed JSON/i.test(e instanceof Error ? e.message : String(e));
+}
+
+/** Waiter-owned sleep (a timer created by the request that is waiting). */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function logStore(event: string, fields: Record<string, unknown>, trace: OpTrace | null): void {
+  console.warn(
+    JSON.stringify({
+      level: 'warn',
+      msg: 'd1-store',
+      event,
+      requestId: trace?.requestId ?? null,
+      ...fields,
+    }),
+  );
 }

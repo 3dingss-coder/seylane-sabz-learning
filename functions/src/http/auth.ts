@@ -9,6 +9,10 @@ declare global {
   namespace Express {
     interface Request {
       user?: Doc<User>;
+      /** Correlation ID for this request (Cloudflare ray ID when available). */
+      requestId?: string;
+      /** Epoch-ms after which this request must not start new work (set for deadline-bounded routes). */
+      deadlineAtMs?: number | null;
     }
   }
 }

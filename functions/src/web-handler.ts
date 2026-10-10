@@ -17,7 +17,8 @@ import { healthRouter } from './routes/health';
 import { managerRouter } from './routes/manager';
 import { meRouter } from './routes/me';
 import type { Deps } from './services/context';
-import { D1Store, type D1Database } from './store/d1';
+import { DeadlineError } from './lib/bounded';
+import { D1Store, StoreBusyError, type D1Database } from './store/d1';
 import { InMemoryStore } from './store/helpers';
 import type { Data, DocStore } from './store/types';
 
@@ -55,7 +56,11 @@ async function resolveSigningSecret(store: DocStore, envSecret?: string): Promis
 
 /**
  * Builds `Deps` backed by Cloudflare D1 (with automatic schema creation + initial catalog seed).
- * Falls back to in-memory seeded store if `env.DB` is not bound yet so previews never 500.
+ *
+ * A missing `DB` binding is a deployment error, not something to paper over: the in-memory store
+ * would answer "success" and silently lose every write when the isolate recycles. It is therefore
+ * refused (the Worker turns this into a controlled 503) unless `ALLOW_MEMORY_STORE=on` is set
+ * explicitly, e.g. for a throwaway preview.
  */
 export async function buildCloudflareDeps(
   env: CloudflareEnv,
@@ -66,6 +71,11 @@ export async function buildCloudflareDeps(
     if (typeof v === 'string') stringEnv[k] = v;
   }
   const db = env.DB && typeof env.DB.prepare === 'function' ? env.DB : undefined;
+  if (!db && stringEnv.ALLOW_MEMORY_STORE !== 'on') {
+    throw new Error(
+      'D1 binding "DB" is missing; refusing to fall back to the in-memory store (set ALLOW_MEMORY_STORE=on to allow it)',
+    );
+  }
   const config = loadConfig({
     ...stringEnv,
     DATA_BACKEND: db ? 'd1' : 'memory',
@@ -195,6 +205,14 @@ function serveBytes(
   });
 }
 
+/** Per-request values the Worker entry point decides (the handler itself has no clock policy). */
+export interface RequestContext {
+  /** Correlation ID: Cloudflare's ray ID when there is one. Always echoed as `X-Request-Id`. */
+  requestId?: string;
+  /** Epoch-ms after which the request must not start new work (deadline-bounded routes only). */
+  deadlineAtMs?: number | null;
+}
+
 /**
  * Creates a zero-socket Web Fetch handler (`(request: Request) => Promise<Response>`)
  * that executes all `/v1/*` API routes directly in memory.
@@ -202,7 +220,7 @@ function serveBytes(
 export function createFetchHandler(
   deps: Deps,
   handles: { limiter?: RateLimiter } = {},
-): (request: Request) => Promise<Response> {
+): (request: Request, rctx?: RequestContext) => Promise<Response> {
   const config = deps.config;
   const limiter =
     handles.limiter ?? new RateLimiter(() => deps.clock().getTime(), deps.config.rateLimitScale);
@@ -219,10 +237,12 @@ export function createFetchHandler(
   v1.use(managerRouter(deps, limiter));
   v1.use(adminRouter(deps, limiter));
 
-  return async (request: Request): Promise<Response> => {
+  return async (request: Request, rctx: RequestContext = {}): Promise<Response> => {
+    const requestId = rctx.requestId ?? request.headers.get('cf-ray') ?? randomBytesBase64Url(9);
     const url = new URL(request.url);
     const origin = request.headers.get('origin');
     const baseHeaders = securityHeaders(origin, url, config);
+    baseHeaders.set('X-Request-Id', requestId);
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: baseHeaders });
@@ -396,6 +416,8 @@ export function createFetchHandler(
         headers: headersObj,
         body: parsedBody,
         ip: clientIp,
+        requestId,
+        deadlineAtMs: rctx.deadlineAtMs ?? null,
         get(name: string) {
           return headersObj[name.toLowerCase()];
         },
@@ -492,6 +514,33 @@ export function createFetchHandler(
           }
           if (err instanceof ApiError) {
             resolve(jsonResponse(toErrorBody(err), err.status, outHeaders));
+            return;
+          }
+          if (err instanceof DeadlineError || err instanceof StoreBusyError) {
+            // A controlled "try again": the store was too slow or too contended. Never a bare 500.
+            console.warn(
+              JSON.stringify({
+                level: 'warn',
+                msg: 'api-unavailable',
+                requestId,
+                path: subPath,
+                kind: err instanceof DeadlineError ? err.kind : 'conflict',
+                error: err.message.slice(0, 200),
+              }),
+            );
+            outHeaders.set('Retry-After', '2');
+            resolve(
+              jsonResponse(
+                {
+                  error: {
+                    code: 'INTERNAL',
+                    message: 'سرور موقتاً شلوغ است. کمی بعد دوباره تلاش کنید.',
+                  },
+                },
+                503,
+                outHeaders,
+              ),
+            );
             return;
           }
           console.error('Unhandled API error', err);

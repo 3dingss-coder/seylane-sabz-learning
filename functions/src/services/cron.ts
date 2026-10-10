@@ -21,7 +21,18 @@ export type JobName =
 export interface JobOptions {
   /** Manual triggers ignore the "only at this weekday/hour" gates (the weekly digest). */
   force?: boolean;
+  /** Epoch-ms after which a job must not START another unit of work (cron invocations only). */
+  deadlineAtMs?: number | null;
 }
+
+/**
+ * Cloudflare ends a Cron Trigger invocation after 15 minutes of wall time ("exceededWallTime").
+ * Jobs stop starting new work after the budget, and a hard backstop ends the invocation earlier
+ * than the platform would, so the failure is logged with the job name. Provisional values: no
+ * production duration data was available; tune from the `[cron]` log line (`totalMs`, per job).
+ */
+export const CRON_BUDGET_MS = 10 * 60_000;
+export const CRON_HARD_LIMIT_MS = 13 * 60_000;
 
 /** The one job table: cron triggers and `POST /admin/jobs/:name` both run through it. */
 export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>> = {
@@ -36,12 +47,22 @@ export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>
   }),
   // Incremental knowledge index rebuild — only changed items are re-embedded, so on a normal day
   // this costs one embedding batch (or none at all) even on a free tier.
-  'knowledge-reindex': async (d) => {
+  'knowledge-reindex': async (d, o) => {
     // 1) Read any media that is new or was produced by an older extractor (bounded per run).
-    const extraction = await extractPendingMedia(d);
+    //    A failure here must not stop step 2 (it used to: one bad asset froze the whole index), but
+    //    it is still reported: after the index is rebuilt the error is re-thrown so the job fails.
+    let extraction: unknown = null;
+    let extractionError: unknown = null;
+    try {
+      extraction = await extractPendingMedia(d, { deadlineAtMs: o?.deadlineAtMs ?? null });
+    } catch (e) {
+      extractionError = e;
+      console.error(`[cron:knowledge-reindex] extraction failed ${describeError(e)}`);
+    }
     // 2) Re-index changed knowledge items (only new/changed ones are embedded).
     const result = await rebuildKnowledgeIndex(d);
     invalidateIndexCache(d);
+    if (extractionError) throw extractionError;
     return { ...result, extraction };
   },
   // Moves files stored in D1 into R2 (a few verified files per run; a no-op once D1 is empty or
@@ -95,16 +116,31 @@ export function describeError(e: unknown): string {
   return JSON.stringify({ thrown: String(e).slice(0, 500) });
 }
 
-/** Runs every job bound to a cron expression. One failing job never blocks the others. */
-export async function runCron(d: Deps, cron: string): Promise<CronResult> {
+/**
+ * Runs every job bound to a cron expression. One failing job never blocks the others. Once the
+ * budget is spent, jobs that have not started are skipped (and reported as failed) rather than
+ * being started and killed by the platform.
+ */
+export async function runCron(
+  d: Deps,
+  cron: string,
+  opts: { deadlineAtMs?: number | null } = {},
+): Promise<CronResult> {
   const names = CRON_JOBS[cron] ?? [];
   const jobs: CronResult['jobs'] = {};
+  const deadlineAtMs = opts.deadlineAtMs ?? null;
   for (const name of names) {
+    if (deadlineAtMs !== null && Date.now() >= deadlineAtMs) {
+      jobs[name] = { ok: false, error: 'skipped: cron time budget exhausted' };
+      console.error(`[cron:${name}] skipped: cron time budget exhausted`);
+      continue;
+    }
+    const started = Date.now();
     try {
-      jobs[name] = { ok: true, result: await runJob(d, name) };
+      jobs[name] = { ok: true, result: await runJob(d, name, { deadlineAtMs }) };
     } catch (e) {
       jobs[name] = { ok: false, error: (e as Error).message?.slice(0, 300) ?? 'failed' };
-      console.error(`[cron:${name}] failed ${describeError(e)}`);
+      console.error(`[cron:${name}] failed after ${Date.now() - started}ms ${describeError(e)}`);
     }
   }
   return { cron, jobs };

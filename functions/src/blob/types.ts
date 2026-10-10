@@ -7,7 +7,7 @@ export interface UploadTicket {
 
 /** Object storage port: local filesystem (dev/test) or Firebase Storage. */
 export interface BlobStore {
-  put(path: string, data: Buffer, contentType: string): Promise<void>;
+  put(path: string, data: Uint8Array, contentType: string): Promise<void>;
   createUploadUrl(path: string, contentType: string, maxBytes: number): Promise<UploadTicket>;
   stat(path: string): Promise<{ size: number; contentType: string } | null>;
   /** Inclusive byte range [start, end]. */

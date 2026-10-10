@@ -4,6 +4,7 @@ import { AllProvidersFailed } from '../ai/hub';
 import type { MediaPart } from '../ai/types';
 import type { Package, Product, Section } from '../domain/types';
 import type { Doc } from '../store/types';
+import { bytesToBase64 } from '../lib/crypto';
 import { DAY } from '../lib/time';
 import type { Deps } from './context';
 import { splitBody } from './knowledge';
@@ -57,7 +58,8 @@ export interface ExtractInput {
   sourceName: string;
   mime: string;
   sizeBytes: number | null;
-  bytes?: Buffer;
+  /** Raw file bytes. A plain Uint8Array: Workers has no `Buffer` global. */
+  bytes?: Uint8Array;
   /** Set instead of `bytes` for YouTube sources (Gemini reads the URL directly). */
   fileUri?: string;
   link?: IngestLink;
@@ -151,7 +153,7 @@ export async function extractAsset(d: Deps, input: ExtractInput): Promise<MediaE
       if (bytes) {
         try {
           const stt = await hub.transcribe({
-            base64: bytes.toString('base64'),
+            base64: bytesToBase64(bytes),
             mime: input.mime,
             language: 'fa',
             prompt: input.hint,
@@ -174,7 +176,7 @@ export async function extractAsset(d: Deps, input: ExtractInput): Promise<MediaE
             {
               kind: 'video',
               mime: input.mime,
-              base64: input.bytes.toString('base64'),
+              base64: bytesToBase64(input.bytes),
               label: input.sourceName,
             },
           ],
@@ -193,7 +195,7 @@ export async function extractAsset(d: Deps, input: ExtractInput): Promise<MediaE
           {
             kind: input.sourceKind,
             mime: input.mime,
-            base64: input.bytes.toString('base64'),
+            base64: bytesToBase64(input.bytes),
             label: input.sourceName,
           },
         ],
@@ -311,7 +313,12 @@ export interface SweepResult {
  */
 export async function extractPendingMedia(
   d: Deps,
-  opts: { limit?: number; only?: 'sections' | 'products' | 'all' } = {},
+  opts: {
+    limit?: number;
+    only?: 'sections' | 'products' | 'all';
+    /** Epoch-ms after which no further asset is started (cron time budget). */
+    deadlineAtMs?: number | null;
+  } = {},
 ): Promise<SweepResult> {
   const limit = Math.max(1, Math.min(opts.limit ?? DEFAULT_EXTRACT_LIMIT, 50));
   const only = opts.only ?? 'all';
@@ -388,6 +395,7 @@ export async function extractPendingMedia(
 
   for (const input of candidates) {
     if (result.extracted + result.failed >= limit) break;
+    if (opts.deadlineAtMs != null && Date.now() >= opts.deadlineAtMs) break;
     result.scanned++;
     const existing = await extractionFor(d, input);
     if (
@@ -407,7 +415,7 @@ export async function extractPendingMedia(
         result.skipped++;
         continue;
       }
-      input.bytes = Buffer.from(await d.blob.readRange(blobPath, 0, stat.size - 1));
+      input.bytes = new Uint8Array(await d.blob.readRange(blobPath, 0, stat.size - 1));
       input.sizeBytes = stat.size;
       input.mime = stat.contentType;
     }
@@ -415,9 +423,8 @@ export async function extractPendingMedia(
     // candidate list could exhaust a Worker's memory before the first provider call.
     if (!input.bytes && input.sourceKind !== 'image' && !input.fileUri) {
       if (input.sizeBytes !== null && input.sizeBytes <= SPEECH_MAX_BYTES)
-        input.bytes = Buffer.from(await d.blob.readRange(input.path, 0, input.sizeBytes - 1));
+        input.bytes = new Uint8Array(await d.blob.readRange(input.path, 0, input.sizeBytes - 1));
     }
-    if (input.bytes && !Buffer.isBuffer(input.bytes)) input.bytes = Buffer.from(input.bytes);
     const out = await extractAsset(d, input);
     const id = extractionId(input);
     if (out.status === 'ready' || out.status === 'skipped') result.extracted++;
