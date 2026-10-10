@@ -25,6 +25,17 @@ function harness(sendResponder: (token: string) => Response) {
   return { calls, fetchImpl };
 }
 
+function lastMessage(calls: Array<{ url: string; body: string }>): Record<string, unknown> & {
+  data: Record<string, string>;
+  webpush: { headers: Record<string, string> };
+  notification?: unknown;
+  android?: unknown;
+} {
+  const sent = calls.filter((c) => c.url.includes('messages:send')).at(-1);
+  if (!sent) throw new Error('no FCM send call recorded');
+  return (JSON.parse(sent.body) as { message: never }).message;
+}
+
 describe('FcmHttpPushSender', () => {
   it('signs a valid RS256 service-account assertion', async () => {
     const s = new FcmHttpPushSender(sa, '', async () => json(200, {}));
@@ -46,7 +57,7 @@ describe('FcmHttpPushSender', () => {
     const s = new FcmHttpPushSender(sa, 'https://academy-seylaneh.site', fetchImpl);
     const r1 = await s.send(['a', 'b'], { title: 't', body: 'b', data: { link: '/messages' } });
     const r2 = await s.send(['c'], { title: 't', body: 'b' });
-    expect(r1).toEqual({ sent: 2, invalidTokens: [] });
+    expect(r1).toMatchObject({ sent: 2, invalidTokens: [] });
     expect(r2.sent).toBe(1);
     expect(calls.filter((c) => c.url.includes('oauth2')).length).toBe(1);
     const sendCall = calls.find((c) => c.url.includes('messages:send'));
@@ -89,5 +100,53 @@ describe('FcmHttpPushSender', () => {
     expect(parseServiceAccount('not json')).toBeNull();
     expect(parseServiceAccount(JSON.stringify({ project_id: 'p' }))).toBeNull();
     expect(parseServiceAccount(JSON.stringify(sa))?.project_id).toBe('proj-1');
+  });
+
+  it('sends web devices a data-only message with all display fields as strings', async () => {
+    const { calls, fetchImpl } = harness(() => json(200, { name: 'm' }));
+    const s = new FcmHttpPushSender(sa, 'https://academy-seylaneh.site', fetchImpl);
+    await s.send(['w1'], {
+      title: 'عنوان',
+      body: 'متن',
+      imageUrl: 'https://cdn.example.com/a.jpg',
+      platform: 'web',
+      data: { link: '/messages', notificationId: 'n1' },
+    });
+    const m = lastMessage(calls);
+    expect(m.notification).toBeUndefined();
+    expect(m.data).toMatchObject({
+      title: 'عنوان',
+      body: 'متن',
+      image: 'https://cdn.example.com/a.jpg',
+      link: '/messages',
+      notificationId: 'n1',
+    });
+    expect(Object.values(m.data).every((v) => typeof v === 'string')).toBe(true);
+    expect(m.webpush.headers).toMatchObject({ TTL: '86400', Urgency: 'high' });
+  });
+
+  it('keeps the notification payload for native devices', async () => {
+    const { calls, fetchImpl } = harness(() => json(200, { name: 'm' }));
+    const s = new FcmHttpPushSender(sa, '', fetchImpl);
+    await s.send(['a1'], { title: 't', body: 'b', platform: 'android' });
+    const m = lastMessage(calls);
+    expect(m.notification).toMatchObject({ title: 't', body: 'b' });
+    expect(m.android).toMatchObject({ priority: 'HIGH' });
+  });
+
+  it('reports a per-token result with the FCM status and code, never the token', async () => {
+    const { fetchImpl } = harness((t) =>
+      t === 'bad'
+        ? json(404, { error: { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] } })
+        : json(200, {}),
+    );
+    const s = new FcmHttpPushSender(sa, '', fetchImpl);
+    const r = await s.send(['ok', 'bad'], { title: 't', body: 'b', platform: 'web' });
+    expect(r.sent).toBe(1);
+    expect(r.invalidTokens).toEqual(['bad']);
+    expect(r.results).toEqual([
+      { result: 'sent', status: 200 },
+      { result: 'invalid', status: 404, code: 'UNREGISTERED' },
+    ]);
   });
 });

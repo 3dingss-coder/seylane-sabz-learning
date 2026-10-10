@@ -15,6 +15,7 @@ import type {
   PushCampaignSummary,
   User,
 } from '../domain/types';
+import { sendToDevices } from '../push/dispatch';
 import { audit, track, type Actor, type Deps } from './context';
 
 /**
@@ -629,8 +630,9 @@ async function runBatch(
       }
       providerCalled = true;
       try {
-        const res = await d.push.send(
-          devices.map((t) => t.token),
+        const res = await sendToDevices(
+          d.push,
+          devices.map((t) => ({ token: t.token, platform: t.platform })),
           {
             title: c.title,
             body: c.body,
@@ -849,4 +851,46 @@ export async function runPushCampaigns(d: Deps): Promise<{ started: number; batc
     budget -= done;
   }
   return { started, batches };
+}
+
+export const selfTestSchema = z.object({
+  title: z.string().trim().min(1).max(65),
+  body: z.string().trim().min(1).max(240),
+  imageUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .optional()
+    .refine((v) => !v || isSafeImageUrl(v), 'آدرس تصویر باید HTTPS معتبر باشد.'),
+  actionRef: z
+    .string()
+    .trim()
+    .max(300)
+    .optional()
+    .refine((v) => !v || isSafeInternalPath(v), 'مقصد باید یک مسیر داخلی باشد.'),
+});
+
+/** Sends the draft's notification only to the calling admin's own devices and reports each outcome. */
+export async function sendSelfTest(d: Deps, actor: Actor, input: z.infer<typeof selfTestSchema>) {
+  const devices = await d.store.query<{ token: string; platform: 'web' | 'android' }>({
+    collection: 'device_tokens',
+    where: [['userId', '==', actor.id]],
+  });
+  if (!devices.length) return { devices: 0, accepted: 0, results: [] as unknown[] };
+  const res = await sendToDevices(
+    d.push,
+    devices.map((t) => ({ token: t.token, platform: t.platform })),
+    {
+      title: input.title,
+      body: input.body,
+      ...(input.imageUrl ? { imageUrl: input.imageUrl } : {}),
+      data: {
+        notificationId: `selftest_${d.clock().getTime()}`,
+        link: input.actionRef || '/messages',
+        type: 'manual',
+      },
+    },
+  );
+  for (const bad of res.invalidTokens) await d.store.delete(`device_tokens/${ids.hash(bad)}`);
+  return { devices: devices.length, accepted: res.sent, results: res.details };
 }
