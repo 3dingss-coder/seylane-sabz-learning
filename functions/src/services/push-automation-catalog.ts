@@ -60,6 +60,15 @@ export const AUTOMATION_VARS: AutomationVar[] = [
   { name: 'score', label: 'نمره آزمون', source: 'attempt.score', kind: 'number' },
   { name: 'n', label: 'تعداد آموزش فعال', source: 'active packages', kind: 'number' },
   { name: 'count', label: 'تعداد نفرات (برای مدیر)', source: 'aggregation', kind: 'number' },
+  // Only the hook that saw the person can supply this one, so it arrives as an event var (see
+  // `users.ts`) and is simply absent everywhere else — a rule using it on another event is refused
+  // with `missingVariable` rather than sending a literal `{memberName}`.
+  {
+    name: 'memberName',
+    label: 'نام عضو تازه تیم',
+    source: 'vars event: team.member_joined',
+    kind: 'text',
+  },
 ];
 
 export const AUTOMATION_VAR_NAMES = AUTOMATION_VARS.map((v) => v.name);
@@ -386,6 +395,8 @@ export const PUSH_AUTOMATION_CATALOG: CatalogEntry[] = [
   base({
     key: 'preferred_time',
     name: 'ساعت همیشگی کاربر (نسخه ۲)',
+    // Decided to stay in version 2: a peak hour needs either a query per user in every sweep or a
+    // histogram write on every heartbeat — §4.9 (cost) says neither is free enough for a nudge.
     description:
       'نیازمند محاسبه «ساعت پیک فعالیت کاربر» از داده‌های ۱۴ روز اخیر؛ در نسخه ۱ محاسبه نمی‌شود.',
     category: 'deadlines',
@@ -730,6 +741,9 @@ export const PUSH_AUTOMATION_CATALOG: CatalogEntry[] = [
   base({
     key: 'team_rank_change',
     name: 'تغییر رتبه در تیم (نسخه ۲)',
+    // The *current* rank is free (the sweep already holds every candidate user with `pointsBalance`),
+    // but «changed» needs a weekly rank snapshot plus a source for {n}; kept out of version 1 as a
+    // whole feature rather than half of one that repeats itself every week.
     description:
       'در ریپو هیچ رتبه‌بندی/لیدربوردی وجود ندارد؛ نیازمند محاسبه هفتگی رتبه در sweep است. نسخه ۱ اجرا نمی‌کند.',
     category: 'progress',
@@ -833,7 +847,9 @@ export const PUSH_AUTOMATION_CATALOG: CatalogEntry[] = [
     audience: { type: 'role', targetId: 'manager', channel: 'any' },
     message: {
       title: 'عضو تازه در تیم شما',
-      body: '{name} به تیم شما پیوست.',
+      // `{name}` here would be the *manager's* own name: in the event path the variables are resolved
+      // from the recipient, so the joiner arrives as `{memberName}` from the hook in `users.ts`.
+      body: '{memberName} به تیم شما پیوست.',
       actionRef: '/manager',
       imageUrl: null,
     },
@@ -848,6 +864,8 @@ export const PUSH_AUTOMATION_CATALOG: CatalogEntry[] = [
   base({
     key: 'manager_score_drop',
     name: 'افت میانگین نمره تیم (نسخه ۲)',
+    // Needs a weekly per-team average (`team_weekly_stats`) stored next to the previous week's to call
+    // a drop a drop. Same shape as team_rank_change, so both land in version 2 together.
     description:
       'نیازمند آمار هفتگی میانگین نمره تیم (team_weekly_stats)؛ در نسخه ۱ محاسبه نمی‌شود.',
     category: 'digests',

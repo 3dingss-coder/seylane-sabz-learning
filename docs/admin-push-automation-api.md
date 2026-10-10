@@ -208,7 +208,7 @@
 | ویژگی | رفتار | کجا |
 | --- | --- | --- |
 | هزینه در وضعیت پیش‌فرض | اگر برای آن اتفاق قاعده‌ی روشنی وجود نداشته باشد، ثبت اتفاق **هیچ** نوشتنی ندارد: `listeningEvents` مجموعه شنونده‌ها را از `loadRunnable` می‌خواند و ۳۰ ثانیه به‌ازای `Deps` کش می‌کند. موتورِ متوقف‌شده هم «شنونده‌ای نیست» برمی‌گرداند، پس در دوران توقف چیزی صف نمی‌شود. | `push-automation-events.ts → listeningEvents` |
-| ایدمپوتنسی (§4.2) | کلید سطر `hash(event|userId)` داخل شارد روز است و با `store.create` نوشته می‌شود؛ تکرارِ همان کاربر و همان اتفاق در همان روز با `StoreConflictError` بی‌صدا رد می‌شود (اولین مقدار متغیرها برنده است، مثل کلید idempotency). | `emitAutomationEvent` |
+| ایدمپوتنسی (§4.2) | کلید سطر `hash(event|userId)` (به‌اضافهٔ یک **موضوع** اختیاری، پایین همین جدول) داخل شارد روز است و با `store.create` نوشته می‌شود؛ تکرارِ همان کاربر و همان اتفاق در همان روز با `StoreConflictError` بی‌صدا رد می‌شود (اولین مقدار متغیرها برنده است، مثل کلید idempotency). | `emitAutomationEvent` |
 | مصرف یک‌بار | سطر چه به ارسال برسد چه به یک ردّ مستند، پاک می‌شود؛ «cap» یا «سکوت شب» نباید ساعت بعد همان یادآوری را برگرداند. | `drainAutomationEvents` |
 | سقف‌ها | هر زهکشی حداکثر `EVENTS_PER_RUN = 30` سطر جلو می‌برد و برای هر کاربر `EVENTS_PER_USER_RUN = 4` تا؛ باقی‌مانده به تیک بعدی می‌ماند (کران تکرار می‌کند، پس چیزی گم نمی‌شود). | `drainAutomationEvents` |
 | انقضا | یک اتفاق بعد از شش ساعت تاریخ می‌خورد؛ یادآوریِ سه‌ساعته‌ای که کسی لازم نداشت، دیگر نباید برود. | `EVENT_TTL_MS` |
@@ -225,12 +225,18 @@
 | `section.completed` | `learning.ts → recordProgressInner` داخل `step('section_completed_event')`؛ `sectionId` هم می‌رود چون `stillValid()` پیش از ارسال دوباره چک می‌کند | `section_ready_quiz` (تأخیر ۳۰ دقیقه) |
 | `package.completed` | `learning.ts → onPackageCompleted`، درست بعد از ساخته‌شدن رکورد تکمیل (پس یک‌بار به‌ازای هر بسته) | `first_course_done` (`sendOnce` + ۳۶۵ روز) |
 | `package.updated` | `content.ts → updatePackage` وقتی بسته منتشرشده است و `title`/`description` عوض شده (نه هر بار ذخیره فرم) | `package_updated` — فقط برای کسانی که در همان بسته پیشرفت دارند (`packageLearnerIds`)؛ مخاطب سطر `role: marketer` است که در این محصول همان «کارآموز» است |
+| `team.member_joined` | `users.ts → announceTeamJoin` از دو جا: `register` (ثبت‌نامی که وارد تیم می‌شود) و `adminUpdateUser` وقتی `teamId` عوض می‌شود — وگرنه یک ذخیرهٔ سادهٔ پروفایل «عضویت» حساب نمی‌شود. مخاطب = مدیران فعالِ همان تیم، منهای خودِ فرد | `manager_member_joined` (داخل‌اپ؛ `push: false`) — متنش به یک متغیرِ هوک نیاز دارد (`{memberName}`)، چون `{name}` نام خودِ مدیر می‌شد؛ `emitAutomationEventForUsers(…, { memberName }, { dedupeKey: id_عضو })` |
 
 عمداً hook نشده‌اند: `user.registered`، `assignment.created`، `badge.earned`، `retake.*`،
 `manager.message`، `deadline.*` و `escalation` — این‌ها دروازه‌ی `templateKey` هستند (متن در تب
 «قالب‌های اعلان» می‌ماند و `fireAutomationEvent` دروازه‌ها را اصلاً بررسی نمی‌کند)، پس ثبت‌شان فقط
-سطر بی‌مصرف تولید می‌کرد. `team.member_joined` هم تا تعیین تکلیف متنش نوشته نمی‌شود: `{name}` در پیام
-آن به مدیر باید اسم عضو تازه باشد، ولی `resolveVars` اسم خودِ گیرنده را می‌دهد.
+سطر بی‌مصرف تولید می‌کرد.
+
+`team.member_joined` (پس از PR6) وصل شد، ولی **نه** با `{name}`: در مسیر اتفاق، متغیرها از خودِ
+گیرنده حل می‌شوند و گیرندهٔ این پیام مدیر است، پس `{name}` نام مدیر را می‌داد. به‌جایش یک متغیر تازه به
+`AUTOMATION_VARS` اضافه شد (`memberName`، «نام عضو تازه تیم») که فقط هوک عضویت آن را می‌فرستد؛ هر قاعدهٔ
+دیگری که بنویسدش در زمان ارسال با `missingVariable` رد می‌شود، نه با پیام نیمه‌کاره. برای همین
+`resolveVars` هم چیزی دربارهٔ تیم نمی‌داند و `users.ts` هم مجبور نشده موتور را import کند.
 
 `supersedes` از قبل وصل بود (`push-automation-governor.ts → templateGate` و
 `notify.ts → notifyTemplate`؛ حالت `superseded` فقط `push: false` می‌کند و پیام داخل‌اپ نگه داشته
@@ -238,7 +244,10 @@
 جای آن را می‌گیرد `reminder` است و هر چهار سطر `inactive_*` همان را اعلام کرده‌اند؛ برای بقیه (مثل
 `quiz_failed`) خودِ قالب `push: false` دارد، پس mapping تازه‌ای اضافه نشد.
 
-`AUTOMATION_EVENT_PATH` سه مسیر `POST /v1/me/…` را می‌شناسد. ویرایش بسته (`PATCH`) عمداً بیرون فهرست
+`AUTOMATION_EVENT_PATH` سه مسیر `POST /v1/me/…` را می‌شناسد و `AUTOMATION_ADMIN_EVENT_PATH` دو مسیر
+عضویت (`PATCH /v1/admin/users/:id` و `POST /v1/auth/phone-register`) را؛ در `backgroundJob` هم درِ
+`method === 'POST'` برای همان PATCH باز شده، و `push-automation-events.test.ts` جفتِ «هر هوکی در فهرست
+drain هست» را روی هر دو فایل می‌گیرد. ویرایش بسته (`PATCH`) عمداً بیرون فهرست
 است: `backgroundJob` فقط POST را اجرا می‌کند و یک یادآوری «محتوا به‌روز شد» با حداکثر پانزده دقیقه
 تأخیر فرقی نمی‌کند. تست `the routes that emit are the routes the Worker drains after` روی منبع چک
 می‌کند این دو فهرست از هم جدا نشوند.
@@ -295,9 +304,15 @@ cooldown/sendOnce لازم است.
 
 
 مستندات فعال‌سازی تدریجی (PR7): ترتیب پیشنهادی روشن‌کردن سناریوها، اندازه‌گیری اثر با کارت سلامت و
-`/runs`، و عقب‌نشینی با kill-switch. بقیه موارد باز: hook نشدن `team.member_joined` (متن سطر کاتالوگ
-باید اسم عضو تازه را بگیرد، نه گیرنده را)، و سه سناریوی `requiresFeature` که تا محاسبه
-`team_weekly_stats` / داده‌ی هزینه آموزش روشن نمی‌شوند. سناریوهای `event` از PR5 عادی کار می‌کنند؛
+`/runs`، و عقب‌نشینی با kill-switch.
+
+دو مورد باز تعیین تکلیف شدند: `team.member_joined` وصل شد (§۸)، و سه سناریوی `requiresFeature`
+(`preferred_time`، `team_rank_change`، `manager_score_drop`) **عمداً** در نسخه ۲ مانده‌اند — دلیلش بالای
+هر سطر در `push-automation-catalog.ts` کامنت شده است: رتبهٔ فعلی از همان داده‌های sweep رایگان درمی‌آید
+ولی «تغییر رتبه» snapshot هفتگی و یک منبع برای `{n}` می‌خواهد، افت میانگین نمره هم همان snapshot را، و
+ساعت پیک فعالیت یا یک query به‌ازای هر کاربر در هر sweep است یا نوشتن در هر heartbeat — هیچ‌کدام با
+قانون هزینهٔ §4.9 جور نمی‌آید. `user.registered` / `assignment.created` / `badge.earned` هم هنوز
+تولیدکنندهٔ رویداد ندارند (دلیلشان در همان بند «عمداً hook نشده‌اند» است). سناریوهای `event` از PR5 عادی کار می‌کنند؛
 برای فعال‌سازی کلیدشان را یک‌بار در پنل روشن کنید و اگر خواستید همان لحظه بررسی شود، «ارسال آزمایشی»
 (`POST …/test-send`) را به‌کار بگیرید — اجرای دستیِ «اجرای الان» عمداً باکس خروجی را خالی نمی‌کند،
 چون فقط قواعد زمان‌بندی‌شده را مربوط می‌داند.

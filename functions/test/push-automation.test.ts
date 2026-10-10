@@ -193,6 +193,12 @@ describe('catalogue seeding', () => {
     });
     expect(unknownVar.status).toBe(400);
     expect(unknownVar.body.error.message).toContain('durationLeft');
+    // `{memberName}` is legal to write anywhere: the `team.member_joined` hook supplies it. A rule that
+    // uses it on another event is refused when sending (`missingVariable`), not silently half-rendered.
+    const joinerVar = await ctx.api(admin.token).patch('/v1/admin/push-automations/inactive_1d', {
+      message: { title: 'سلام', body: '{memberName} به تیم شما اضافه شد', actionRef: '/' },
+    });
+    expect(joinerVar.status).toBe(200);
   });
 });
 

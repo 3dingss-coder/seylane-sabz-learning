@@ -20,9 +20,10 @@
 // writes **nothing**. A user action never fans out over the whole user base either — the recipient
 // list is always the caller's own (see `emitAutomationEventForUsers`).
 //
-// Idempotency: the document id is a hash of `event|userId` inside a daily shard, written with
-// `store.create`, which throws `StoreConflictError` on a duplicate. So a double-clicked submit or a
-// replayed request cannot queue a second nudge for the same person on the same day (prompt §4.2).
+// Idempotency: the document id is a hash of `event|userId` (plus an optional *subject*, see
+// `emitAutomationEventForUsers`) inside a daily shard, written with `store.create`, which throws
+// `StoreConflictError` on a duplicate. So a double-clicked submit or a replayed request cannot queue a
+// second nudge for the same person on the same day (prompt §4.2).
 //
 // ═══ EDIT THIS FILE TOGETHER WITH `docs/admin-push-automation-api.md` ══════════════════════════
 
@@ -60,6 +61,13 @@ export interface AutomationEvent {
  */
 export const AUTOMATION_EVENT_PATH =
   /^\/v1\/me\/(quizzes\/[^/]+\/attempts|attempts\/[^/]+\/submit|sections\/[^/]+\/progress)$/;
+/**
+ * Team joins are queued by admin requests (`users.adminUpdateUser`, `users.register`), so those two
+ * answers also get a drain: «عضو تازه به تیم شما پیوست» should be in the manager's inbox with the
+ * page they just saved, not somewhere within 15 minutes.
+ */
+export const AUTOMATION_ADMIN_EVENT_PATH =
+  /^\/v1\/admin\/users\/[^/]+$|^\/v1\/auth\/phone-register$/;
 
 const eventShard = async (d: Deps): Promise<string> =>
   `${EVENTS}/${dayKey(d.clock(), (await getPolicy(d)).timezone)}`;
@@ -152,6 +160,7 @@ export async function emitAutomationEventForUsers(
   event: string,
   userIds: string[],
   vars: Record<string, string | number> = {},
+  opts: { dedupeKey?: string } = {},
 ): Promise<number> {
   let queued = 0;
   try {
@@ -159,9 +168,12 @@ export async function emitAutomationEventForUsers(
     const at = d.clock().toISOString();
     const expireAt = new Date(Date.parse(at) + EVENT_TTL_MS).toISOString();
     const shard = await eventShard(d);
+    // The daily dedupe is per *subject* too: two people joining one team on one day are two notices
+    // for the manager, while a replayed PATCH of the same join still collapses into one row.
+    const subject = opts.dedupeKey ? `|${opts.dedupeKey}` : '';
     for (const userId of userIds.slice(0, BROADCAST_MAX_USERS)) {
       try {
-        await d.store.create(`${shard}/${hash(`${event}|${userId}`)}`, {
+        await d.store.create(`${shard}/${hash(`${event}|${userId}${subject}`)}`, {
           event,
           userId,
           vars,
@@ -170,7 +182,7 @@ export async function emitAutomationEventForUsers(
         } as AutomationEvent);
         queued++;
       } catch {
-        /* already queued for this person today */
+        /* already queued for this person and subject today */
       }
     }
     if (userIds.length > BROADCAST_MAX_USERS)

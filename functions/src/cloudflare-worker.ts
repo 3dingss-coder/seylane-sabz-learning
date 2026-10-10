@@ -1,7 +1,11 @@
 import { D1Store } from './store/d1';
 import { flushDeferredPush } from './services/notify';
 import { runPushCampaigns } from './services/push-campaigns';
-import { AUTOMATION_EVENT_PATH, drainAutomationEvents } from './services/push-automation-events';
+import {
+  AUTOMATION_ADMIN_EVENT_PATH,
+  AUTOMATION_EVENT_PATH,
+  drainAutomationEvents,
+} from './services/push-automation-events';
 import {
   buildCloudflareDeps,
   createFetchHandler,
@@ -169,9 +173,11 @@ function backgroundJob(path: string): ((d: Deps) => Promise<unknown>) | null {
   if (/^\/v1\/admin\/push-campaigns\/[^/]+\/send$/.test(path)) return runPushCampaigns;
   if (path === '/v1/admin/notifications/send') return flushDeferredPush;
   // Automation events queued by this request. The learner-facing routes in `AUTOMATION_EVENT_PATH`
-  // are the ones where «right now» matters (a nudge two hours after a failed quiz cannot wait for
-  // the next cron tick); the 15-minute job is only the guarantee that nothing is lost.
-  if (AUTOMATION_EVENT_PATH.test(path)) return drainAutomationEvents;
+  // and the admin requests in `AUTOMATION_ADMIN_EVENT_PATH` are the ones where «right now» matters (a
+  // nudge two hours after a failed quiz, or a new member the page just added, cannot wait for the next
+  // cron tick); the 15-minute job is only the guarantee that nothing is lost.
+  if (AUTOMATION_EVENT_PATH.test(path) || AUTOMATION_ADMIN_EVENT_PATH.test(path))
+    return drainAutomationEvents;
   return null;
 }
 
@@ -195,7 +201,12 @@ export default {
         // Admin sends only enqueue; delivery starts right after the response, on its OWN D1Store
         // so its queries never sit in the serialized queue that serves site requests. Uses the
         // already-acquired runtime (no further wait on the shared startup).
-        const bg = ctx && res.ok && request.method === 'POST' ? backgroundJob(url.pathname) : null;
+        // `PATCH` for one route only: `PATCH /v1/admin/users/:id` can queue «عضو تازه به تیم شما» and
+        // the manager should read it on the page they just saved, not somewhere within 15 minutes.
+        const drainable =
+          request.method === 'POST' ||
+          (request.method === 'PATCH' && AUTOMATION_ADMIN_EVENT_PATH.test(url.pathname));
+        const bg = ctx && res.ok && drainable ? backgroundJob(url.pathname) : null;
         if (ctx && bg) {
           const deps = runtime.deps;
           ctx.waitUntil(

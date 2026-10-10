@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { dayKey } from '../src/lib/time';
 import { runJob } from '../src/services/cron';
 import { runPushAutomations } from '../src/services/push-automation-engine';
+import { register, adminUpdateUser } from '../src/services/users';
 import {
+  AUTOMATION_ADMIN_EVENT_PATH,
   AUTOMATION_EVENT_PATH,
   EVENTS_PER_USER_RUN,
   drainAutomationEvents,
@@ -243,13 +245,19 @@ describe('the cron and the Worker share the load', () => {
     // A hook without a matcher waits for the cron; a matcher without a hook is dead weight. Neither
     // shows up in a type check, so the pair is asserted on the source.
     // No `import.meta` here: the functions project compiles to CJS (see cron.test.ts).
-    const src = readFileSync(path.join(process.cwd(), 'src/services/learning.ts'), 'utf8');
-    const emitted = [...src.matchAll(/emitAutomationEvent\(d, '([a-z._]+)'/g)].map(
-      (m) => m[1] as string,
-    );
+    const eventsIn = (file: string) =>
+      [
+        ...new Set(
+          [
+            ...(readFileSync(path.join(process.cwd(), file), 'utf8') as string).matchAll(
+              /emitAutomationEvent(?:ForUsers)?\(\s*d,\s*'([a-z._]+)'/g,
+            ),
+          ].map((m) => m[1] as string),
+        ),
+      ].sort();
     // Every event the learning service records must be listed in the matcher above or reached by the
     // cron; this is the pair that silently drifts apart when a hook is added.
-    expect([...new Set(emitted)].sort()).toEqual([
+    expect(eventsIn('src/services/learning.ts')).toEqual([
       'attempt.started',
       'package.completed',
       'quiz.failed',
@@ -265,6 +273,13 @@ describe('the cron and the Worker share the load', () => {
       expect(AUTOMATION_EVENT_PATH.test(path), path).toBe(true);
     for (const path of ['/v1/me/notifications/read-all', '/v1/admin/push-automations/x/run'])
       expect(AUTOMATION_EVENT_PATH.test(path), path).toBe(false);
+    // …and the admin-side hook: a team join is queued by two requests, and both are drained right
+    // after, so the manager reads «عضو تازه» in the same page they saved.
+    expect(eventsIn('src/services/users.ts')).toEqual(['team.member_joined']);
+    for (const path of ['/v1/admin/users/u1', '/v1/auth/phone-register'])
+      expect(AUTOMATION_ADMIN_EVENT_PATH.test(path), path).toBe(true);
+    for (const path of ['/v1/admin/users', '/v1/admin/teams/t1', '/v1/auth/login-phone'])
+      expect(AUTOMATION_ADMIN_EVENT_PATH.test(path), path).toBe(false);
   });
 });
 
@@ -327,5 +342,103 @@ describe('event variables', () => {
     expect(queue.map((q) => q.key)).toEqual(['quiz_failed_nudge']);
     expect(queue[0]?.vars.sectionId).toBe(fx.sections[0]?.id);
     expect(queue[0]?.vars.title).toBe('آموزش کرم مرطوب کننده');
+  });
+});
+
+describe('a team gaining a member', () => {
+  /** `teams/<id>` has to exist before a user may be attached to it (adminUpdateUser validates it). */
+  const team = (id: string, managerId: string) =>
+    store().set(`teams/${id}`, {
+      name: 'تیم الف',
+      managerId,
+      memberCount: 0,
+      archived: false,
+      createdAt: ctx.deps.clock().toISOString(),
+      updatedAt: ctx.deps.clock().toISOString(),
+    });
+  const signUp = (name: string, phone: string, teamId: string) =>
+    register(
+      ctx.deps,
+      { name, identifier: phone, password: 'passw0rd123', province: 'تهران', city: 'تهران' },
+      'marketer',
+      { teamId },
+    );
+
+  it('names the person who joined, not the manager reading it', async () => {
+    const boss = await ctx.user('manager', { teamId: 'team-a', name: 'مریم' });
+    await enable('manager_member_joined');
+    ctx.advance(60_000); // the listener set is cached for 30s, so a toggle needs a new read
+    await signUp('سارا', '09123330000', 'team-a');
+    const queued = await rows();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.event).toBe('team.member_joined');
+    expect(queued[0]?.userId).toBe(boss.id);
+    expect(queued[0]?.vars).toEqual({ memberName: 'سارا' });
+    expect(await drainAutomationEvents(ctx.deps)).toMatchObject({ sent: 1 });
+    const inbox = await ctx.api(boss.token).get('/v1/me/notifications');
+    expect(inbox.body.data.items[0]).toMatchObject({
+      title: 'عضو تازه در تیم شما',
+      body: 'سارا به تیم شما پیوست.',
+      actionRef: '/manager',
+    });
+    // The point of the separate variable: `{name}` in this very message would have been the
+    // manager’s own first name, because an event resolves variables from its recipient.
+    expect(inbox.body.data.items[0]?.body).not.toContain('مریم');
+    expect(ctx.deps.push.sent).toHaveLength(0); // seeded with push:false — the manager is not pinged
+  });
+
+  it('fires when an admin moves someone into the team, and stays free while the rule is off', async () => {
+    const boss = await ctx.user('manager', { teamId: 'team-a', name: 'مریم' });
+    await team('team-a', boss.id);
+    const off = await ctx.user('marketer', { name: 'رضا' });
+    await adminUpdateUser(ctx.deps, ACTOR, off.id, { teamId: 'team-a' });
+    expect(await rows()).toHaveLength(0); // §4.9: no enabled rule, no outbox write
+    await enable('manager_member_joined');
+    ctx.advance(60_000); // the listener set is cached for 30s, so a toggle needs a new read
+    const on = await ctx.user('marketer', { name: 'سارا' });
+    await adminUpdateUser(ctx.deps, ACTOR, on.id, { teamId: 'team-a' });
+    expect((await rows()).map((r) => r.userId)).toEqual([boss.id]);
+    expect((await rows())[0]?.vars.memberName).toBe('سارا');
+    // Saving the person again (their team did not change) is not a second join.
+    await adminUpdateUser(ctx.deps, ACTOR, on.id, { teamId: 'team-a', city: 'شهرری' });
+    expect(await rows()).toHaveLength(1);
+  });
+
+  it('is one notice per new member, and still one per replayed join', async () => {
+    const boss = await ctx.user('manager', { teamId: 'team-a' });
+    await enable('manager_member_joined');
+    ctx.advance(60_000); // the listener set is cached for 30s, so a toggle needs a new read
+    const emit = (memberId: string) =>
+      emitAutomationEventForUsers(
+        ctx.deps,
+        'team.member_joined',
+        [boss.id],
+        { memberName: memberId },
+        { dedupeKey: memberId },
+      );
+    expect(await emit('u-new')).toBe(1);
+    expect(await emit('u-new')).toBe(0); // a replayed request collapses, like any other event
+    expect(await emit('u-other')).toBe(1); // two people joining on one day are two notices
+    expect((await rows()).map((r) => r.vars.memberName).sort()).toEqual(['u-new', 'u-other']);
+  });
+
+  it('does not tell a manager about themselves', async () => {
+    await enable('manager_member_joined');
+    ctx.advance(60_000); // the listener set is cached for 30s, so a toggle needs a new read
+    // The only manager of the team is the person joining: the filter drops themself, so the row count
+    // stays zero. A *second* manager on that team would still be told (a colleague did join).
+    await register(
+      ctx.deps,
+      {
+        name: 'مریم',
+        identifier: '09123330001',
+        password: 'passw0rd123',
+        province: 'تهران',
+        city: 'تهران',
+      },
+      'manager',
+      { teamId: 'team-a' },
+    );
+    expect(await rows()).toHaveLength(0);
   });
 });
