@@ -45,6 +45,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium webkit
         working-directory: apps/web
+      # Build outside Playwright's webServer timeout; `vite preview` then serves apps/web/dist.
+      - run: npm run build -w apps/web
       - run: npm run test:e2e
         working-directory: apps/web
       - uses: actions/upload-artifact@v4
