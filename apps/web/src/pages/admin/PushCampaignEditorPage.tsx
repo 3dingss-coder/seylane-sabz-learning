@@ -1,3 +1,4 @@
+import { userOptionLabel } from '@/lib/digits';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -233,7 +234,7 @@ function Editor({ campaign }: { campaign: PushCampaign | null }) {
     if (form.audienceType === 'user')
       return (users.data ?? [])
         .filter((u) => u.status === 'active')
-        .map((u) => ({ value: u.id, label: u.name }));
+        .map((u) => ({ value: u.id, label: userOptionLabel(u) }));
     return [];
   }, [form.audienceType, teams.data, users.data]);
   const targetName = targetOptions.find((o) => o.value === form.targetId)?.label ?? null;

@@ -13,3 +13,13 @@ export function toLatinDigits(value: string): string {
     return String(fa >= 0 ? fa : AR.indexOf(d));
   });
 }
+
+/** «علی عدلی — ۰۹۱۲…» : the phone/email tells apart users who share the same name. */
+export function userOptionLabel(u: {
+  name: string;
+  phone: string | null;
+  email: string | null;
+}): string {
+  const id = u.phone ?? u.email;
+  return id ? `${u.name} — ${toPersianDigits(id)}` : u.name;
+}

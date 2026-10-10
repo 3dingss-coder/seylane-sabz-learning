@@ -1,3 +1,4 @@
+import { userOptionLabel } from '@/lib/digits';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -29,7 +30,7 @@ import { cn } from '@/lib/cn';
 import { toPersianDigits } from '@/lib/digits';
 import { errMsg } from '@/lib/errors';
 import { faDuration } from '@/lib/format';
-import type { AdminAssignment, AdminPackageDetail, AdminPath, AdminSection } from '@/lib/types';
+import type { AdminAssignment, AdminPackageDetail, AdminPath, AdminSection, Me } from '@/lib/types';
 import { ak, useBrands, useProducts, useTeams, useUsers } from './adminQueries';
 import { AssignmentDialog } from './AssignmentsPage';
 import { PackageFormDialog } from './PackageFormDialog';
@@ -586,7 +587,8 @@ function AudienceCard({
   const name = (a: AdminAssignment) => {
     if (a.type === 'global') return 'همه بازاریاب‌ها';
     const list = a.type === 'team' ? teams.data : a.type === 'user' ? users.data : brands.data;
-    const n = (list ?? []).find((x) => x.id === a.targetId)?.name ?? '—';
+    const found = (list ?? []).find((x) => x.id === a.targetId);
+    const n = !found ? '—' : a.type === 'user' ? userOptionLabel(found as Me) : found.name;
     return `${a.type === 'team' ? 'تیم' : a.type === 'user' ? 'فرد' : 'برند'}: ${n}`;
   };
   const pathName = new Map(paths.map((x) => [x.id, x.name]));

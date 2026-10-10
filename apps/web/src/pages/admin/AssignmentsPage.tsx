@@ -1,3 +1,4 @@
+import { userOptionLabel } from '@/lib/digits';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -39,7 +40,7 @@ function useTargetNames() {
   return useMemo(() => {
     const m = new Map<string, string>();
     for (const t of teams.data ?? []) m.set(`team:${t.id}`, t.name);
-    for (const u of users.data ?? []) m.set(`user:${u.id}`, u.name);
+    for (const u of users.data ?? []) m.set(`user:${u.id}`, userOptionLabel(u));
     for (const b of brands.data ?? []) m.set(`brand:${b.id}`, b.name);
     return (type: Scope, id: string | null) =>
       type === 'global'
@@ -69,7 +70,7 @@ function TargetPicker({
       : type === 'user'
         ? (users.data ?? [])
             .filter((u) => u.role === 'marketer' && u.status === 'active')
-            .map((u) => [u.id, u.name] as const)
+            .map((u) => [u.id, userOptionLabel(u)] as const)
         : (brands.data ?? []).filter((b) => !b.archived).map((b) => [b.id, b.name] as const);
   return (
     <Select
