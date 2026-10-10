@@ -1,3 +1,4 @@
+import { userOptionLabel } from '@/lib/digits';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -340,7 +341,7 @@ function ManualSend() {
                   .filter((u) => u.status === 'active')
                   .map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.name}
+                      {userOptionLabel(u)}
                     </option>
                   ))}
             </Select>
