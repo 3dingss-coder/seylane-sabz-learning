@@ -5,8 +5,9 @@ import {
   Bell,
   Bot,
   FolderTree,
-  Library,
   LayoutDashboard,
+  Library,
+  Megaphone,
   ScrollText,
   Settings2,
   Share2,
@@ -17,6 +18,7 @@ import {
 import { PanelLayout } from '@/layouts/PanelLayout';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { ProfilePage } from '@/pages/m/ProfilePage';
+
 const AdminDashboard = lazy(() =>
   import('./AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
 );
@@ -34,6 +36,12 @@ const ContentPage = lazy(() =>
 );
 const NotificationsPage = lazy(() =>
   import('./NotificationsPage').then((m) => ({ default: m.NotificationsPage })),
+);
+const PushCampaignEditorPage = lazy(() =>
+  import('./PushCampaignEditorPage').then((m) => ({ default: m.PushCampaignEditorPage })),
+);
+const PushCampaignsPage = lazy(() =>
+  import('./PushCampaignsPage').then((m) => ({ default: m.PushCampaignsPage })),
 );
 const MediaLibraryPage = lazy(() =>
   import('./MediaLibraryPage').then((m) => ({ default: m.MediaLibraryPage })),
@@ -78,6 +86,7 @@ const NAV = [
   { to: '/admin/teams', label: 'تیم‌ها', icon: UsersRound },
   { to: '/admin/reports', label: 'گزارش‌ها', icon: BarChart3 },
   { to: '/admin/notifications', label: 'اعلان‌ها', icon: Bell },
+  { to: '/admin/push-campaigns', label: 'کمپین‌های Push', icon: Megaphone },
   { to: '/admin/policies', label: 'سیاست‌ها', icon: Settings2 },
   { to: '/admin/audit', label: 'لاگ تغییرات', icon: ScrollText },
   { to: '/admin/profile', label: 'پروفایل', icon: UserRound },
@@ -93,25 +102,28 @@ export default function AdminRoutes() {
       }
     >
       <Routes>
-      <Route element={<PanelLayout title="پنل ادمین" items={NAV} />}>
-        <Route index element={<AdminDashboard />} />
-        <Route path="content" element={<ContentPage />} />
-        <Route path="media" element={<MediaLibraryPage />} />
-        <Route path="mentor" element={<MentorGuidesPage />} />
-        <Route path="content/brands/:id" element={<BrandDetailPage />} />
-        <Route path="packages/:id" element={<PackageEditorPage />} />
-        <Route path="quizzes/:id" element={<QuizBuilderPage />} />
-        <Route path="assignments" element={<AssignmentsPage />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="users/:id" element={<AdminUserDetail />} />
-        <Route path="teams" element={<TeamsPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="policies" element={<PoliciesPage />} />
-        <Route path="audit" element={<AuditPage />} />
-        <Route path="profile" element={<ProfilePage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
+        <Route element={<PanelLayout title="پنل ادمین" items={NAV} />}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="content" element={<ContentPage />} />
+          <Route path="media" element={<MediaLibraryPage />} />
+          <Route path="mentor" element={<MentorGuidesPage />} />
+          <Route path="content/brands/:id" element={<BrandDetailPage />} />
+          <Route path="packages/:id" element={<PackageEditorPage />} />
+          <Route path="quizzes/:id" element={<QuizBuilderPage />} />
+          <Route path="assignments" element={<AssignmentsPage />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="users/:id" element={<AdminUserDetail />} />
+          <Route path="teams" element={<TeamsPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="push-campaigns" element={<PushCampaignsPage />} />
+          <Route path="push-campaigns/new" element={<PushCampaignEditorPage />} />
+          <Route path="push-campaigns/:id" element={<PushCampaignEditorPage />} />
+          <Route path="policies" element={<PoliciesPage />} />
+          <Route path="audit" element={<AuditPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Route>
       </Routes>
     </Suspense>
   );
