@@ -49,12 +49,22 @@ describe('PushOptInBanner', () => {
     }
   });
 
-  it('snoozes for a week when dismissed', () => {
-    const r = renderBanner();
-    fireEvent.click(screen.getByRole('button', { name: 'بعداً' }));
-    expect(screen.queryByRole('region')).toBeNull();
-    r.unmount();
-    renderBanner();
-    expect(screen.queryByRole('region')).toBeNull();
+  it('snoozes for one day when dismissed, then asks again every day until allowed', () => {
+    vi.useFakeTimers();
+    try {
+      const r = renderBanner();
+      fireEvent.click(screen.getByRole('button', { name: 'بعداً' }));
+      expect(screen.queryByRole('region')).toBeNull();
+      r.unmount();
+
+      renderBanner();
+      expect(screen.queryByRole('region')).toBeNull(); // still the same day
+
+      vi.setSystemTime(Date.now() + 25 * 3600_000); // next day, app resumed
+      fireEvent(document, new Event('visibilitychange'));
+      expect(screen.queryByRole('region')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
