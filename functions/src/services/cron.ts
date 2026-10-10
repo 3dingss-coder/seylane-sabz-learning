@@ -82,15 +82,18 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 
 // Cloudflare Cron Triggers fire in UTC (Iran has no DST any more: Asia/Tehran = UTC+03:30 all
 // year), so the Tehran wall-clock times of spec §26 are converted here:
-//   every 15 min   → web push deferred by quiet hours + scheduled push campaigns + knowledge-reindex (reads up to 8 new media
-//                    files per run, re-indexes only what changed; zero cost once caught up)
-//   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot)
+//   every 15 min   → web push deferred by quiet hours + scheduled push campaigns + blob migration
+//   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot) + knowledge-reindex
+//                    (reads up to 8 new media files per run, re-indexes only what changed)
 //   08:00 Tehran   → mentor daily nudges + behaviour sweep + knowledge reindex
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
-  '*/15 * * * *': ['flush-push', 'push-campaigns', 'knowledge-reindex', 'migrate-blobs'],
-  '0 * * * *': ['deadline-sweep', 'weekly-digest'],
+  '*/15 * * * *': ['flush-push', 'push-campaigns', 'migrate-blobs'],
+  // knowledge-reindex rescans every knowledge item and media row (D1 is single-threaded); it took
+  // 12-23 s per run in production logs and slowed learners' requests. Hourly is plenty; admins can
+  // run it on demand via POST /v1/admin/jobs/knowledge-reindex.
+  '0 * * * *': ['deadline-sweep', 'weekly-digest', 'knowledge-reindex'],
   '30 4 * * *': ['mentor-daily'],
   '30 6 * * *': ['daily-reminders'],
 };
