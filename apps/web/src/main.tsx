@@ -21,8 +21,13 @@ if (!isNative() && 'serviceWorker' in navigator && import.meta.env.PROD) {
       // Tabs that stay open for days only re-check sw.js on navigation; poll hourly so every
       // client picks up a new deploy (autoUpdate then activates it and reloads the page).
       onRegisteredSW(_url, registration) {
-        if (registration)
-          setInterval(() => void registration.update().catch(() => undefined), 3_600_000);
+        if (!registration) return;
+        const check = () => void registration.update().catch(() => undefined);
+        setInterval(check, 3_600_000);
+        // An installed PWA is resumed, not reopened: check as soon as the user comes back to it.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') check();
+        });
       },
     }),
   );

@@ -48,6 +48,13 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          // `injectRegister: false` stops vite-plugin-pwa from applying its autoUpdate defaults, so a
+          // new service worker used to *wait* until every tab/PWA window was closed — users kept
+          // seeing the old version for days. Activate immediately and take over open pages; the
+          // register code (main.tsx) then reloads the page onto the new build.
+          skipWaiting: true,
+          clientsClaim: true,
+          cleanupOutdatedCaches: true,
           // Catalog images and the rarely used ExcelJS export chunk are fetched on demand.
           // ExcelJS (~940 KB) must not be downloaded during PWA installation for marketers.
           globIgnores: ['**/catalog/**', '**/ffmpeg/**', '**/exceljs*.js', '**/*-legacy-*.js'],

@@ -16,3 +16,16 @@
 # Catalog file names are stable (not hashed): cache a day, serve stale while refreshing.
 /catalog/*
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+# The app shell and service-worker files must always be revalidated, otherwise a browser or CDN keeps
+# serving an old copy and users never see a new version. (Hashed files under /assets/ stay immutable.)
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/push-sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
