@@ -169,6 +169,7 @@ function validateSemantics(input: {
   trigger: PushAutomation['trigger'];
   audience: { type: string; targetId?: string | null };
   message: PushAutomation['message'];
+  delivery?: PushAutomation['delivery'];
 }): void {
   const t = input.trigger;
   const bad = (msg: string): never => {
@@ -195,6 +196,14 @@ function validateSemantics(input: {
   );
   for (const v of used)
     if (!AUTOMATION_VAR_NAMES.includes(v)) bad(`متغیر «{${v}}» شناخته‌شده نیست.`);
+  // Spec §4.4: quiet hours are crossed by priority `urgent` and by nothing else, and the engine maps
+  // exactly that to the `priority: 'high'` + `urgent` pair `notifyUsers` reserves for emergencies
+  // (a deadline under 24h in `jobs.ts`). So `respectQuietHours: false` on a normal-priority rule is a
+  // switch that cannot be honoured — refusing it here beats saving a promise the sender will break.
+  if (input.delivery && !input.delivery.respectQuietHours && input.delivery.priority !== 'urgent')
+    bad(
+      'ساعت سکوت فقط با اولویت «فوری» رد می‌شود؛ این گزینه را روشن بگذارید یا اولویت را «فوری» کنید.',
+    );
 }
 
 // ─── Catalogue seeding ───────────────────────────────────────────────────────
@@ -396,6 +405,7 @@ export async function importAutomations(
           trigger: parsed.trigger,
           audience: parsed.audience,
           message: parsed.message,
+          delivery: parsed.delivery,
         });
       } else if (cur) {
         const patch: Record<string, unknown> = { ...parsed };
@@ -836,8 +846,8 @@ export interface DryRunResult {
 }
 
 /**
- * «چهsomething اتفاقی می‌افتد؟» without touching anything: same evaluation path as the real sweep,
- * with `dry: true`, so no claim, no counter and no provider call. This is what the wizard's last step shows.
+ * «چه اتفاقی می‌افتد؟» without touching anything: same evaluation path as the real sweep, with
+ * `dry: true`, so no claim, no counter and no provider call. This is what the wizard's last step shows.
  */
 export async function dryRun(d: Deps, key: string): Promise<DryRunResult> {
   const a = await mustGet(d, key);
@@ -876,8 +886,8 @@ export async function dryRun(d: Deps, key: string): Promise<DryRunResult> {
     sample,
     note: a.requiresFeature
       ? 'این سناریو هنوز اجرا نمی‌شود: داده‌ی لازم محاسبه نمی‌شود.'
-      : !a.enabled
-        ? 'اتوماسیون خاموش است؛ این فقط برآورد مشمولان است.'
+      : !a.enabled || settings.paused
+        ? `اتوماسیون ${a.enabled ? 'زیر کلید توقف کلی' : 'خاموش'} است؛ این فقط برآورد مشمولان است، نه قولِ ارسال.`
         : null,
   };
 }

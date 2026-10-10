@@ -254,6 +254,32 @@ describe('import', () => {
     });
   });
 
+  it('refuses a row that ignores quiet hours without being urgent', async () => {
+    // An export taken from an environment that still holds the old combination must not smuggle it
+    // into the target: §4.4 hands the quiet-hours window to priority `urgent` and nothing else, and
+    // the engine no longer honours the pair either way — so a file cannot re-arm it.
+    const src = pick((await exportAll()).rows, 'inactive_1d');
+    const legacy = {
+      ...src,
+      delivery: {
+        ...src.delivery,
+        priority: 'normal' as const,
+        respectQuietHours: false,
+      },
+    };
+    const preview = await importAutomations(ctx.deps, ACTOR, { rows: [legacy], dryRun: true });
+    expect(preview.results[0]?.action).toBe('skipped'); // the dry run says so before anything is written
+    expect(preview.results[0]?.message).toContain('اولویت «فوری»');
+
+    const report = await importAutomations(ctx.deps, ACTOR, { rows: [legacy] });
+    expect(report).toMatchObject({ checked: 1, created: 0, updated: 0, skipped: 1 });
+    expect((await row('inactive_1d')).delivery.respectQuietHours).toBe(true); // the row is untouched
+    // the honest form of the same switch — the rule really is urgent — imports fine
+    const honest = { ...legacy, delivery: { ...legacy.delivery, priority: 'urgent' as const } };
+    expect((await importAutomations(ctx.deps, ACTOR, { rows: [honest] })).updated).toBe(1);
+    expect((await row('inactive_1d')).delivery.respectQuietHours).toBe(false);
+  });
+
   it('writes one audit record for the import, with the counts', async () => {
     await importAutomations(ctx.deps, ACTOR, {
       rows: [pick((await exportAll()).rows, 'inactive_1d')],

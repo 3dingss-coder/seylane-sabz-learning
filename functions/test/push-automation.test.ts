@@ -6,6 +6,7 @@ import {
   fireAutomationEvent,
   runPushAutomations,
   pruneExpiredShards,
+  sendAutomation,
   stillValid,
 } from '../src/services/push-automation-engine';
 import { computeNextItem, loadUserLearning } from '../src/services/learning-state';
@@ -26,6 +27,7 @@ import {
 } from '../src/services/push-automation-admin';
 import {
   DEFAULT_SETTINGS,
+  SKIP_LABELS,
   advanceCounter,
   gate,
   isClaimed,
@@ -931,6 +933,185 @@ describe('panel API', () => {
         })
       ).length,
     ).toBe(1);
+  });
+});
+
+/**
+ * Review follow-up (PR #84): the two ways a send could talk its way past a rule that is meant to be
+ * absolute. The kill-switch has to cover every path that can deliver — including «ارسال آزمایشی»,
+ * which exists precisely to skip the per-rule checks — and `respectQuietHours: false` must not turn a
+ * normal reminder into the emergency pair (`priority: 'high'` + `urgent`) that `notifyUsers` reserves
+ * for deadline traffic (spec §4.4: only priority `urgent` may cross the window).
+ */
+describe('the kill-switch and the quiet-hours window cannot be talked around', () => {
+  const pause = async (paused: boolean) => {
+    const r = await ctx.api(admin.token).post('/v1/admin/push-automations/pause', { paused });
+    expect(r.status).toBe(200);
+    expect(r.body.data.paused).toBe(paused);
+  };
+  const testSend = (key = 'inactive_1d') =>
+    ctx
+      .api(admin.token)
+      .post(`/v1/admin/push-automations/${key}/test-send`, { userId: marketer.id });
+  /** A marketer who matches `inactive_1d` right now, with a registered device. */
+  const readyRecipient = async () => {
+    await buildFixture(ctx);
+    await device();
+    await inactiveFor(2);
+    await enable('inactive_1d');
+  };
+  const notes = () =>
+    store().query<{ pushStatus: string; deliverAfter: string | null }>({
+      collection: 'notifications',
+      where: [['userId', '==', marketer.id]],
+    });
+  /**
+   * Writes a delivery block straight to the row. Two reasons: a store saved before the write-path
+   * guard can hold the combination the API now refuses, and the engine must not read that state as an
+   * emergency either way.
+   */
+  const patchDelivery = async (over: Partial<PushAutomation['delivery']>) => {
+    const row = (await store().get<PushAutomation>(
+      'push_automations/inactive_1d',
+    )) as PushAutomation;
+    await store().update('push_automations/inactive_1d', {
+      delivery: { ...row.delivery, ...over },
+    });
+  };
+
+  it('a paused engine also refuses the test-send: no notification, no push, nothing counted', async () => {
+    await readyRecipient();
+    await pause(true);
+    const r = await testSend();
+    expect(r.status).toBe(200);
+    expect(r.body.data.sent).toBe(false);
+    expect(r.body.data.reason).toBe('paused');
+    expect(r.body.data.label).toBe(SKIP_LABELS.paused); // the panel shows the server's own wording
+    expect(r.body.data.preview.title).toBeTruthy(); // the preview is not a send, so it still renders
+    expect(ctx.deps.push.sent).toHaveLength(0);
+    expect(await notes()).toHaveLength(0); // not even an in-app card: paused means nothing is created
+    expect((await readCounter(ctx.deps, marketer.id)).daySent).toBe(0);
+    // refused attempts are audited, so an operator can see somebody tried while it was stopped
+    const logs = await store().query<{
+      action: string;
+      after: { sent?: boolean; reason?: string };
+    }>({
+      collection: 'audit_logs',
+      where: [['action', '==', 'push_automation.test_sent']],
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.after.sent).toBe(false);
+    expect(logs[0]?.after.reason).toBe('paused');
+  });
+
+  it('unpausing lets the same test-send through, and the refused attempt left the window free', async () => {
+    await readyRecipient();
+    await pause(true);
+    expect((await testSend()).body.data.sent).toBe(false);
+    await pause(false);
+    expect((await testSend()).body.data.sent).toBe(true);
+    expect(ctx.deps.push.sent).toHaveLength(1);
+    // the refused attempt took no claim either, so today's scheduled run still sends for real
+    expect((await runPushAutomations(ctx.deps, { force: true })).sweeps[0]?.sent).toBe(1);
+  });
+
+  it('force, urgent priority and the manual kind reach nobody while paused', async () => {
+    await readyRecipient();
+    await pause(true);
+    await patchDelivery({ priority: 'urgent', respectQuietHours: false });
+    const forced = await runPushAutomations(ctx.deps, { force: true });
+    expect(forced.paused).toBe(true);
+    expect(forced.sweeps).toEqual([]);
+    // the widest bypass the panel owns, at the function boundary itself
+    const row = (await store().get<PushAutomation>(
+      'push_automations/inactive_1d',
+    )) as PushAutomation;
+    const r = await sendAutomation(
+      ctx.deps,
+      row,
+      await marketerDoc(),
+      { name: 'سارا احمدی' },
+      { test: true, kind: 'manual' },
+    );
+    expect(r).toEqual({ sent: false, reason: 'paused' });
+    expect(ctx.deps.push.sent).toHaveLength(0);
+    expect(await notes()).toHaveLength(0);
+  });
+
+  it('the wizard preview keeps its estimate while paused — and labels it as an estimate', async () => {
+    await readyRecipient();
+    await pause(true);
+    const r = await dryRun(ctx.deps, 'inactive_1d');
+    expect(r.wouldSend).toBeGreaterThan(0);
+    expect(r.note).toContain('توقف کلی');
+    expect(ctx.deps.push.sent).toHaveLength(0);
+    expect(await notes()).toHaveLength(0);
+  });
+
+  it('quiet hours off on a normal rule does not make it an emergency: the push waits for 07:00', async () => {
+    await readyRecipient();
+    await patchDelivery({ priority: 'normal', respectQuietHours: false });
+    ctx.setNow('2026-10-03T19:30:00.000Z'); // 23:00 Tehran — inside quiet hours
+    const r = await runPushAutomations(ctx.deps, { force: true });
+    expect(r.sweeps[0]?.sent).toBe(1);
+    expect(ctx.deps.push.sent).toHaveLength(0); // this is where the forged `urgent` used to send
+    const [note] = await notes();
+    expect(note?.pushStatus).toBe('deferred');
+    const deliverAfter = note?.deliverAfter ?? null;
+    expect(deliverAfter).toBeTruthy();
+    const parked = Date.parse(deliverAfter as string);
+    expect(parked).toBeGreaterThan(ctx.deps.clock().getTime()); // not "now", which would be a push
+    expect(parked).toBeLessThanOrEqual(Date.parse('2026-10-04T03:31:00.000Z')); // 07:00 Tehran
+    ctx.setNow('2026-10-04T03:30:00.000Z');
+    expect(await flushDeferredPush(ctx.deps)).toBe(1); // deferred, not dropped
+    expect(ctx.deps.push.sent).toHaveLength(1);
+  });
+
+  it('priority urgent is still the one pass through the window', async () => {
+    await readyRecipient();
+    await patchDelivery({ priority: 'urgent', respectQuietHours: true });
+    ctx.setNow('2026-10-03T19:30:00.000Z');
+    const r = await runPushAutomations(ctx.deps, { force: true });
+    expect(r.sweeps[0]?.sent).toBe(1);
+    expect(ctx.deps.push.sent).toHaveLength(1); // a real emergency is not parked by the window
+    const [note] = await notes();
+    expect(note?.pushStatus).toBe('sent');
+    expect(note?.deliverAfter).toBeNull();
+  });
+
+  it('the API refuses the combination instead of saving a switch it will not honour', async () => {
+    const before = (await store().get<PushAutomation>(
+      'push_automations/inactive_1d',
+    )) as PushAutomation;
+    const bad = await ctx.api(admin.token).patch('/v1/admin/push-automations/inactive_1d', {
+      delivery: {
+        priority: 'normal',
+        push: true,
+        inApp: true,
+        respectQuietHours: false,
+        cooldownMs: DAY,
+      },
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error.message).toContain('اولویت «فوری»');
+    // a refused write touches nothing: not the row, not its version, not a new revision
+    const after = (await store().get<PushAutomation>(
+      'push_automations/inactive_1d',
+    )) as PushAutomation;
+    expect(after.delivery.respectQuietHours).toBe(before.delivery.respectQuietHours);
+    expect(after.version).toBe(before.version);
+    // the honest form of the same switch — an urgent rule, which §4.4 actually allows — is legal
+    const ok = await ctx.api(admin.token).patch('/v1/admin/push-automations/inactive_1d', {
+      delivery: {
+        priority: 'urgent',
+        push: true,
+        inApp: true,
+        respectQuietHours: false,
+        cooldownMs: DAY,
+      },
+    });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.data.delivery.respectQuietHours).toBe(false);
   });
 });
 

@@ -965,6 +965,7 @@ function Wizard({
                 label="ساعت سکوت رعایت شود"
                 checked={draft.respectQuietHours}
                 onChange={set('respectQuietHours')}
+                hint="خاموش‌کردنش فقط با اولویت «فوری» مجاز است؛ موتور برای بقیه ارسال را به آخر ساعت سکوت موکول می‌کند"
               />
               <Bool
                 label="یک‌بار در هر بازه (روز/هفته)"

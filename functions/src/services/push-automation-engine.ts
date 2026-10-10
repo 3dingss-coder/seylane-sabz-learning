@@ -273,6 +273,16 @@ export async function sendAutomation(
     return { sent: false, reason };
   };
 
+  // The kill-switch is not one of the send rules a caller may opt out of — it is the absence of the
+  // engine — so it is checked BEFORE the `test`/`dry` bypass below. `gate()` puts it first for the
+  // same reason; here it also covers «ارسال آزمایشی», which is the only path that reaches this
+  // function with the bypass on (spec §4.1: nothing is sent while paused, not even a test).
+  // A skip is not written to the decision log while paused, on purpose: the pause is global, and
+  // 141 rows of «paused» would bury the per-user decisions an operator is looking for.
+  // `dry` is exempt because a preview delivers nothing at all and the wizard's report is the
+  // membership estimate (`dryRun`'s `note` says so out loud when the engine is stopped).
+  if (settings.paused && !ctx.dry) return await skip('paused');
+
   const title = render(a.message.title, vars);
   const body = render(a.message.body, vars);
   const actionRef = render(a.message.actionRef, vars);
@@ -307,12 +317,15 @@ export async function sendAutomation(
     actionRef,
     imageUrl: a.message.imageUrl ?? null,
     push: a.delivery.push,
+    // `urgent` is the ONLY thing that may cross quiet hours (spec §4.4) — and it has to arrive as the
+    // pair `notifyUsers` defines (`priority: 'high'` + `urgent`, notify.ts:294), which is also what
+    // `jobs.ts` passes for a deadline under 24h. `delivery.respectQuietHours` is NOT a second way in:
+    // switching it off used to forge that pair here, which turned "this rule ignores the quiet-hours
+    // setting" into "this rule is an emergency". A normal reminder now defers either way, and the
+    // write path refuses the combination so the panel cannot offer a switch that does nothing.
     ...(a.delivery.priority === 'urgent'
       ? { priority: 'high' as const, urgent: true }
-      : { priority: a.delivery.priority }),
-    // `urgent` is the ONLY thing that may cross quiet hours (spec §4.4): notifyUsers defers whenever
-    // it is not explicitly told to bypass.
-    ...(a.delivery.respectQuietHours ? {} : { urgent: true, priority: 'high' as const }),
+      : { priority: a.delivery.priority, urgent: false }),
     ...(a.delivery.cooldownMs > 0 && !ctx.test
       ? { throttleKey: `auto_${a.key}`, throttleMs: Math.max(60_000, a.delivery.cooldownMs) }
       : {}),

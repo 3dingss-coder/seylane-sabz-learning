@@ -281,3 +281,48 @@ claim = `store.create` که روی `StoreConflictError` رد می‌شود — �
 * هیچ فایل منبعی تغییر نکرد؛ هیچ تستی اجرا نشد (وابستگی‌ها نصب نیستند)؛ هیچ branch/PR/commitsی ساخته نشد.
 * هیچ عددی از D1 پروداکشن خوانده نشد و هیچ ادعایی دربارهٔ وضعیت داشبورد Cloudflare/Firebase (تأیید نشده) انجام نشد.
 * منتظر پاسخ Q1–Q5 (بخش ۶) هستم؛ پس از تأیید، از PR0 شروع می‌کنم. اگر بخواهید می‌توانم `npm ci` را همین حالا اجرا کنم تا از PR1 به بعد، نتایج lint/typecheck/test واقعی در هر PR گزارش شود.
+
+
+## ۹. مرور PR #84 (درخواست بازبین) — دو مسیر دورزدن و یک پیداِ سوم
+
+موضوعات P1 همان‌جا اصلاح شدند؛ این بخش شواهد را نگه می‌دارد تا بعداً کسی دوباره آن‌ها را کشف نکند.
+
+| # | ایراد | محل | چه بود | بعد از اصلاح |
+| --- | --- | --- | --- | --- |
+| P1-1 | کلید توقف با «ارسال آزمایشی» دور زده می‌شد | `push-automation-engine.ts → sendAutomation` | `ctx.test \|\| ctx.dry` تصمیم `gate` را کامل رد می‌کرد و `gate` تنها جایی بود که `settings.paused` را می‌دید؛ `testSend` هم `test: true` می‌فرستد → در حالت توقف، یک `POST …/:key/test-send` اعلان واقعی (و push) می‌ساخت | چک `paused` داخل `sendAutomation` و **پیش از** آن bypass؛ `dry` معاف (چیزی نمی‌فرستد) |
+| P1-2 | تنظیم ساعت سکوت، «اضطراری» جعلی می‌ساخت | `sendAutomation` → ساخت `NotifyOptions` | `...(a.delivery.respectQuietHours ? {} : { urgent: true, priority: 'high' })` — یعنی یک یادآوری عادی با `respectQuietHours: false` به `notifyUsers` می‌رسید طوری که انگار مهلت ۲۴ ساعته گذشته است (`bypassQuiet` در `notify.ts:294`) و بی‌درنگ push می‌رفت | آن spread حذف شد؛ جفت `high`+`urgent` فقط از `priority: 'urgent'` می‌آید (§۴.۴ سند: «فقط اولویت urgent مجاز به عبور است»)، و `validateSemantics` ترکیبِ «غیرفوری + عدم رعایت» را در نوشتن و در `import` رد می‌کند |
+
+**سه واقعیت که اصلاح را بی‌خطر می‌کنند (بررسی‌شده در کاتالوگ و تست‌ها):**
+
+- هر ۳۸ سطر کاتالوگ `respectQuietHours: true` دارند، پس هیچ قانون آماده‌ای با حذف آن spread رفتار عوض
+  نمی‌کند؛ تنها دو سطر `priority: 'urgent'` دارند (`deadline_passed`، `push_cron_stalled`) که مثل قبل از
+  ساعت سکوت رد می‌شوند — از راه درست (`{ priority: 'high', urgent: true }`).
+- کمپین‌های دستی اصلاً از `notifyUsers` رد نمی‌شوند (`d.push.send` در `push-campaigns.ts:636` و سطر
+  `notifications` خودشان)، پس هیچ‌کدام از این دو اصلاح به رفتار کمپین نمی‌خورد؛ قالب‌های سیستمی از
+  `notifyUsers` می‌روند ولی `urgent` را خودشان تعیین می‌کند — و `jobs.ts` همان `urgent: true` را برای
+  مهلتِ زیر ۲۴ ساعت می‌فرستد. هیچ‌کدام تغییر نکردند.
+- ویزارد از قبل درست نوشته بود («فقط «فوری» از ساعت سکوت رد می‌شود»); فقط hintِ همان چک‌باکس
+  صریح‌تر شد که چرا برای اولویت عادی خاموش‌کردنش مجاز نیست.
+
+**تست‌ها (۸ تای تازه، رفتار واقعی روی همان `RecordingPushSender` و دیتابیس حافظه‌ای):**
+`functions/test/push-automation.test.ts → describe('the kill-switch and the quiet-hours window cannot be
+talked around')` (۷): test-send در حالت توقف هیچ `notifications` و هیچ `push.sent` تولید نمی‌کند و ردیف
+audit را با `sent: false` و `reason: 'paused'` می‌گذارد؛ بعد از ادامه‌دادن همان درخواست work می‌کند و
+چون claim نسوخته، اجرای واقعیِ همان روز هم می‌فرستد؛ `force` + اولویت urgent + `kind: 'manual'` هم
+نمی‌رسد؛ dry-run فقط برآورد می‌دهد و `note`اش توقف را اعلام می‌کند؛ قانون عادی با
+`respectQuietHours: false` در ۲۳:۰۰ تهران `pushStatus: 'deferred'` با `deliverAfter` معتبر می‌گیرد و
+پس از پایان بازه با `flushDeferredPush` **یکی** ارسال می‌شود (موکول، نه حذف); urgent همان لحظه رد می‌شود؛
+و `PATCH` با ترکیب نامعتبر ۴۰۰ می‌دهد و سطر و نسخه‌اش دست نمی‌خورد.
+`push-automation-export-import.test.ts` (۱): همان سطرِ نامعتبر از فایل import هم در dryRun و هم در نوشتن
+رد می‌شود.
+
+**پیداِ سوم — ثبت شد و اصلاح نشد (بیرون از دامنه این درخواست):** شمارنده‌های کاربر در مسیر sweep
+`persist` نمی‌شوند. `sendAutomation:343` اگر `ctx.counters` باشد فقط همان map را جلو می‌برد
+(`if (ctx.counters) ctx.counters.set(...) else await writeCounter(...)`)، و `buildSweepContext` آن map را
+از `loadCounterIndex` در ابتدای اجرا می‌سازد؛ هیچ flushی در پایان اجرا وجود ندارد. نتیجه:
+سقف روزانه/هفتگی و `minGapMs` عملاً **داخل یک اجرا** نگهبانی می‌کنند، نه بین دو اجرای همان روز
+(claimِ پنجره از تکرارِ همان قانون جلوگیری می‌کند، پس دو قانونِ متفاوت در دو اجرای همان روز می‌توانند
+سقف ۲/روز را رد کنند) — و `GET …/trace/:userId` هم `daySent` را کم نشان می‌دهد. مسیر event/queue این
+مشکل را ندارند (map ندارند → `writeCounter`). اصلاحش یعنی یک نوشتن به‌ازای هر کاربرِ ارسال‌شده در هر
+اجرا، که عدد «۵۲ نوشتن در ۱۴۱ کاربر» (§۵ همین سند) و بودجه کران را عوض می‌کند. تصمیم جداگانه می‌خواهد؛
+این PR دست نزده و در `docs/USER-TODO.md` §۴ هم علامت‌گذاری شده.
