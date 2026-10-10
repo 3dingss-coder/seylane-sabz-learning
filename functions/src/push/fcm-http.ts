@@ -17,6 +17,7 @@ type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
 const CONCURRENCY = 8;
+const FETCH_TIMEOUT_MS = 10_000;
 
 export function parseServiceAccount(raw: string | undefined): ServiceAccount | null {
   if (!raw || !raw.trim()) return null;
@@ -62,7 +63,8 @@ export class FcmHttpPushSender implements PushSender {
   constructor(
     private readonly sa: ServiceAccount,
     private readonly appUrl = '',
-    private readonly fetchImpl: FetchLike = (i, init) => fetch(i, init),
+    private readonly fetchImpl: FetchLike = (i, init) =>
+      fetch(i, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
     private readonly now: () => number = () => Date.now(),
   ) {}
 
