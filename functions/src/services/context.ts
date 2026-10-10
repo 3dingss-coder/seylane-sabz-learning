@@ -1,3 +1,4 @@
+import type { R2BucketLike } from '../blob/cloudflare';
 import type { Mailer } from '../mail/types';
 import type { AiHub } from '../ai/hub';
 import type { AppConfig } from '../config';
@@ -27,6 +28,8 @@ export interface Deps {
    */
   ai?: AiHub;
   clock: Clock;
+  /** Event archive target (Cloudflare only). `prune` = also remove archived rows from D1. */
+  archive?: { bucket: R2BucketLike; prune: boolean };
 }
 
 export interface Actor {
