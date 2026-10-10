@@ -365,7 +365,7 @@ describe('push campaigns: batching, budgets and interruption safety', () => {
     expect(done.body.data.campaign.summary.users).toBe(devices + 2);
     expect(done.body.data.campaign.summary.attempted).toBe(devices);
     expect(done.body.data.campaign.summary.accepted).toBe(devices);
-    // every device received exactly one message across inline + cron runs (no duplicates)
+    // every device received exactly one message across processing runs (no duplicates)
     const tokens = ctx.deps.push.sent.flatMap((s) => s.tokens);
     expect(tokens).toHaveLength(devices);
     expect(new Set(tokens).size).toBe(devices);
