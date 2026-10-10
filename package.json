@@ -14,7 +14,7 @@
     "start": "node scripts/start.mjs",
     "start:prod": "node scripts/start.mjs --prod",
     "dev": "tsx scripts/dev-server.ts",
-    "build": "npm run build -w functions && npm run build -w apps/web",
+    "build": "cd functions && npm run build && cd ../apps/web && npm run build",
     "lint": "npm run lint -w functions && npm run lint -w apps/web",
     "typecheck": "npm run typecheck -w functions && npm run typecheck -w apps/web",
     "test": "npm run test -w functions && npm run test -w apps/web",
