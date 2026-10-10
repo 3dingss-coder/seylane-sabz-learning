@@ -194,8 +194,8 @@ export function PushAutomationTracePage() {
             </h2>
             {!trace.data.decisions.length && (
               <p className="text-xs leading-6 text-muted-fg">
-                در ۲۴ ساعت اخیر ردّی ثبت نشده. یعنی یا قانونی مشمول این کاربر نشده، یا اجرا در پنجره
-                زمانی خودش نبوده است.
+                در امروز و روزهای اخیر (تا ۱۴ روز، سقف ۴۰ مورد) ردّی ثبت نشده؛ یعنی یا قانونی مشمول
+                این کاربر نشده، یا اجرا در پنجره زمانی خودش نبوده است.
               </p>
             )}
             <ul className="flex flex-col gap-1">

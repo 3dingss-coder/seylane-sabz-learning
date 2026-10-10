@@ -358,7 +358,7 @@ describe('admin: ردیابی کاربر', () => {
     expect(
       await screen.findByText('هیچ انتخاب شخصی ثبت نکرده؛ همان سیاست عمومی جاری است.'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/در ۲۴ ساعت اخیر ردّی ثبت نشده/)).toBeInTheDocument();
+    expect(screen.getByText(/ردّی ثبت نشده/)).toBeInTheDocument();
     expect(
       await screen.findByText(/هیچ اعلان خودکاری برای این کاربر ثبت نشده/),
     ).toBeInTheDocument();
