@@ -23,9 +23,9 @@ concurrency:
 jobs:
   deploy:
     name: Build & Deploy to Cloudflare + D1
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check Cloudflare credentials
         id: cf
@@ -54,7 +54,7 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.cf.outputs.configured == 'true'
         with:
           node-version: 22
