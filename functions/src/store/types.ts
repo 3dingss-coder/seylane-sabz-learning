@@ -97,6 +97,11 @@ export interface DocStore {
   delete(path: string): Promise<void>;
   /** Atomically add `by` to a numeric field (creates doc/field if missing). */
   increment(path: string, field: string, by: number): Promise<void>;
+  /**
+   * Optional (D1 only): physically delete up to `limit` docs of `collection` whose `expireAt` is before
+   * `beforeIso`. Returns how many were deleted. Technical event logs only — never content or users.
+   */
+  purgeExpired?(collection: string, beforeIso: string, limit: number): Promise<number>;
   newId(): string;
   runTransaction<R>(fn: (tx: TxOps) => Promise<R>): Promise<R>;
   /** Batched writes for bulk operations (≤ 400 per chunk handled by adapter). */

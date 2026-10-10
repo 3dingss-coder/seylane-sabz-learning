@@ -721,6 +721,23 @@ export class D1Store implements DocStore {
     );
   }
 
+  async purgeExpired(collection: string, beforeIso: string, limit: number): Promise<number> {
+    await this.ensureReady();
+    const n = Math.max(1, Math.min(1000, Math.floor(limit)));
+    const res = await this.enqueue(() =>
+      this.db
+        .prepare(
+          `DELETE FROM docs WHERE rowid IN (
+             SELECT rowid FROM docs
+             WHERE col = ?1 AND json_extract(data, '$.expireAt') < ?2
+             LIMIT ${n})`,
+        )
+        .bind(collection, beforeIso)
+        .run(),
+    );
+    return Number(res.meta?.changes ?? 0);
+  }
+
   async increment(p: string, field: string, by: number): Promise<void> {
     await this.ensureReady();
     const cur = await this.read<Data>(p);

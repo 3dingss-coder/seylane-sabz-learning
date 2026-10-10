@@ -7,6 +7,7 @@ import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
 import { runPushCampaigns } from './push-campaigns';
 import type { Deps } from './context';
+import { purgeExpiredEvents } from './retention';
 
 export type JobName =
   | 'flush-push'
@@ -16,7 +17,8 @@ export type JobName =
   | 'mentor-daily'
   | 'knowledge-reindex'
   | 'migrate-blobs'
-  | 'push-campaigns';
+  | 'push-campaigns'
+  | 'purge-expired';
 
 export interface JobOptions {
   /** Manual triggers ignore the "only at this weekday/hour" gates (the weekly digest). */
@@ -70,6 +72,9 @@ export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>
   'migrate-blobs': async (d) => (await d.blob.migrateToObjectStorage?.()) ?? { skipped: true },
   // Admin push campaigns: starts due scheduled campaigns and sends pending batches (budgeted).
   'push-campaigns': (d) => runPushCampaigns(d),
+  // Event logs carry an `expireAt` (a Firestore-TTL leftover) that nothing enforced on D1, so they only
+  // ever grew. Deletes expired rows of the two high-volume logs, in bounded batches.
+  'purge-expired': (d, o) => purgeExpiredEvents(d, o?.deadlineAtMs ?? null),
 };
 
 export const JOB_NAMES = Object.keys(JOBS) as JobName[];
@@ -96,6 +101,7 @@ export const CRON_JOBS: Record<string, JobName[]> = {
   '0 * * * *': ['deadline-sweep', 'weekly-digest', 'knowledge-reindex'],
   '30 4 * * *': ['mentor-daily'],
   '30 6 * * *': ['daily-reminders'],
+  '0 22 * * *': ['purge-expired'], // 01:30 Tehran, the quietest hour
 };
 
 export const CRON_SCHEDULES = Object.keys(CRON_JOBS);
