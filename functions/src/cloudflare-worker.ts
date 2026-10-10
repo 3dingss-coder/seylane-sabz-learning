@@ -1,3 +1,5 @@
+import { D1Store } from './store/d1';
+import { flushDeferredPush } from './services/notify';
 import { runPushCampaigns } from './services/push-campaigns';
 import {
   buildCloudflareDeps,
@@ -162,6 +164,12 @@ function logFailure(
   );
 }
 
+function backgroundJob(path: string): ((d: Deps) => Promise<unknown>) | null {
+  if (/^\/v1\/admin\/push-campaigns\/[^/]+\/send$/.test(path)) return runPushCampaigns;
+  if (path === '/v1/admin/notifications/send') return flushDeferredPush;
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: CloudflareEnv, ctx?: ExecutionContextLike): Promise<Response> {
     const url = new URL(request.url);
@@ -179,20 +187,18 @@ export default {
           requestId,
           deadlineAtMs: progressDeadlineMs(request.method, url.pathname),
         });
-        // Admin "send now" only enqueues; drain the queue right after the response is sent so
-        // delivery starts immediately instead of waiting for the 15-minute cron. Claims keep it
-        // idempotent. Uses the already-acquired runtime (no further wait on the shared startup).
-        if (
-          ctx &&
-          res.ok &&
-          request.method === 'POST' &&
-          /^\/v1\/admin\/push-campaigns\/[^/]+\/send$/.test(url.pathname)
-        )
+        // Admin sends only enqueue; delivery starts right after the response, on its OWN D1Store
+        // so its queries never sit in the serialized queue that serves site requests. Uses the
+        // already-acquired runtime (no further wait on the shared startup).
+        const bg = ctx && res.ok && request.method === 'POST' ? backgroundJob(url.pathname) : null;
+        if (ctx && bg) {
+          const deps = runtime.deps;
           ctx.waitUntil(
-            runPushCampaigns(runtime.deps).catch((err) =>
-              console.error('[push-campaigns] background run failed', err),
+            bg({ ...deps, store: env?.DB ? new D1Store(env.DB) : deps.store }).catch((err) =>
+              console.error('[push] background run failed', err),
             ),
           );
+        }
         return withRequestId(res, requestId);
       } catch (err) {
         logFailure('request', request, err, requestId);
