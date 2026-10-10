@@ -1,3 +1,4 @@
+import { runPushCampaigns } from './services/push-campaigns';
 import {
   buildCloudflareDeps,
   createFetchHandler,
@@ -162,7 +163,7 @@ function logFailure(
 }
 
 export default {
-  async fetch(request: Request, env: CloudflareEnv): Promise<Response> {
+  async fetch(request: Request, env: CloudflareEnv, ctx?: ExecutionContextLike): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/v1' || url.pathname.startsWith('/v1/')) {
       const requestId = requestIdFor(request);
@@ -178,6 +179,20 @@ export default {
           requestId,
           deadlineAtMs: progressDeadlineMs(request.method, url.pathname),
         });
+        // Admin "send now" only enqueues; drain the queue right after the response is sent so
+        // delivery starts immediately instead of waiting for the 15-minute cron. Claims keep it
+        // idempotent. Uses the already-acquired runtime (no further wait on the shared startup).
+        if (
+          ctx &&
+          res.ok &&
+          request.method === 'POST' &&
+          /^\/v1\/admin\/push-campaigns\/[^/]+\/send$/.test(url.pathname)
+        )
+          ctx.waitUntil(
+            runPushCampaigns(runtime.deps).catch((err) =>
+              console.error('[push-campaigns] background run failed', err),
+            ),
+          );
         return withRequestId(res, requestId);
       } catch (err) {
         logFailure('request', request, err, requestId);
