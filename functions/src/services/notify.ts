@@ -309,11 +309,15 @@ export async function flushDeferredPush(d: Deps): Promise<number> {
     ],
     limit: 500,
   });
+  const deadline = Date.now() + 20_000;
+  let done = 0;
   for (const n of due) {
+    if (Date.now() > deadline) break;
     const status = await sendPush(d, n, n.type);
     await d.store.update(`notifications/${n.id}`, { pushStatus: status });
+    done++;
   }
-  return due.length;
+  return done;
 }
 
 // ─── Marketer inbox ─────────────────────────────────────────────────────────
@@ -417,13 +421,39 @@ export async function manualSend(d: Deps, actor: Actor, input: z.infer<typeof ma
   let users = await d.store.query<User>({ collection: 'users', where });
   if (input.audience === 'user') users = users.filter((u) => u.id === input.targetId);
   if (!users.length) throw new ApiError('VALIDATION', 'هیچ کاربری در این مخاطب نیست.');
-  const count = await notifyUsers(
-    d,
-    users.map((u) => u.id),
-    'manual',
-    { title: input.title, body: input.body },
-    { priority: 'normal', imageUrl: input.imageUrl ?? null, actionRef: input.actionRef ?? '/' },
+  // Fast path: ONE token read + ONE bulk write. Push delivery is left to flushDeferredPush
+  // (kicked in the background right after this response, and by the 15-minute cron), so the
+  // admin request never waits on FCM or on per-user database round trips.
+  const policy = await getPolicy(d);
+  const now = d.clock();
+  const quiet = inQuietHours(now, policy.quietHours, policy.timezone);
+  const deliverAfter = quiet
+    ? quietHoursEnd(now, policy.quietHours, policy.timezone).toISOString()
+    : now.toISOString();
+  const withDevice = new Set(
+    (await d.store.query<DeviceToken>({ collection: 'device_tokens' })).map((t) => t.userId),
   );
+  const items = [...new Set(users.map((u) => u.id))].map((userId) => {
+    const hasDevice = withDevice.has(userId);
+    const n: Notification = {
+      userId,
+      type: 'manual',
+      title: input.title,
+      body: input.body,
+      actionRef: input.actionRef ?? '/',
+      imageUrl: input.imageUrl ?? null,
+      readAt: null,
+      pushStatus: hasDevice ? 'deferred' : 'skipped',
+      deliverAfter: hasDevice ? deliverAfter : null,
+      createdAt: now.toISOString(),
+    };
+    return {
+      path: `notifications/${d.store.newId()}`,
+      data: n as unknown as Record<string, unknown>,
+    };
+  });
+  await d.store.batchSet(items);
+  const count = items.length;
   await audit(d, actor, 'notification.manual_sent', 'notifications', input.audience, null, {
     ...input,
     count,

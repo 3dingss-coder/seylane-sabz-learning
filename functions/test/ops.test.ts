@@ -117,4 +117,35 @@ describe('reports & admin lists', () => {
     });
     expect(r.status).toBeLessThan(300);
   });
+  it('manual send returns without sending push; flush delivers it afterwards', async () => {
+    await ctx.deps.store.set('device_tokens/tok-manual', {
+      userId: 'u-manual-test',
+      token: 'tok-manual',
+      platform: 'android',
+      createdAt: new Date().toISOString(),
+    });
+    let providerCalls = 0;
+    const realSend = ctx.deps.push.send.bind(ctx.deps.push);
+    ctx.deps.push.send = async (...a: Parameters<typeof realSend>) => {
+      providerCalls++;
+      return realSend(...a);
+    };
+    const t0 = Date.now();
+    const r = await ctx.api(tokens.admin).post('/v1/admin/notifications/send', {
+      audience: 'all',
+      title: 'تست سریع',
+      body: 'ارسال بدون انتظار',
+    });
+    expect(r.status).toBeLessThan(300);
+    expect(r.body.data.count).toBeGreaterThan(0);
+    expect(Date.now() - t0).toBeLessThan(5000);
+    expect(providerCalls).toBe(0);
+    const rows = await ctx.deps.store.query<{ pushStatus: string; title: string }>({
+      collection: 'notifications',
+      where: [['type', '==', 'manual']],
+    });
+    const mine = rows.filter((n) => n.title === 'تست سریع');
+    expect(mine.length).toBe(r.body.data.count);
+    expect(mine.every((n) => ['deferred', 'skipped'].includes(n.pushStatus))).toBe(true);
+  });
 });
