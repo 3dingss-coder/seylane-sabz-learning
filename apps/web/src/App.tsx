@@ -17,12 +17,8 @@ import { NotFoundPage } from '@/pages/NotFoundPage';
 const OnboardingPage = lazy(() =>
   import('@/pages/auth/OnboardingPage').then((m) => ({ default: m.OnboardingPage })),
 );
-const CardsPage = lazy(() =>
-  import('@/pages/m/CardsPage').then((m) => ({ default: m.CardsPage })),
-);
-const LearnPage = lazy(() =>
-  import('@/pages/m/LearnPage').then((m) => ({ default: m.LearnPage })),
-);
+const CardsPage = lazy(() => import('@/pages/m/CardsPage').then((m) => ({ default: m.CardsPage })));
+const LearnPage = lazy(() => import('@/pages/m/LearnPage').then((m) => ({ default: m.LearnPage })));
 const MentorPage = lazy(() =>
   import('@/pages/m/MentorPage').then((m) => ({ default: m.MentorPage })),
 );
@@ -35,9 +31,7 @@ const PackagePage = lazy(() =>
 const ProfilePage = lazy(() =>
   import('@/pages/m/ProfilePage').then((m) => ({ default: m.ProfilePage })),
 );
-const QuizPage = lazy(() =>
-  import('@/pages/m/QuizPage').then((m) => ({ default: m.QuizPage })),
-);
+const QuizPage = lazy(() => import('@/pages/m/QuizPage').then((m) => ({ default: m.QuizPage })));
 const SectionPage = lazy(() =>
   import('@/pages/m/SectionPage').then((m) => ({ default: m.SectionPage })),
 );
