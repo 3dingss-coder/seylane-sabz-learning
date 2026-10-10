@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bell, X } from 'lucide-react';
 import { Button, useToast } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { enableWebPush, webPushState } from '@/lib/webPush';
 
 const SNOOZE_KEY = 'push-optin-snoozed-until';
-const SNOOZE_MS = 7 * 24 * 3600_000;
+// Dismissing (✕) hides the banner for one day only: it comes back every day until the user allows.
+const SNOOZE_MS = 24 * 3600_000;
 
 function snoozed(): boolean {
   try {
@@ -44,6 +45,15 @@ export function PushOptInBanner() {
   const [hidden, setHidden] = useState(snoozed);
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState(webPushState);
+
+  // An installed PWA is resumed, not reopened: bring the banner back once the day has passed.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') setHidden(snoozed());
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   if (status !== 'authenticated' || hidden) return null;
   const install = state === 'unavailable' && needsHomeScreenInstall();
