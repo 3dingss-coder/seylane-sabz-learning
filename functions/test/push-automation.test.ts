@@ -885,6 +885,11 @@ describe('panel API', () => {
     const runs = await ctx.api(admin.token).get('/v1/admin/push-automations/runs?limit=5');
     expect(runs.status).toBe(200);
     expect(runs.body.data[0].key).toBe('inactive_1d');
+    // The history table shows the reason in Persian, from the governor's own label table: the panel
+    // renders `skippedLabels` and never keeps a second copy of the wording.
+    expect(runs.body.data[0].skippedLabels).toEqual([
+      { reason: 'noDevice', count: 1, label: 'هیچ دستگاه معتبری برای این کاربر ثبت نشده است' },
+    ]);
   });
 
   it('the cron group runs the engine before the flush, and one engine failure cannot stop the others', async () => {

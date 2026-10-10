@@ -210,7 +210,11 @@ describe('admin: جزئیات و ویزارد اتوماسیون', () => {
   it('reads the four questions back from the API, with runs and archived text', async () => {
     mockApi(ROUTES());
     renderApp('/admin/push-campaigns/automations/inactive_1d');
-    expect(await screen.findByRole('heading', { name: 'یک روز بی‌فعالیتی' })).toBeInTheDocument();
+    // The first query in the suite also waits for the session bootstrap (`refresh` + `/me`), and on a
+    // loaded machine that can take longer than testing-library's second — so this one gets a budget.
+    expect(
+      await screen.findByRole('heading', { name: 'یک روز بی‌فعالیتی' }, { timeout: 5000 }),
+    ).toBeInTheDocument();
     expect(screen.getByText('۱) چیست')).toBeInTheDocument();
     expect(screen.getByText('۲) چه‌زمانی')).toBeInTheDocument();
     expect(screen.getByText('۳) برای چه‌کسی')).toBeInTheDocument();

@@ -733,6 +733,8 @@ async function testVars(
 export interface RunRow extends PushAutomationRun {
   id: string;
   label: string;
+  /** The Persian wording of each skip reason, from `skipLabel()` — the panel renders, it does not translate. */
+  skippedLabels: Array<{ reason: string; count: number; label: string }>;
 }
 
 export async function recentRuns(
@@ -749,7 +751,16 @@ export async function recentRuns(
     automations.find((a) => a.key === key)?.name ??
     PUSH_AUTOMATION_CATALOG.find((c) => c.key === key)?.name ??
     key;
-  return all.map((r) => ({ ...r, id: r.id, label: nameOf(r.key) }));
+  return all.map((r) => ({
+    ...r,
+    id: r.id,
+    label: nameOf(r.key),
+    // Same shape as `dryRun().skippedLabels`: the run row stores the raw reason codes, and the only
+    // reader of that list is a person, so it is translated here (prompt §7: the panel explains).
+    skippedLabels: Object.entries(r.skipped ?? {})
+      .map(([reason, count]) => ({ reason, count, label: skipLabel(reason) }))
+      .sort((x, y) => y.count - x.count),
+  }));
 }
 
 /** One archived wording of an automation (`push_automation_text_revs/<key>/<version>`). */

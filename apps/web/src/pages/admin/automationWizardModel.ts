@@ -93,6 +93,12 @@ export interface RunRow {
   matched: number;
   sent: number;
   skipped: Record<string, number>;
+  /**
+   * Persian wording of each reason, from the engine's own `skipLabel()`
+   * (`functions/src/services/push-automation-governor.ts`). Optional because run rows written before
+   * this field existed simply do not have it — the panel then shows the counts without labels.
+   */
+  skippedLabels?: Array<{ reason: string; count: number; label: string }>;
   failed: number;
   error: string | null;
 }

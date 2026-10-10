@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Activity, FlaskConical, History, Pencil, Save, Trash2, Wand2 } from 'lucide-react';
 import { Button, Card, Input, Skeleton, useToast } from '@/components/ui';
@@ -38,6 +38,7 @@ import {
   type WizardStepId,
 } from './automationWizardModel';
 import { Chip, EstimateDialog } from './PushAutomationsPanel';
+import { RUN_KIND_LABELS, skippedSentence } from './pushAutomationRunModel';
 import {
   estimateChip,
   stateOf,
@@ -292,7 +293,7 @@ function Existing({ det, meta }: { det: DetailMeta; meta: CatalogMeta | null }) 
             <Definition det={det} meta={meta} />
           )}
           <div className="grid gap-4 lg:grid-cols-2">
-            <RunsCard runs={runs.data} loading={runs.isPending} />
+            <RunsCard runs={runs.data} loading={runs.isPending} ruleKey={det.key} />
             <RevisionsCard
               revisions={revisions.data}
               loading={revisions.isPending}
@@ -1248,12 +1249,26 @@ function NewAutomationPage({ meta, loading }: { meta: CatalogMeta | null; loadin
 
 // ─── History, revisions, test send ───────────────────────────────────────────
 
-function RunsCard({ runs, loading }: { runs: RunRow[] | undefined; loading: boolean }) {
+function RunsCard({
+  runs,
+  loading,
+  ruleKey,
+}: {
+  runs: RunRow[] | undefined;
+  loading: boolean;
+  ruleKey: string;
+}) {
   return (
     <Card className="flex flex-col gap-2">
       <h2 className="flex items-center gap-2 text-sm font-extrabold text-text">
         <Activity className="size-4" aria-hidden />
         اجراهای این قانون
+        <Link
+          to={`/admin/push-campaigns/automations/runs?key=${encodeURIComponent(ruleKey)}`}
+          className="ms-auto text-[11px] font-bold text-primary hover:underline"
+        >
+          تاریخچه کامل
+        </Link>
       </h2>
       {loading && <Skeleton className="h-24" />}
       {!loading && !runs?.length && (
@@ -1267,20 +1282,16 @@ function RunsCard({ runs, loading }: { runs: RunRow[] | undefined; loading: bool
           {runs.map((r) => (
             <li key={r.id} className="rounded-card border border-border bg-background p-2 text-xs">
               <p className="font-bold text-text">
-                {r.kind === 'sweep'
-                  ? 'بررسی دسته‌ای'
-                  : r.kind === 'event'
-                    ? 'اتفاق'
-                    : r.kind === 'queue'
-                      ? 'صف'
-                      : 'دستی'}{' '}
-                · {toFa(r.sent)} ارسال از {toFa(r.evaluated)} کاربر
+                {RUN_KIND_LABELS[r.kind] ?? r.kind} · {toFa(r.sent)} ارسال از {toFa(r.evaluated)}{' '}
+                کاربر
               </p>
               <p className="mt-0.5 text-muted-fg">
                 بازه {r.windowKey} ·{' '}
                 {r.error
                   ? r.error
-                  : `رد: ${toFa(Object.values(r.skipped).reduce((a, b) => a + b, 0))}`}
+                  : r.skippedLabels?.length
+                    ? skippedSentence(r)
+                    : `رد: ${toFa(Object.values(r.skipped).reduce((a, b) => a + b, 0))}`}
               </p>
             </li>
           ))}

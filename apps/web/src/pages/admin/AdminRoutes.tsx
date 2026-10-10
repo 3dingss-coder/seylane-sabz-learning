@@ -26,6 +26,8 @@ import { NotificationsPage } from './NotificationsPage';
 import { PushCampaignEditorPage } from './PushCampaignEditorPage';
 import { PushAutomationDetailPage, PushAutomationNewPage } from './PushAutomationDetailPage';
 import { PushAutomationsPage } from './PushAutomationsPage';
+import { PushAutomationRunsPage } from './PushAutomationRunsPage';
+import { PushAutomationTracePage } from './PushAutomationTracePage';
 import { PushCampaignsPage } from './PushCampaignsPage';
 import { MediaLibraryPage } from './MediaLibraryPage';
 import { MentorGuidesPage } from './MentorGuidesPage';
@@ -81,6 +83,10 @@ export default function AdminRoutes() {
         <Route path="push-campaigns/automations" element={<PushAutomationsPage />} />
         {/* `new` is its own page, registered before `:key`. */}
         <Route path="push-campaigns/automations/new" element={<PushAutomationNewPage />} />
+        {/* The read-only half: `runs` and `trace` are static segments, so they win over `:key` —
+            and they are registered first anyway, for the same reason `new` is. */}
+        <Route path="push-campaigns/automations/runs" element={<PushAutomationRunsPage />} />
+        <Route path="push-campaigns/automations/trace" element={<PushAutomationTracePage />} />
         <Route path="push-campaigns/automations/:key" element={<PushAutomationDetailPage />} />
         <Route path="push-campaigns/new" element={<PushCampaignEditorPage />} />
         <Route path="push-campaigns/:id" element={<PushCampaignEditorPage />} />
