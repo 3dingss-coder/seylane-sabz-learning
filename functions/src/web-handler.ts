@@ -102,6 +102,9 @@ export async function buildCloudflareDeps(
       ? new GeminiClient(finalConfig.geminiApiKey, finalConfig.geminiModel)
       : null,
     clock: systemClock,
+    archive: env.MEDIA_BUCKET
+      ? { bucket: env.MEDIA_BUCKET, prune: stringEnv.EVENT_ARCHIVE_PRUNE === 'on' }
+      : undefined,
   };
 }
 

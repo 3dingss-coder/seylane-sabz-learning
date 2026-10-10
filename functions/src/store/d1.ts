@@ -721,21 +721,37 @@ export class D1Store implements DocStore {
     );
   }
 
-  async purgeExpired(collection: string, beforeIso: string, limit: number): Promise<number> {
+  async selectOlderThan(collection: string, beforeIso: string, limit: number) {
     await this.ensureReady();
-    const n = Math.max(1, Math.min(1000, Math.floor(limit)));
+    const n = Math.max(1, Math.min(5000, Math.floor(limit)));
     const res = await this.enqueue(() =>
       this.db
         .prepare(
-          `DELETE FROM docs WHERE rowid IN (
-             SELECT rowid FROM docs
-             WHERE col = ?1 AND json_extract(data, '$.expireAt') < ?2
-             LIMIT ${n})`,
+          `SELECT id, data, updated_at FROM docs
+           WHERE col = ?1 AND json_extract(data, '$.ts') < ?2
+           ORDER BY json_extract(data, '$.ts') ASC, id ASC LIMIT ${n}`,
         )
         .bind(collection, beforeIso)
-        .run(),
+        .all<{ id: string; data: string; updated_at: string }>(),
     );
-    return Number(res.meta?.changes ?? 0);
+    return (res.results ?? []).map((r) => ({ id: r.id, data: r.data, updatedAt: r.updated_at }));
+  }
+
+  async deleteByIds(collection: string, ids: string[]): Promise<number> {
+    await this.ensureReady();
+    let deleted = 0;
+    for (let i = 0; i < ids.length; i += 50) {
+      const chunk = ids.slice(i, i + 50);
+      const marks = chunk.map((_, k) => `?${k + 2}`).join(',');
+      const res = await this.enqueue(() =>
+        this.db
+          .prepare(`DELETE FROM docs WHERE col = ?1 AND id IN (${marks})`)
+          .bind(collection, ...chunk)
+          .run(),
+      );
+      deleted += Number(res.meta?.changes ?? 0);
+    }
+    return deleted;
   }
 
   async increment(p: string, field: string, by: number): Promise<void> {

@@ -21,6 +21,9 @@ APP_URL = "https://academy-seylaneh.site"
 # D1 -> R2 media move: files are copied to R2 and verified by size; the D1 copy is deleted only
 # when this is "on" (flip it after checking that images/videos play from R2).
 R2_MIGRATE_PURGE = "on"
+# Event archive (nightly): old playback/analytics events are copied to R2. "on" also removes the
+# verified copies from D1; keep "off" until the files in R2 (archive/events/) have been checked.
+EVENT_ARCHIVE_PRUNE = "off"
 
 # Scheduled jobs (deadline warnings, reminders, weekly digest, web-push flush).
 # The Worker's `scheduled` handler (functions/src/cloudflare-worker.ts) dispatches on the cron

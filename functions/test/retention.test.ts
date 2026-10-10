@@ -1,65 +1,122 @@
 import { describe, expect, it } from 'vitest';
+import type { R2BucketLike } from '../src/blob/cloudflare';
 import { D1Store } from '../src/store/d1';
-import { purgeExpiredEvents } from '../src/services/retention';
+import { archiveOldEvents } from '../src/services/retention';
 import { createSqliteD1 } from './support/sqlite-d1';
 import { createCtx } from './support/ctx';
 
 const DAY = 86_400_000;
 
-async function setup() {
-  const ctx = await createCtx();
-  const store = new D1Store(createSqliteD1());
-  ctx.deps.store = store;
-  return { ctx, store };
+class FakeR2 implements R2BucketLike {
+  objects = new Map<string, Uint8Array>();
+  corrupt = false;
+  async put(key: string, value: ArrayBuffer | Uint8Array) {
+    const v = new Uint8Array(value);
+    this.objects.set(key, this.corrupt ? v.slice(0, Math.max(0, v.length - 5)) : v);
+  }
+  async head(key: string) {
+    const o = this.objects.get(key);
+    return o ? { size: o.byteLength } : null;
+  }
+  async get(key: string) {
+    const o = this.objects.get(key);
+    if (!o) return null;
+    return {
+      size: o.byteLength,
+      arrayBuffer: async () =>
+        o.buffer.slice(o.byteOffset, o.byteOffset + o.byteLength) as ArrayBuffer,
+    };
+  }
+  async delete(key: string) {
+    this.objects.delete(key);
+  }
 }
 
-describe('retention purge', () => {
-  it('deletes only expired rows of the event logs', async () => {
-    const { ctx, store } = await setup();
-    const now = ctx.deps.clock().getTime();
-    const old = new Date(now - DAY);
-    const future = new Date(now + 30 * DAY);
-    for (let i = 0; i < 5; i++) {
-      await store.set(`analytics_events/old${i}`, { name: 'x', expireAt: old });
-      await store.set(`playback_events/old${i}`, { userId: 'u', expireAt: old });
-    }
-    await store.set('analytics_events/new', { name: 'x', expireAt: future });
-    await store.set('playback_events/new', { userId: 'u', expireAt: future });
-    // Another collection with an expired expireAt must be left alone.
-    await store.set('mentor_nudges/keep', { expireAt: old });
-    // A row without expireAt must be left alone.
-    await store.set('analytics_events/noexp', { name: 'y' });
+async function setup(prune: boolean) {
+  const ctx = await createCtx();
+  const store = new D1Store(createSqliteD1());
+  const bucket = new FakeR2();
+  ctx.deps.store = store;
+  ctx.deps.archive = { bucket, prune };
+  const now = ctx.deps.clock().getTime();
+  const iso = (daysAgo: number) => new Date(now - daysAgo * DAY).toISOString();
+  return { ctx, store, bucket, iso };
+}
 
-    const r = await purgeExpiredEvents(ctx.deps);
-    expect(r).toEqual({ deleted: { playback_events: 5, analytics_events: 5 } });
-    expect((await store.query({ collection: 'analytics_events' })).map((x) => x.id).sort()).toEqual(
-      ['new', 'noexp'],
-    );
-    expect((await store.query({ collection: 'playback_events' })).length).toBe(1);
-    expect(await store.get('mentor_nudges/keep')).not.toBeNull();
+const ids = async (store: D1Store, col: string) =>
+  (await store.query({ collection: col })).map((x) => x.id).sort();
+
+describe('event archive', () => {
+  it('copy-only (default): archives old rows to R2 and leaves D1 untouched', async () => {
+    const { ctx, store, bucket, iso } = await setup(false);
+    for (let i = 0; i < 3; i++)
+      await store.set(`analytics_events/old${i}`, { name: 'x', ts: iso(40) });
+    await store.set('analytics_events/recent', { name: 'x', ts: iso(5) });
+    await store.set('playback_events/oldp', { userId: 'u', ts: iso(45) });
+    const r = await archiveOldEvents(ctx.deps);
+    expect(r).toMatchObject({ prune: false });
+    expect(bucket.objects.size).toBe(2);
+    expect([...bucket.objects.keys()].every((k) => k.startsWith('archive/events/'))).toBe(true);
+    expect(await ids(store, 'analytics_events')).toEqual(['old0', 'old1', 'old2', 'recent']);
+    expect(await ids(store, 'playback_events')).toEqual(['oldp']);
+    // running again rewrites the same objects instead of piling up copies
+    await archiveOldEvents(ctx.deps);
+    expect(bucket.objects.size).toBe(2);
   });
 
-  it('handles more rows than one batch and stops at the deadline', async () => {
-    const { ctx, store } = await setup();
-    const old = new Date(ctx.deps.clock().getTime() - DAY);
+  it('prune on: removes exactly the verified old rows, keeps recent rows and other collections', async () => {
+    const { ctx, store, bucket, iso } = await setup(true);
+    for (let i = 0; i < 5; i++)
+      await store.set(`analytics_events/old${i}`, { name: 'x', ts: iso(60) });
+    await store.set('analytics_events/recent', { name: 'x', ts: iso(29) });
+    await store.set('mentor_nudges/keep', { ts: iso(400) });
+    await store.set('section_progress/keep', { ts: iso(400) });
+    const r = await archiveOldEvents(ctx.deps);
+    expect(r).toMatchObject({ report: { analytics_events: { archived: 5, removedFromD1: 5 } } });
+    expect(await ids(store, 'analytics_events')).toEqual(['recent']);
+    expect(await store.get('mentor_nudges/keep')).not.toBeNull();
+    expect(await store.get('section_progress/keep')).not.toBeNull();
+    // every removed row is recoverable from R2
+    const [key] = [...bucket.objects.keys()];
+    const stream = new Blob([bucket.objects.get(key ?? '') as unknown as ArrayBuffer])
+      .stream()
+      .pipeThrough(new DecompressionStream('gzip'));
+    const lines = (await new Response(stream).text()).split('\n').map((l) => JSON.parse(l));
+    expect(lines.map((l) => l.id).sort()).toEqual(['old0', 'old1', 'old2', 'old3', 'old4']);
+    expect(JSON.parse(lines[0].data).name).toBe('x');
+  });
+
+  it('keeps every D1 row when the copy cannot be verified', async () => {
+    const { ctx, store, bucket, iso } = await setup(true);
+    bucket.corrupt = true;
+    for (let i = 0; i < 4; i++)
+      await store.set(`analytics_events/old${i}`, { name: 'x', ts: iso(60) });
+    const r = await archiveOldEvents(ctx.deps);
+    expect(r).toMatchObject({ failed: true });
+    expect((await ids(store, 'analytics_events')).length).toBe(4);
+  });
+
+  it('handles more rows than one batch, and stops at the deadline', async () => {
+    const { ctx, store, iso } = await setup(true);
     await store.batchSet(
-      Array.from({ length: 1200 }, (_, i) => ({
-        path: `analytics_events/e${i}`,
-        data: { name: 'x', expireAt: old },
+      Array.from({ length: 2300 }, (_, i) => ({
+        path: `analytics_events/e${String(i).padStart(5, '0')}`,
+        data: { name: 'x', ts: iso(50) },
       })),
     );
-    const r = await purgeExpiredEvents(ctx.deps);
-    expect(r).toEqual({ deleted: { playback_events: 0, analytics_events: 1200 } });
-    expect((await store.query({ collection: 'analytics_events' })).length).toBe(0);
-    await store.set('analytics_events/z', { name: 'x', expireAt: old });
-    const stopped = await purgeExpiredEvents(ctx.deps, Date.now() - 1);
+    const stopped = await archiveOldEvents(ctx.deps, Date.now() - 1);
     expect(stopped).toMatchObject({ partial: true });
-    expect(await store.get('analytics_events/z')).not.toBeNull();
+    expect((await ids(store, 'analytics_events')).length).toBe(2300);
+    const r = await archiveOldEvents(ctx.deps);
+    expect(r).toMatchObject({
+      report: { analytics_events: { archived: 2300, removedFromD1: 2300 } },
+    });
+    expect((await ids(store, 'analytics_events')).length).toBe(0);
   });
 
-  it('is a no-op on a store without purgeExpired', async () => {
-    const { ctx } = await setup();
-    const bare = { ...ctx.deps, store: { ...ctx.deps.store, purgeExpired: undefined } };
-    expect(await purgeExpiredEvents(bare as never)).toEqual({ skipped: true });
+  it('is a no-op without an archive bucket', async () => {
+    const { ctx } = await setup(true);
+    ctx.deps.archive = undefined;
+    expect(await archiveOldEvents(ctx.deps)).toEqual({ skipped: true });
   });
 });
