@@ -185,7 +185,10 @@ describe('push campaigns: immediate send', () => {
     await addDevice(marketer.token, 'fcm-token-aaaaaaaa1');
     await addDevice(other.token, 'fcm-token-bbbbbbbb2', 'web');
     const c = await createDraft({ title: 'عنوان دستی ادمین', body: 'متن دستی ادمین' });
-    const immediate = await ctx.api(admin.token).post(`/v1/admin/push-campaigns/${c.id}/send`).set('Idempotency-Key', 'fast-key-000001');
+    const immediate = await ctx
+      .api(admin.token)
+      .post(`/v1/admin/push-campaigns/${c.id}/send`)
+      .set('Idempotency-Key', 'fast-key-000001');
     expect(immediate.status).toBe(200);
     expect(immediate.body.data.campaign.status).toBe('queued');
     await runPushCampaigns(ctx.deps);
