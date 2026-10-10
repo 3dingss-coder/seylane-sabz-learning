@@ -10,6 +10,7 @@ import { runPushAutomations } from './push-automation-engine';
 import { drainAutomationEvents } from './push-automation-events';
 import { recordCronRun } from './system-health';
 import type { Deps } from './context';
+import { archiveOldEvents } from './retention';
 
 export type JobName =
   | 'flush-push'
@@ -20,7 +21,8 @@ export type JobName =
   | 'knowledge-reindex'
   | 'migrate-blobs'
   | 'push-campaigns'
-  | 'push-automations';
+  | 'push-automations'
+  | 'archive-events';
 
 export interface JobOptions {
   /** Manual triggers ignore the "only at this weekday/hour" gates (the weekly digest). */
@@ -85,6 +87,9 @@ export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>
     const run = await runPushAutomations(d, { deadlineAtMs: o?.deadlineAtMs ?? null });
     return { ...run, events };
   },
+  // Copies event-log rows older than 30 days to R2 (verified), and only when EVENT_ARCHIVE_PRUNE=on
+  // removes them from D1. Nothing is ever deleted without a verified copy.
+  'archive-events': (d, o) => archiveOldEvents(d, o?.deadlineAtMs ?? null),
 };
 
 export const JOB_NAMES = Object.keys(JOBS) as JobName[];
@@ -97,23 +102,22 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 
 // Cloudflare Cron Triggers fire in UTC (Iran has no DST any more: Asia/Tehran = UTC+03:30 all
 // year), so the Tehran wall-clock times of spec §26 are converted here:
-//   every 15 min   → automation engine (queue + windows) + web push deferred by quiet hours + scheduled push campaigns + knowledge-reindex (reads up to 8 new media
-//                    files per run, re-indexes only what changed; zero cost once caught up)
-//   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot)
+//   every 15 min   → automation engine (queue + windows) + web push deferred by quiet hours + scheduled
+//                    push campaigns + blob migration (a no-op without an R2 bucket)
+//   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot) + knowledge-reindex
+//                    (reads up to 8 new media files per run, re-indexes only what changed)
 //   08:00 Tehran   → mentor daily nudges + behaviour sweep + knowledge reindex
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
-  '*/15 * * * *': [
-    'push-automations',
-    'flush-push',
-    'push-campaigns',
-    'knowledge-reindex',
-    'migrate-blobs',
-  ],
-  '0 * * * *': ['deadline-sweep', 'weekly-digest'],
+  '*/15 * * * *': ['push-automations', 'flush-push', 'push-campaigns', 'migrate-blobs'],
+  // knowledge-reindex rescans every knowledge item and media row (D1 is single-threaded); it took
+  // 12-23 s per run in production logs and slowed learners' requests. Hourly is plenty; admins can
+  // run it on demand via POST /v1/admin/jobs/knowledge-reindex.
+  '0 * * * *': ['deadline-sweep', 'weekly-digest', 'knowledge-reindex'],
   '30 4 * * *': ['mentor-daily'],
   '30 6 * * *': ['daily-reminders'],
+  '0 22 * * *': ['archive-events'], // 01:30 Tehran, the quietest hour
 };
 
 export const CRON_SCHEDULES = Object.keys(CRON_JOBS);

@@ -304,6 +304,26 @@ export async function loadShared(d: Deps, extraPackageIds: string[] = []): Promi
   };
 }
 
+const SHARED_TTL_MS = 30_000;
+const sharedCache = new WeakMap<Deps, { at: number; value: SharedData }>();
+
+/**
+ * `loadShared` for the hot heartbeat path only. Assignments, published packages and learning paths are
+ * admin-edited and shared by every learner, yet each heartbeat re-read them (three full-collection scans
+ * on D1). A learner may therefore see an admin's assign/revoke up to 30 s late on THIS path (same TTL as
+ * `getPolicy`); every other endpoint still reads fresh. `now` is refreshed per call and the packages map
+ * is copied, because callers add started-but-unassigned packages to it.
+ */
+export async function loadSharedCached(d: Deps): Promise<SharedData> {
+  const t = d.clock().getTime();
+  let hit = sharedCache.get(d);
+  if (!hit || t - hit.at >= SHARED_TTL_MS || t < hit.at) {
+    hit = { at: t, value: await loadShared(d) };
+    sharedCache.set(d, hit);
+  }
+  return { ...hit.value, now: d.clock(), packages: new Map(hit.value.packages) };
+}
+
 export interface UserLearning {
   packages: PackageView[];
   progressRows: Doc<SectionProgress>[];

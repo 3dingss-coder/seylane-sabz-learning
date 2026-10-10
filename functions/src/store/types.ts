@@ -97,6 +97,17 @@ export interface DocStore {
   delete(path: string): Promise<void>;
   /** Atomically add `by` to a numeric field (creates doc/field if missing). */
   increment(path: string, field: string, by: number): Promise<void>;
+  /**
+   * Optional (D1 only, used by the event archive): raw rows of `collection` whose `ts` is before
+   * `beforeIso`, oldest first, at most `limit`. `data` is the stored JSON text, unparsed.
+   */
+  selectOlderThan?(
+    collection: string,
+    beforeIso: string,
+    limit: number,
+  ): Promise<Array<{ id: string; data: string; updatedAt: string }>>;
+  /** Optional (D1 only): physically delete these ids of `collection`. Returns how many went. */
+  deleteByIds?(collection: string, ids: string[]): Promise<number>;
   newId(): string;
   runTransaction<R>(fn: (tx: TxOps) => Promise<R>): Promise<R>;
   /** Batched writes for bulk operations (≤ 400 per chunk handled by adapter). */

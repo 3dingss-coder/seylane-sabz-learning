@@ -21,6 +21,7 @@ import { getPolicy, track, type Deps } from './context';
 import {
   computeNextItem,
   effectiveDeadlineAt,
+  loadSharedCached,
   loadUserLearning,
   type PackageCompletion,
   type PackageView,
@@ -76,8 +77,13 @@ export async function listMyPackages(
   return packages.filter((p) => !status || p.status === status).map(stripSections);
 }
 
-async function packageForUser(d: Deps, user: Doc<User>, packageId: string): Promise<PackageView> {
-  const { packages } = await loadUserLearning(d, user);
+async function packageForUser(
+  d: Deps,
+  user: Doc<User>,
+  packageId: string,
+  hot = false,
+): Promise<PackageView> {
+  const { packages } = await loadUserLearning(d, user, hot ? await loadSharedCached(d) : undefined);
   const p = packages.find((x) => x.id === packageId);
   if (!p) throw new ApiError('NOT_FOUND', 'این آموزش برای شما فعال نیست.');
   return p;
@@ -127,9 +133,9 @@ export async function sectionIndex(
   return { section, pkg };
 }
 
-async function sectionForUser(d: Deps, user: Doc<User>, sectionId: string) {
+async function sectionForUser(d: Deps, user: Doc<User>, sectionId: string, hot = false) {
   const { section, pkg } = await sectionIndex(d, sectionId);
-  const view = await packageForUser(d, user, pkg.id);
+  const view = await packageForUser(d, user, pkg.id, hot);
   const sv = view.sections.find((s) => s.id === sectionId);
   if (!sv) throw new ApiError('NOT_FOUND', 'این قسمت پیدا نشد.');
   return { section, pkg, view, sv };
@@ -279,6 +285,7 @@ export async function getProgress(d: Deps, user: Doc<User>, sectionId: string) {
 
 /** Log a progress request when it failed, hit a limit, or was slow; healthy fast beats stay silent. */
 const PROGRESS_SLOW_LOG_MS = 1_500;
+const ACTIVITY_PING_MS = 5 * 60_000;
 
 export interface ProgressOptions {
   skipBudget?: boolean;
@@ -445,7 +452,7 @@ async function recordProgressInner(
   opts: ProgressOptions,
 ) {
   const deadline = new Deadline(opts.deadlineAtMs ?? null);
-  const { section, pkg, sv } = await sectionForUser(d, user, sectionId);
+  const { section, pkg, sv } = await sectionForUser(d, user, sectionId, true);
   if (sv.state === 'locked') throw new ApiError('FORBIDDEN', LOCKED);
   const policy = await getPolicy(d);
   // Everything above is read-only. From here on a deadline failure still means "nothing written".
@@ -534,7 +541,14 @@ async function recordProgressInner(
   const next = result.next;
   const step = (name: string, fn: () => Promise<unknown>) =>
     bestEffort(name, trace, state, deadline, fn);
-  await step('touch_user', () => store.update(`users/${user.id}`, { lastActiveAt: now }));
+  // Presence only needs minute-level resolution (inactivity jobs count days, KPIs count users), so the
+  // user touch and the presence event are written at most once per ACTIVITY_PING_MS per section instead
+  // of on every 10 s heartbeat. Section start and completion are always recorded.
+  const lastWrite = result.prev ? Date.parse(result.prev.updatedAt) : NaN;
+  const pingDue =
+    !Number.isFinite(lastWrite) || d.clock().getTime() - lastWrite >= ACTIVITY_PING_MS;
+  if (pingDue)
+    await step('touch_user', () => store.update(`users/${user.id}`, { lastActiveAt: now }));
   if (!result.prev) {
     await step('section_played', () =>
       track(d, 'section_played', user.id, { sectionId, mediaType: section.mediaType }),
@@ -552,9 +566,10 @@ async function recordProgressInner(
       await maybeReengaged(d, user.id);
     });
   }
-  await step('heartbeat_event', () =>
-    track(d, 'playback_heartbeat', user.id, { sectionId, deltaSec: input.playedDeltaSec }),
-  );
+  if (pingDue)
+    await step('heartbeat_event', () =>
+      track(d, 'playback_heartbeat', user.id, { sectionId, deltaSec: input.playedDeltaSec }),
+    );
   if (result.justCompleted) {
     await step('section_completed', () =>
       track(d, 'section_completed', user.id, { sectionId, elapsedSec: next.playedSeconds }),
