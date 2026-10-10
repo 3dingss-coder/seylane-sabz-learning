@@ -5,6 +5,7 @@ import { rebuildKnowledgeIndex } from './knowledge';
 import { extractPendingMedia } from './media-ingest';
 import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
+import { runPushCampaigns } from './push-campaigns';
 import type { Deps } from './context';
 
 export type JobName =
@@ -14,7 +15,8 @@ export type JobName =
   | 'daily-reminders'
   | 'mentor-daily'
   | 'knowledge-reindex'
-  | 'migrate-blobs';
+  | 'migrate-blobs'
+  | 'push-campaigns';
 
 export interface JobOptions {
   /** Manual triggers ignore the "only at this weekday/hour" gates (the weekly digest). */
@@ -66,6 +68,8 @@ export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>
   // Moves files stored in D1 into R2 (a few verified files per run; a no-op once D1 is empty or
   // when no R2 bucket is bound).
   'migrate-blobs': async (d) => (await d.blob.migrateToObjectStorage?.()) ?? { skipped: true },
+  // Admin push campaigns: starts due scheduled campaigns and sends pending batches (budgeted).
+  'push-campaigns': (d) => runPushCampaigns(d),
 };
 
 export const JOB_NAMES = Object.keys(JOBS) as JobName[];
@@ -78,14 +82,14 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 
 // Cloudflare Cron Triggers fire in UTC (Iran has no DST any more: Asia/Tehran = UTC+03:30 all
 // year), so the Tehran wall-clock times of spec §26 are converted here:
-//   every 15 min   → web push deferred by quiet hours + knowledge-reindex (reads up to 8 new media
+//   every 15 min   → web push deferred by quiet hours + scheduled push campaigns + knowledge-reindex (reads up to 8 new media
 //                    files per run, re-indexes only what changed; zero cost once caught up)
 //   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot)
 //   08:00 Tehran   → mentor daily nudges + behaviour sweep + knowledge reindex
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
-  '*/15 * * * *': ['flush-push', 'knowledge-reindex', 'migrate-blobs'],
+  '*/15 * * * *': ['flush-push', 'push-campaigns', 'knowledge-reindex', 'migrate-blobs'],
   '0 * * * *': ['deadline-sweep', 'weekly-digest'],
   '30 4 * * *': ['mentor-daily'],
   '30 6 * * *': ['daily-reminders'],

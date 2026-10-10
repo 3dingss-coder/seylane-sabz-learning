@@ -6,6 +6,7 @@ import {
   FolderTree,
   Library,
   LayoutDashboard,
+  Megaphone,
   ScrollText,
   Settings2,
   Share2,
@@ -22,6 +23,8 @@ import { AuditPage } from './AuditPage';
 import { BrandDetailPage } from './BrandDetailPage';
 import { ContentPage } from './ContentPage';
 import { NotificationsPage } from './NotificationsPage';
+import { PushCampaignEditorPage } from './PushCampaignEditorPage';
+import { PushCampaignsPage } from './PushCampaignsPage';
 import { MediaLibraryPage } from './MediaLibraryPage';
 import { MentorGuidesPage } from './MentorGuidesPage';
 import { PackageEditorPage } from './PackageEditorPage';
@@ -46,6 +49,7 @@ const NAV = [
   { to: '/admin/teams', label: 'تیم‌ها', icon: UsersRound },
   { to: '/admin/reports', label: 'گزارش‌ها', icon: BarChart3 },
   { to: '/admin/notifications', label: 'اعلان‌ها', icon: Bell },
+  { to: '/admin/push-campaigns', label: 'کمپین‌های Push', icon: Megaphone },
   { to: '/admin/policies', label: 'سیاست‌ها', icon: Settings2 },
   { to: '/admin/audit', label: 'لاگ تغییرات', icon: ScrollText },
   { to: '/admin/profile', label: 'پروفایل', icon: UserRound },
@@ -68,6 +72,9 @@ export default function AdminRoutes() {
         <Route path="teams" element={<TeamsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="push-campaigns" element={<PushCampaignsPage />} />
+        <Route path="push-campaigns/new" element={<PushCampaignEditorPage />} />
+        <Route path="push-campaigns/:id" element={<PushCampaignEditorPage />} />
         <Route path="policies" element={<PoliciesPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="profile" element={<ProfilePage />} />

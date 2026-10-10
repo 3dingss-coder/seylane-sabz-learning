@@ -16,6 +16,8 @@ run_worker_first = ["/v1/*"]
 APP_ENV = "dev"
 PLAYBACK_BUDGET = "off"
 RATE_LIMIT_SCALE = "20"
+# Public site URL: used to build the absolute click-through link in web push notifications.
+APP_URL = "https://academy-seylaneh.site"
 # D1 -> R2 media move: files are copied to R2 and verified by size; the D1 copy is deleted only
 # when this is "on" (flip it after checking that images/videos play from R2).
 R2_MIGRATE_PURGE = "on"
@@ -44,6 +46,28 @@ binding = "MEDIA_BUCKET"
 bucket_name = "seylane-sabz-media"
 
 # Workers Logs: capture invocations and errors (1101/1102/503) for diagnosis.
+# Worker Previews are created by Cloudflare Workers Builds for pull requests.
+# Keep preview-specific bindings isolated; add test D1/R2 resources before runtime testing.
+[previews]
+
+# Preview configuration is isolated from production data and side effects.
+[previews.vars]
+APP_ENV = "preview"
+PLAYBACK_BUDGET = "off"
+RATE_LIMIT_SCALE = "20"
+APP_URL = "https://arena-490c9708-seylane-sabz-learning-seylane-sabz-learning.3dingss.workers.dev"
+# Never run the D1-to-R2 purge migration automatically in a preview.
+R2_MIGRATE_PURGE = "off"
+
+[[previews.d1_databases]]
+binding = "DB"
+database_name = "seylane-sabz-preview-db"
+database_id = "2c0dcb87-a429-4de4-9f40-6a6f58ac3dbd"
+
+[[previews.r2_buckets]]
+binding = "MEDIA_BUCKET"
+bucket_name = "seylane-sabz-preview-media"
+
 [observability]
 enabled = true
 head_sampling_rate = 1

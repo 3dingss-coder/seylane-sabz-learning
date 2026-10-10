@@ -35,13 +35,41 @@ jobs:
           cache: gradle
       - run: npm ci
       - name: Firebase config (push notifications)
+        id: firebase
         env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
-        if: env.GOOGLE_SERVICES_JSON != ''
+          # Either the raw JSON (GOOGLE_SERVICES_JSON) or its base64 (GOOGLE_SERVICES_JSON_BASE64).
+          GS_RAW: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GS_B64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
-          echo "$GOOGLE_SERVICES_JSON" | base64 -d > apps/web/android/app/google-services.json
-          echo "VITE_PUSH_ENABLED=true" >> "$GITHUB_ENV"
-          echo "VITE_CRASHLYTICS_ENABLED=true" >> "$GITHUB_ENV"
+          OUT=apps/web/android/app/google-services.json
+          if [ -z "$GS_RAW" ] && [ -z "$GS_B64" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Firebase Android config secret is missing; this APK will not receive push notifications."
+            {
+              echo "### Android push notifications are not configured"
+              echo "Add `GOOGLE_SERVICES_JSON_BASE64` (base64-encoded matching `google-services.json`) or `GOOGLE_SERVICES_JSON` under Settings → Secrets and variables → Actions."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ -n "$GS_RAW" ]; then printf '%s' "$GS_RAW" > "$OUT"; else echo "$GS_B64" | base64 -d > "$OUT"; fi
+          if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$OUT"; then
+            echo "VITE_PUSH_ENABLED=true" >> "$GITHUB_ENV"
+            echo "VITE_CRASHLYTICS_ENABLED=true" >> "$GITHUB_ENV"
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            rm -f "$OUT"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::google-services.json secret is not valid JSON; building without push."
+            {
+              echo "### Android push notifications are not configured"
+              echo "The provided Google Services JSON is invalid. Replace the secret with valid JSON for package `ir.seylanesabz.learning`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Require Firebase config for main/release builds
+        if: github.event_name != 'pull_request' && steps.firebase.outputs.configured != 'true'
+        run: |
+          echo "::error::Refusing to build a main/release APK without valid Firebase push configuration."
+          exit 1
       - run: npm run build -w apps/web
       - run: npx cap sync android
         working-directory: apps/web
