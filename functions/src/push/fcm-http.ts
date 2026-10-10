@@ -1,5 +1,5 @@
 import { webpushLink } from './fcm';
-import type { PushMessage, PushSender } from './types';
+import type { PushMessage, PushResult, PushSender } from './types';
 
 /**
  * FCM HTTP v1 sender that runs on Cloudflare Workers (no firebase-admin, no Node APIs):
@@ -129,6 +129,22 @@ export class FcmHttpPushSender implements PushSender {
 
   private body(token: string, msg: PushMessage) {
     const link = webpushLink(this.appUrl, msg.data?.link);
+    if (msg.platform === 'web') {
+      // Data-only: the service worker (push-sw.js) draws the notification, so title/body/image/link
+      // are fully ours. All values must be strings.
+      return {
+        message: {
+          token,
+          data: {
+            ...(msg.data ?? {}),
+            title: msg.title,
+            body: msg.body,
+            ...(msg.imageUrl ? { image: msg.imageUrl } : {}),
+          },
+          webpush: { headers: { TTL: '86400', Urgency: 'high' } },
+        },
+      };
+    }
     return {
       message: {
         token,
@@ -153,11 +169,7 @@ export class FcmHttpPushSender implements PushSender {
   }
 
   /** true = token is permanently dead; false = delivered or a transient/unrelated failure. */
-  private async sendOne(
-    access: string,
-    token: string,
-    msg: PushMessage,
-  ): Promise<'sent' | 'invalid' | 'failed'> {
+  private async sendOne(access: string, token: string, msg: PushMessage): Promise<PushResult> {
     const res = await this.fetchImpl(
       `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(this.sa.project_id)}/messages:send`,
       {
@@ -166,7 +178,7 @@ export class FcmHttpPushSender implements PushSender {
         body: JSON.stringify(this.body(token, msg)),
       },
     );
-    if (res.ok) return 'sent';
+    if (res.ok) return { result: 'sent', status: res.status };
     let code = '';
     let message = '';
     try {
@@ -179,25 +191,34 @@ export class FcmHttpPushSender implements PushSender {
       // non-JSON error body
     }
     // Only prune when FCM says the token itself is dead, never for a bad message/link.
-    if (code === 'UNREGISTERED' || res.status === 404) return 'invalid';
-    if (code === 'INVALID_ARGUMENT' && /registration token/i.test(message)) return 'invalid';
-    return 'failed';
+    if (code === 'UNREGISTERED' || res.status === 404)
+      return { result: 'invalid', status: res.status, code: code || 'UNREGISTERED' };
+    if (code === 'INVALID_ARGUMENT' && /registration token/i.test(message))
+      return { result: 'invalid', status: res.status, code };
+    console.warn(
+      JSON.stringify({ level: 'warn', msg: 'fcm rejected', status: res.status, code, message }),
+    );
+    return { result: 'failed', status: res.status, code: code || undefined };
   }
 
   async send(tokens: string[], msg: PushMessage) {
-    if (tokens.length === 0) return { sent: 0, invalidTokens: [] };
+    if (tokens.length === 0) return { sent: 0, invalidTokens: [], results: [] };
     const access = await this.getAccessToken();
+    const results: PushResult[] = new Array(tokens.length);
     let sent = 0;
     const invalidTokens: string[] = [];
     let next = 0;
     const worker = async () => {
       while (next < tokens.length) {
-        const t = tokens[next++] as string;
+        const idx = next++;
+        const t = tokens[idx] as string;
         try {
           const r = await this.sendOne(access, t, msg);
-          if (r === 'sent') sent++;
-          else if (r === 'invalid') invalidTokens.push(t);
+          results[idx] = r;
+          if (r.result === 'sent') sent++;
+          else if (r.result === 'invalid') invalidTokens.push(t);
         } catch (err) {
+          results[idx] = { result: 'failed', code: 'NETWORK_ERROR' };
           console.warn(
             JSON.stringify({
               level: 'warn',
@@ -209,6 +230,6 @@ export class FcmHttpPushSender implements PushSender {
       }
     };
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tokens.length) }, worker));
-    return { sent, invalidTokens };
+    return { sent, invalidTokens, results };
   }
 }

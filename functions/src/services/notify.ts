@@ -11,6 +11,7 @@ import type {
   NotificationType,
   User,
 } from '../domain/types';
+import { sendToDevices } from '../push/dispatch';
 import { audit, getPolicy, track, type Actor, type Deps } from './context';
 import { isSafeImageUrl, isSafeInternalPath } from './push-campaigns';
 
@@ -203,8 +204,9 @@ async function sendPush(
   if (!tokens.length) return 'skipped';
   const g = GENERIC_PUSH[type];
   try {
-    const res = await d.push.send(
-      tokens.map((t) => t.token),
+    const res = await sendToDevices(
+      d.push,
+      tokens.map((t) => ({ token: t.token, platform: t.platform })),
       {
         title: type === 'manual' ? n.title : (g?.title ?? n.title),
         body: type === 'manual' ? n.body : (g?.body ?? n.body),

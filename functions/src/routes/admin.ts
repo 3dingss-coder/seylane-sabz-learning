@@ -618,6 +618,20 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
       ),
     ),
   );
+  r.post(
+    '/admin/push-campaigns/test-self',
+    rateLimit(
+      limiter,
+      'push-campaign-test-self',
+      20,
+      60 * 60_000,
+      (req) => me(req).id,
+      'ارسال تست حداکثر ۲۰ بار در ساعت ممکن است.',
+    ),
+    h(async (req) =>
+      pushCampaigns.sendSelfTest(d, actorOf(req), parse(pushCampaigns.selfTestSchema, req.body)),
+    ),
+  );
   r.get(
     '/admin/push-campaigns/:id',
     h(async (req) => pushCampaigns.campaignDetail(d, id(req))),

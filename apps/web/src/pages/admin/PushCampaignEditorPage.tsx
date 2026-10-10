@@ -224,6 +224,39 @@ function Editor({ campaign }: { campaign: PushCampaign | null }) {
     },
   });
 
+  const selfTest = useMutation({
+    mutationFn: () =>
+      api.post<{
+        devices: number;
+        accepted: number;
+        results: Array<{ platform: string; result: string; status?: number; code?: string }>;
+      }>('/admin/push-campaigns/test-self', {
+        title: form.title,
+        body: form.body,
+        ...(form.imageUrl.trim() ? { imageUrl: form.imageUrl.trim() } : {}),
+        ...(form.actionRef.trim() ? { actionRef: form.actionRef.trim() } : {}),
+      }),
+    onSuccess: (r) => {
+      if (!r.devices) {
+        toast.show({
+          type: 'warning',
+          message: 'هیچ دستگاهی برای حساب شما ثبت نشده. اول از «پروفایل» اعلان‌ها را روشن کنید.',
+        });
+        return;
+      }
+      const lines = r.results
+        .map(
+          (x, i) =>
+            `دستگاه ${i + 1} (${x.platform}): ${x.result === 'sent' ? 'پذیرفته شد' : x.result === 'invalid' ? 'توکن نامعتبر (حذف شد)' : 'ناموفق'}${x.code ? ` — ${x.code}` : ''}`,
+        )
+        .join(' | ');
+      toast.show({
+        type: r.accepted > 0 ? 'success' : 'error',
+        message: `ارسال تست: ${r.accepted} از ${r.devices} پذیرفته شد. ${lines}`,
+      });
+    },
+    onError: (e) => toast.show({ type: 'error', message: errMsg(e) }),
+  });
   const busy = draft.isPending || scheduleMut.isPending || sendMut.isPending;
   const targetOptions = useMemo(() => {
     if (form.audienceType === 'team')
@@ -424,6 +457,15 @@ function Editor({ campaign }: { campaign: PushCampaign | null }) {
             onClick={() => submitCheck(true) && setScheduleOpen(true)}
           >
             زمان‌بندی ارسال
+          </Button>
+          <Button
+            variant="secondary"
+            icon={<Send className="size-4" aria-hidden />}
+            loading={selfTest.isPending}
+            disabled={busy || !form.title.trim() || !form.body.trim()}
+            onClick={() => selfTest.mutate()}
+          >
+            ارسال تست به خودم
           </Button>
           <Button
             icon={<Send className="size-4" aria-hidden />}
