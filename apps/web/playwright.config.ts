@@ -43,10 +43,15 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
+      // CI builds in a dedicated workflow step (like the Lighthouse job) so a slow runner can't
+      // eat the server start-up budget ("Timed out waiting from config.webServer"). Locally the
+      // build still runs here so `npm run test:e2e` works from a clean checkout.
+      command: process.env.CI
+        ? 'npx vite preview --host 127.0.0.1 --port 4173 --strictPort'
+        : 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
       url: 'http://127.0.0.1:4173',
       reuseExistingServer: !process.env.CI,
-      timeout: 180_000,
+      timeout: 300_000,
     },
   ],
 });
