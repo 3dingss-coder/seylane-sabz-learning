@@ -1,3 +1,4 @@
+import { runPushCampaigns } from './services/push-campaigns';
 import { buildCloudflareDeps, createFetchHandler, type CloudflareEnv } from './web-handler';
 import { runCron } from './services/cron';
 import type { Deps } from './services/context';
@@ -86,7 +87,7 @@ function logFailure(phase: 'startup' | 'request', request: Request, err: unknown
 }
 
 export default {
-  async fetch(request: Request, env: CloudflareEnv): Promise<Response> {
+  async fetch(request: Request, env: CloudflareEnv, ctx?: ExecutionContextLike): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/v1' || url.pathname.startsWith('/v1/')) {
       let handler: FetchHandler;
@@ -97,7 +98,21 @@ export default {
         return unavailable();
       }
       try {
-        return await handler(request);
+        const res = await handler(request);
+        // Admin "send now" only enqueues; drain the queue right after the response is sent so
+        // delivery starts immediately instead of waiting for the 15-minute cron. Claims keep it idempotent.
+        if (
+          ctx &&
+          res.ok &&
+          request.method === 'POST' &&
+          /^\/v1\/admin\/push-campaigns\/[^/]+\/send$/.test(url.pathname)
+        )
+          ctx.waitUntil(
+            getDeps(env ?? {})
+              .then((deps) => runPushCampaigns(deps))
+              .catch((err) => console.error('[push-campaigns] background run failed', err)),
+          );
+        return res;
       } catch (err) {
         logFailure('request', request, err);
         return unavailable();

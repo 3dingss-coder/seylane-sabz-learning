@@ -26,15 +26,14 @@ import { audit, track, type Actor, type Deps } from './context';
  *    created with the store's atomic `create`; a second start gets a CONFLICT (idempotency).
  *  • Starting snapshots the audience into batches of BATCH_USERS users. Each batch is processed
  *    by one claim per attempt (`<batchId>__<attempt>`), so overlapping runs never send twice.
- *  • An admin's immediate send processes INLINE_BATCHES batches inside the request; the rest (and
- *    every scheduled campaign) is processed by the 15-minute cron job `push-campaigns`, under a
+ *  • Admin requests only enqueue a campaign and return promptly; all batches (immediate and
+ *    scheduled) are processed by the 15-minute cron job `push-campaigns`, under a
  *    per-run budget of MAX_BATCHES_PER_RUN batches (Cloudflare subrequest limits).
  *  • A batch is retried only when it failed BEFORE any provider request was made. A batch whose
  *    previous run crashed while sending is marked `interrupted` and is never re-sent.
  */
 
 export const BATCH_USERS = 25;
-export const INLINE_BATCHES = 2;
 export const MAX_BATCHES_PER_RUN = 8;
 export const MAX_BATCH_ATTEMPTS = 3;
 export const STALE_BATCH_MS = 10 * 60_000;
@@ -576,7 +575,9 @@ export async function sendCampaignNow(d: Deps, actor: Actor, id: string, request
   }
   await audit(d, actor, 'push_campaign.send_started', CAMPAIGNS, id, null, { requestId });
   await track(d, 'admin_push_campaign_started', actor.id, { mode: 'immediate' });
-  await advanceCampaign(d, id, INLINE_BATCHES);
+  // Do not send Push from the HTTP request: provider latency and per-user store writes can
+  // hold the admin API open long enough to make the whole admin UI appear frozen. The durable
+  // queued state is drained by the existing cron; claim documents preserve idempotency.
   return campaignDetail(d, id);
 }
 
