@@ -79,6 +79,11 @@ export class FcmHttpPushSender implements PushSender {
     return this.key;
   }
 
+  /** Health card: a real FCM sender is configured (the service-account JSON itself is never exposed). */
+  describe() {
+    return { provider: 'fcm' as const, configured: true };
+  }
+
   async buildAssertion(): Promise<string> {
     const iat = Math.floor(this.now() / 1000);
     const header = b64urlText(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));

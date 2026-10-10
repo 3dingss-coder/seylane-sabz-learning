@@ -6,6 +6,7 @@ import { extractPendingMedia } from './media-ingest';
 import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
 import { runPushCampaigns } from './push-campaigns';
+import { recordCronRun } from './system-health';
 import type { Deps } from './context';
 
 export type JobName =
@@ -142,6 +143,13 @@ export async function runCron(
       jobs[name] = { ok: false, error: (e as Error).message?.slice(0, 300) ?? 'failed' };
       console.error(`[cron:${name}] failed after ${Date.now() - started}ms ${describeError(e)}`);
     }
+  }
+  // Persisted heartbeat: without it, "is the scheduler alive at all?" is only answerable from the
+  // Cloudflare dashboard. Best-effort — a health write must never fail the cron itself.
+  try {
+    await recordCronRun(d, cron, jobs);
+  } catch (e) {
+    console.warn('[cron] health record failed', (e as Error).message);
   }
   return { cron, jobs };
 }

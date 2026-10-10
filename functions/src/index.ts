@@ -27,7 +27,24 @@ const job = (schedule: string, name: JobName | 'backup', run: (d: Deps) => Promi
   onSchedule(
     { schedule, timeZone: TZ, retryCount: 1, memory: '512MiB', timeoutSeconds: 540 },
     async () => {
-      const result = await run(await deps());
+      const d = await deps();
+      let ok = true;
+      let error: string | undefined;
+      let result: unknown = null;
+      try {
+        result = await run(d);
+      } catch (e) {
+        ok = false;
+        error = (e as Error).message?.slice(0, 300) ?? 'failed';
+        throw e;
+      } finally {
+        // Same heartbeat document the Cloudflare cron writes, so the admin health card means the
+        // same thing on either deployment (services/system-health.ts).
+        const { recordCronRun } = await import('./services/system-health');
+        await recordCronRun(d, schedule, { [name]: { ok, ...(error ? { error } : {}) } }).catch(
+          () => undefined,
+        );
+      }
       console.info(`[job:${name}]`, JSON.stringify(result));
     },
   );

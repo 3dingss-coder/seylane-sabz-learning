@@ -12,6 +12,7 @@ import type {
   User,
 } from '../domain/types';
 import { audit, getPolicy, track, type Actor, type Deps } from './context';
+import { recordPushOutcome } from './system-health';
 import { isSafeImageUrl, isSafeInternalPath } from './push-campaigns';
 
 /** Persian templates (spec §26). Variables in {braces}. Editable by admin. */
@@ -311,11 +312,25 @@ export async function flushDeferredPush(d: Deps): Promise<number> {
   });
   const deadline = Date.now() + 20_000;
   let done = 0;
+  let sent = 0;
+  let failed = 0;
   for (const n of due) {
     if (Date.now() > deadline) break;
     const status = await sendPush(d, n, n.type);
     await d.store.update(`notifications/${n.id}`, { pushStatus: status });
+    if (status === 'sent') sent++;
+    else if (status === 'failed') failed++;
     done++;
+  }
+  if (done) {
+    // One aggregated health write per run (not per notification): the admin panel shows the
+    // failure rate and whether Push is configured at all (see services/system-health.ts).
+    await recordPushOutcome(d, {
+      sent,
+      failed,
+      invalid: 0,
+      ...(failed ? { error: 'بخشی از ارسال‌های موکول‌شده ناموفق بود.' } : {}),
+    });
   }
   return done;
 }

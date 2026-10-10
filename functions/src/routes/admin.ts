@@ -18,6 +18,7 @@ import * as mediaLibrary from '../services/media-library';
 import * as notify from '../services/notify';
 import * as pushCampaigns from '../services/push-campaigns';
 import * as policies from '../services/policies';
+import * as systemHealth from '../services/system-health';
 import * as reports from '../services/reports';
 import * as users from '../services/users';
 
@@ -676,6 +677,16 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   r.get(
     '/admin/audit-logs',
     h(async (req) => reports.listAudit(d, parse(reports.auditQuery, req.query))),
+  );
+
+  // System health: is Push configured? did the scheduler run? (see services/system-health.ts)
+  r.get(
+    '/admin/system-health',
+    h(async () => systemHealth.systemHealth(d)),
+  );
+  r.post(
+    '/admin/system-health/check',
+    h(async (req) => systemHealth.runHealthCheck(d, actorOf(req))),
   );
 
   // Manual job trigger (superadmin) — useful on dev / when schedules are paused.
