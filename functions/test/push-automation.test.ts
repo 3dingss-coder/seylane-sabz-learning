@@ -138,6 +138,47 @@ describe('catalogue seeding', () => {
     }
   });
 
+  it('an image URL must be a public HTTPS link here too, not only in the campaign studio', async () => {
+    for (const imageUrl of [
+      'http://cdn.example.com/a.png',
+      'javascript:alert(1)',
+      'https://localhost/a.png',
+    ])
+      expect(
+        (
+          await ctx.api(admin.token).patch('/v1/admin/push-automations/inactive_1d', {
+            message: {
+              title: 'ادامه بده',
+              body: 'یک مرحله دیگر مانده است',
+              actionRef: '/learn',
+              imageUrl,
+            },
+          })
+        ).status,
+        imageUrl,
+      ).toBe(400);
+    const ok = await ctx.api(admin.token).patch('/v1/admin/push-automations/inactive_1d', {
+      message: {
+        title: 'ادامه بده',
+        body: 'یک مرحله دیگر مانده است',
+        actionRef: '/learn',
+        imageUrl: 'https://cdn.example.com/a.png',
+      },
+    });
+    expect(ok.status).toBe(200);
+    // and «no image» stays legal: empty means null, not an invalid URL
+    const cleared = await ctx.api(admin.token).patch('/v1/admin/push-automations/inactive_1d', {
+      message: {
+        title: 'ادامه بده',
+        body: 'یک مرحله دیگر مانده است',
+        actionRef: '/learn',
+        imageUrl: '',
+      },
+    });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.message.imageUrl).toBeNull();
+  });
+
   it('rejects unsafe destinations and unknown variables at the API', async () => {
     const evil = await ctx.api(admin.token).patch('/v1/admin/push-automations/inactive_1d', {
       message: { title: 'سلام', body: 'متن', actionRef: 'https://evil.example/x' },
@@ -722,6 +763,27 @@ describe('panel API', () => {
         x.action.startsWith('push_automation.'),
       ),
     ).toBe(true);
+    // «نسخه‌بندی متن»: the wording that was replaced stays readable, newest first
+    const revs = await ctx.api(admin.token).get('/v1/admin/push-automations/inactive_1d/revisions');
+    expect(revs.status).toBe(200);
+    const revisions = revs.body.data as Array<{
+      version: number;
+      note: string;
+      message: { title: string };
+    }>;
+    expect(revisions).toHaveLength(1);
+    expect(revisions[0]?.version).toBe(1);
+    expect(revisions[0]?.message.title).toBeTruthy();
+    expect(revisions[0]?.note.length).toBeGreaterThan(0);
+    // an unknown key answers like the detail route, not with an empty list
+    expect(
+      (await ctx.api(admin.token).get('/v1/admin/push-automations/nope_x/revisions')).status,
+    ).toBe(404);
+    // and the read side is admin-only too
+    expect(
+      (await ctx.api(marketer.token).get('/v1/admin/push-automations/inactive_1d/revisions'))
+        .status,
+    ).toBe(403);
   });
 
   it('a custom automation can be created, run and deleted; a catalogue one cannot', async () => {

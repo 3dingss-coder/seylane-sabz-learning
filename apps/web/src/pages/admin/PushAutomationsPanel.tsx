@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
@@ -8,6 +9,7 @@ import {
   PlayCircle,
   Save,
   ShieldAlert,
+  Plus,
   SlidersHorizontal,
   Users,
 } from 'lucide-react';
@@ -177,6 +179,13 @@ export function PushAutomationsPanel() {
           >
             <KpiStrip data={data} />
             <div className="ms-auto flex flex-wrap items-center gap-2">
+              <Link
+                to="/admin/push-campaigns/automations/new"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-input border border-primary/70 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary-light"
+              >
+                <Plus className="size-4" aria-hidden />
+                اتوماسیون دست‌ساز
+              </Link>
               <Button
                 variant="ghost"
                 icon={<SlidersHorizontal className="size-4" aria-hidden />}
@@ -398,7 +407,12 @@ function AutomationTable({
         return (
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="truncate text-sm font-extrabold text-text">{r.name}</span>
+              <Link
+                to={`/admin/push-campaigns/automations/${r.key}`}
+                className="truncate text-sm font-extrabold text-text hover:text-primary hover:underline"
+              >
+                {r.name}
+              </Link>
               <Chip tone={state.tone} hint={state.hint}>
                 {state.label}
               </Chip>
@@ -532,7 +546,7 @@ export function AutomationSwitch({
   );
 }
 
-function EstimateDialog({
+export function EstimateDialog({
   row,
   dry,
   chip,

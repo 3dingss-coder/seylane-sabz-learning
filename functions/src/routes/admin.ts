@@ -686,6 +686,10 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     h(async (req) => automations.recentRuns(d, parse(automations.runsQuery, req.query))),
   );
   r.get(
+    '/admin/push-automations/:key/revisions',
+    h(async (req) => automations.listTextRevisions(d, id(req, 'key'))),
+  );
+  r.get(
     '/admin/push-automations/trace/:userId',
     h(async (req) => automations.traceUser(d, id(req, 'userId'))),
   );

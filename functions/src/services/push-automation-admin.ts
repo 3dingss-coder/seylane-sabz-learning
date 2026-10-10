@@ -393,6 +393,8 @@ export interface AutomationDetail extends AutomationRow {
   createdBy: string;
   canDelete: boolean;
   needsCriticalConfirm: boolean;
+  /** The population the sweep walks while `audience.type === 'all'` — the editor round-trips it. */
+  audienceRole: PushAutomation['audienceRole'];
 }
 
 export async function automationDetail(d: Deps, key: string): Promise<AutomationDetail> {
@@ -446,6 +448,7 @@ export async function automationDetail(d: Deps, key: string): Promise<Automation
     createdBy: a.createdBy,
     canDelete: !a.isSystem,
     needsCriticalConfirm: CRITICAL_AUTOMATION_KEYS.includes(a.key),
+    audienceRole: a.audienceRole,
   };
 }
 
@@ -756,6 +759,49 @@ export async function recentRuns(
     PUSH_AUTOMATION_CATALOG.find((c) => c.key === key)?.name ??
     key;
   return all.map((r) => ({ ...r, id: r.id, label: nameOf(r.key) }));
+}
+
+/** One archived wording of an automation (`push_automation_text_revs/<key>/<version>`). */
+export interface AutomationTextRevision {
+  version: number;
+  at: string;
+  by: string | null;
+  note: string;
+  message: PushAutomation['message'];
+  delivery: PushAutomation['delivery'];
+}
+
+/**
+ * «نسخه‌بندی متن»: every write archives the text it replaced, so an admin can read what the sentence
+ * used to be and who changed it. Newest first, capped — the archive itself is kept for 180 days
+ * (`updateAutomation`) and the panel never needs more than a screenful.
+ */
+export async function listTextRevisions(
+  d: Deps,
+  key: string,
+  limit = 20,
+): Promise<AutomationTextRevision[]> {
+  await mustGet(d, key); // unknown or malformed key → the same 404 the detail page gives
+  const rows = await d.store.query<{
+    version?: number;
+    at?: string;
+    by?: string | null;
+    note?: string;
+    message?: PushAutomation['message'];
+    delivery?: PushAutomation['delivery'];
+  }>({ collection: `${TEXT_REVISIONS}/${key}` });
+  return rows
+    .filter((r) => r.message && r.delivery)
+    .map((r) => ({
+      version: r.version ?? 0,
+      at: r.at ?? '',
+      by: r.by ?? null,
+      note: r.note ?? '',
+      message: r.message as PushAutomation['message'],
+      delivery: r.delivery as PushAutomation['delivery'],
+    }))
+    .sort((x, y) => y.version - x.version)
+    .slice(0, Math.max(1, Math.min(50, limit)));
 }
 
 export interface TraceResult {

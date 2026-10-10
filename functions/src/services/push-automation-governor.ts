@@ -12,7 +12,7 @@ import type {
   PushAutomationSettings,
   User,
 } from '../domain/types';
-import { isSafeInternalPath } from './push-campaigns';
+import { isSafeImageUrl, isSafeInternalPath } from './push-campaigns';
 import { isCategory, isMutable, PROTECTED_CATEGORIES } from '../domain/notification-categories';
 import { ApiError } from '../http/errors';
 import { AUTOMATION_PATH_VARS } from './push-automation-catalog';
@@ -696,11 +696,16 @@ export const automationMessageSchema = z.object({
       message:
         'مقصد باید یک مسیر داخلی معتبر باشد (/packages، /sections، /quiz، /messages، /cards، /mentor، /manager) و متغیرهای آن از فهرست مجاز.',
     }),
+  // The same public-HTTPS rule the campaign studio applies (§4.5): an automation is not a weaker
+  // writer of payloads, and this URL ends up in the in-app card and the push message.
   imageUrl: z
     .string()
     .trim()
     .max(2048)
     .nullable()
     .optional()
+    .refine((v) => !v || isSafeImageUrl(v), {
+      message: 'آدرس تصویر باید یک لینک عمومی و معتبر با HTTPS باشد.',
+    })
     .transform((v) => (v ? v : null)),
 });

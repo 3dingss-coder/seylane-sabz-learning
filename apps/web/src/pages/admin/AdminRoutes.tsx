@@ -24,6 +24,7 @@ import { BrandDetailPage } from './BrandDetailPage';
 import { ContentPage } from './ContentPage';
 import { NotificationsPage } from './NotificationsPage';
 import { PushCampaignEditorPage } from './PushCampaignEditorPage';
+import { PushAutomationDetailPage, PushAutomationNewPage } from './PushAutomationDetailPage';
 import { PushAutomationsPage } from './PushAutomationsPage';
 import { PushCampaignsPage } from './PushCampaignsPage';
 import { MediaLibraryPage } from './MediaLibraryPage';
@@ -78,6 +79,9 @@ export default function AdminRoutes() {
             («کمپین‌های Push» = دستی + خودکار). Registered before `:id` for readability only — React
             Router already prefers a static segment over a param. */}
         <Route path="push-campaigns/automations" element={<PushAutomationsPage />} />
+        {/* `new` is its own page, registered before `:key`. */}
+        <Route path="push-campaigns/automations/new" element={<PushAutomationNewPage />} />
+        <Route path="push-campaigns/automations/:key" element={<PushAutomationDetailPage />} />
         <Route path="push-campaigns/new" element={<PushCampaignEditorPage />} />
         <Route path="push-campaigns/:id" element={<PushCampaignEditorPage />} />
         <Route path="policies" element={<PoliciesPage />} />
