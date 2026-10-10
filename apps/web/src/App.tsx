@@ -6,6 +6,7 @@ import { ApiError } from '@/lib/api';
 import { AuthProvider, useAuth } from '@/lib/auth';
 import { isNative, registerPush } from '@/lib/native';
 import { resumeWebPush } from '@/lib/webPush';
+import { PushOptInBanner } from '@/components/common/PushOptInBanner';
 import { setCrashUser, track } from '@/lib/telemetry';
 import { MarketerLayout } from '@/layouts/MarketerLayout';
 import { FullPageSpinner, RequireAuth } from '@/layouts/RequireAuth';
@@ -137,6 +138,7 @@ export default function App() {
         <BrowserRouter>
           <AuthProvider>
             <NativeBridge />
+            <PushOptInBanner />
             <RouteGuard />
           </AuthProvider>
         </BrowserRouter>
