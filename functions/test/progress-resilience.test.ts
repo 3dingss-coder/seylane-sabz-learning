@@ -4,12 +4,7 @@ import type { Doc } from '../src/store/types';
 import { DeadlineError } from '../src/lib/bounded';
 import { recordProgress } from '../src/services/learning';
 import { register } from '../src/services/users';
-import {
-  D1Store,
-  D1_CALL_TIMEOUT_MS,
-  D1_QUEUE_WAIT_MS,
-  D1_TX_QUEUE_WAIT_MS,
-} from '../src/store/d1';
+import { D1Store, D1_CALL_TIMEOUT_MS } from '../src/store/d1';
 import { buildCloudflareDeps } from '../src/web-handler';
 import { createSqliteD1, withFaults, type FaultAction } from './support/sqlite-d1';
 import { buildFixture, createCtx, type Fixture, type TestCtx } from './support/ctx';
@@ -94,7 +89,7 @@ describe('concurrency: no deadlock, no lost updates', () => {
       );
       const total = Date.now() - t0;
       expect(results).toHaveLength(n);
-      // The transaction queue serializes read-modify-write: every second is accounted for.
+      // Concurrent beats of one user conflict on the guarded commit and retry: every second is accounted for.
       const final = await env.store.get<{ playedSeconds: number }>(
         `section_progress/${u.id}_${sec}`,
       );
@@ -216,7 +211,7 @@ describe('failure injection on the progress path', () => {
 });
 
 describe('isolation between users', () => {
-  it("one user's hung commit delays other users only up to the waiter-owned queue bound", async () => {
+  it("one user's hung commit does not delay other users at all", async () => {
     const env = await setup();
     vi.useFakeTimers();
     const slowUser = await env.marketer();
@@ -240,9 +235,8 @@ describe('isolation between users', () => {
       () => (settled = true),
       () => (settled = true),
     );
-    // The per-isolate call queue is a throttle, not a lock: a waiter gives up on a stuck predecessor
-    // after its OWN bounded waits (tx queue + call queue). Safety does not depend on the queue (writes are guarded CAS).
-    await vi.advanceTimersByTimeAsync(D1_TX_QUEUE_WAIT_MS + D1_QUEUE_WAIT_MS + 200);
+    // There is no cross-request queue: the other user finishes while the first commit is still hung.
+    await vi.advanceTimersByTimeAsync(200);
     expect(settled).toBe(true);
     expect((await other).duplicate).toBe(false);
     await vi.advanceTimersByTimeAsync(D1_CALL_TIMEOUT_MS + 100);

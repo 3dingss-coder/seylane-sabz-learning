@@ -1,4 +1,4 @@
-import { createGate, DeadlineError, waitSettled, withTimeout } from '../lib/bounded';
+import { DeadlineError, withTimeout } from '../lib/bounded';
 import { randomBytesBase64Url } from '../lib/crypto';
 import { applyUpdate, cmp, deepMerge, getField, matches, splitPath } from './helpers';
 import {
@@ -146,22 +146,20 @@ function mentorGuideSnapshotVersion(snapshot: Record<string, Data>): string {
 const MAX_ROW_JSON = 1_800_000;
 
 /**
- * Time limits. They are nested on purpose, not equal:
- *   request budget (cloudflare-worker.ts)  >  D1 call  >  transaction queue wait  >  call queue wait
- * Values are provisional: no production latency measurements were available when they were chosen.
- * Check `queueWaitMs` / `d1DurationMs` in the progress log lines after deploy and tune from those.
+ * Time limits: request budget (cloudflare-worker.ts) > D1 call.
  *
- * The queues below are a courtesy (they keep one request from opening a 7th D1 connection and
- * reduce conflicts). They are NOT what makes transactions correct: a waiter that gives up on a
- * predecessor may overlap with it, and a predecessor's D1 call may still finish late. Correctness
- * comes from the compare-and-swap commit in `runTransaction`, which works across isolates.
+ * There is deliberately NO queue in the Worker. An earlier version chained every D1 call and every
+ * transaction behind the previous one across ALL requests of an isolate. In production that chain
+ * was broken by cancelled requests (Workers cancels a request's continuations when the client
+ * disconnects, so its "release" never ran: the logs show "A promise was resolved or rejected from a
+ * different request context") and every request behind it stalled for the full wait bound (5-25 s
+ * seen), while at load the queue itself became the bottleneck. D1 already queues queries, and a
+ * Worker invocation is limited to 6 connections by the runtime. Transactions are correct because of
+ * the compare-and-swap commit in `runTransaction`, not because of any ordering; different users
+ * touch different rows and never conflict.
  */
 /** One D1 call (and the one-time init). A stalled call must fail instead of waiting for the runtime. */
 export const D1_CALL_TIMEOUT_MS = 15_000;
-/** How long a D1 call waits behind earlier calls before it stops waiting and goes ahead. */
-export const D1_QUEUE_WAIT_MS = 5_000;
-/** How long a transaction waits behind earlier transactions before it goes ahead. */
-export const D1_TX_QUEUE_WAIT_MS = 10_000;
 /** A transaction that keeps losing the optimistic-concurrency check gives up after this many runs. */
 export const D1_MAX_TX_ATTEMPTS = 6;
 
@@ -171,10 +169,6 @@ interface SharedState {
   /** True once init succeeded: the hot path then skips the init wait and its timer. */
   ready: boolean;
   initPromise: Promise<void> | null;
-  /** Serializes whole transactions (tail of the chain). Per isolate, shared by all requests. */
-  queue: Promise<void>;
-  /** D1 allows 6 connections per invocation and runs one query at a time. Serialize SQL. */
-  io: Promise<void>;
 }
 
 export class D1Store implements DocStore {
@@ -185,8 +179,6 @@ export class D1Store implements DocStore {
   private readonly shared: SharedState = {
     ready: false,
     initPromise: null,
-    queue: Promise.resolve(),
-    io: Promise.resolve(),
   };
   private trace: OpTrace | null = null;
 
@@ -294,13 +286,9 @@ export class D1Store implements DocStore {
   }
 
   /**
-   * Run one D1 call at a time so a Promise.all of reads cannot open a 7th connection.
-   *
-   * Lifecycle: take a gate → wait (bounded, own timer) for the previous gate → refuse to START if
-   * the request deadline has passed → run the call under its own time limit → release the gate in
-   * `finally`. A waiter that gives up on a predecessor proceeds anyway (see the note on the
-   * constants); that is safe for reads and for compare-and-swap commits, and plain upserts are
-   * last-writer-wins regardless of any queue.
+   * Run one D1 call under its own time limit. Lifecycle: refuse to START if the request deadline
+   * has passed → run the call under the per-call limit. No call waits for any other call (see the
+   * note on the time limits).
    *
    * `commit: true` marks the single call that makes a transaction durable. It is never cut short by
    * the request deadline (a commit that was already sent cannot be recalled, so the caller waits for
@@ -311,21 +299,9 @@ export class D1Store implements DocStore {
     op = 'call',
     opts: { commit?: boolean } = {},
   ): Promise<T> {
-    const s = this.shared;
     const trace = this.trace;
-    const prev = s.io;
-    const gate = createGate();
-    s.io = gate.promise;
     const started = { at: 0 };
     try {
-      this.assertWithinDeadline(op);
-      const remaining = this.remainingMs();
-      const wait = await waitSettled(prev, Math.min(D1_QUEUE_WAIT_MS, Math.max(1, remaining)));
-      if (trace) {
-        trace.queueWaitMs += wait.waitedMs;
-        if (wait.timedOut) trace.queueTimeouts++;
-      }
-      if (wait.timedOut) logStore('queue_wait_timeout', { op, waitedMs: wait.waitedMs }, trace);
       this.assertWithinDeadline(op);
       const limit = opts.commit
         ? D1_CALL_TIMEOUT_MS
@@ -352,7 +328,6 @@ export class D1Store implements DocStore {
         trace.d1DurationMs += Date.now() - started.at;
         trace.d1Calls++;
       }
-      gate.release();
     }
   }
 
@@ -778,34 +753,16 @@ export class D1Store implements DocStore {
    * The callback may run more than once, so it must not have side effects outside `tx`.
    */
   async runTransaction<R>(fn: (tx: TxOps) => Promise<R>): Promise<R> {
-    const s = this.shared;
     const trace = this.trace;
-    // Courtesy queue (bounded wait, gate released in `finally`); not relied on for correctness.
-    const prev = s.queue;
-    const gate = createGate();
-    s.queue = gate.promise;
-    try {
-      this.assertWithinDeadline('transaction');
-      const wait = await waitSettled(
-        prev,
-        Math.min(D1_TX_QUEUE_WAIT_MS, Math.max(1, this.remainingMs())),
-      );
-      if (trace) {
-        trace.queueWaitMs += wait.waitedMs;
-        if (wait.timedOut) trace.queueTimeouts++;
-      }
-      if (wait.timedOut) logStore('tx_queue_wait_timeout', { waitedMs: wait.waitedMs }, trace);
-      for (let attempt = 1; ; attempt++) {
-        this.assertWithinDeadline('transaction attempt');
-        const out = await this.attemptTransaction(fn);
-        if (out.committed) return out.result;
-        if (trace) trace.txRetries++;
-        logStore('tx_conflict_retry', { attempt }, trace);
-        if (attempt >= D1_MAX_TX_ATTEMPTS) throw new StoreBusyError(attempt);
-        await sleep(Math.min(200, 5 * 2 ** attempt + Math.floor(Math.random() * 10)));
-      }
-    } finally {
-      gate.release();
+    this.assertWithinDeadline('transaction');
+    for (let attempt = 1; ; attempt++) {
+      this.assertWithinDeadline('transaction attempt');
+      const out = await this.attemptTransaction(fn);
+      if (out.committed) return out.result;
+      if (trace) trace.txRetries++;
+      logStore('tx_conflict_retry', { attempt }, trace);
+      if (attempt >= D1_MAX_TX_ATTEMPTS) throw new StoreBusyError(attempt);
+      await sleep(Math.min(200, 5 * 2 ** attempt + Math.floor(Math.random() * 10)));
     }
   }
 
