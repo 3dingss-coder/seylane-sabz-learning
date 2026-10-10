@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Button, Card, EmptyState, KpiCard, TableSkeleton } from '@/components/ui';
 import { Tabs } from '@/components/common/Field';
+import { PushSectionTabs } from './PushSectionTabs';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
@@ -131,6 +132,8 @@ export function PushCampaignsPage() {
           </Button>
         }
       />
+
+      <PushSectionTabs value="campaigns" />
 
       <QueryState
         query={dash}

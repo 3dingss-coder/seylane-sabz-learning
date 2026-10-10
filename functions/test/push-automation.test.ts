@@ -18,6 +18,7 @@ import {
 import {
   seedCatalog,
   setAutomationEnabled,
+  setPaused,
   updateAutomation,
   dryRun,
   traceUser,
@@ -593,6 +594,35 @@ describe('events and the delayed queue', () => {
     expect(drain.queue?.sent).toBe(1);
     expect(ctx.deps.push.sent).toHaveLength(2);
     // a second drain of the same window must not repeat it
+    expect((await runPushAutomations(ctx.deps)).queue?.sent).toBe(0);
+  });
+
+  it('a pause leaves queued follow-ups pending, and resuming delivers them', async () => {
+    await enable('quiz_failed_nudge');
+    await device();
+    const queued = await fireAutomationEvent(ctx.deps, 'quiz.failed', marketer.id, {
+      title: 'آموزش کرم',
+      sectionId: 'sec_1',
+      packageId: 'pkg_1',
+    });
+    expect(queued.queued).toBe(1);
+    await ctx.api(admin.token).post('/v1/admin/push-automations/pause', { paused: true });
+    ctx.advance(6 * 3600_000);
+    // past the delay and past the global gap, yet the kill-switch wins: nothing is sent *or* dropped
+    const paused = await runPushAutomations(ctx.deps, { force: true });
+    expect(paused.paused).toBe(true);
+    expect(paused.queue).toBeNull();
+    expect(ctx.deps.push.sent).toHaveLength(0);
+    const day = dayKey(ctx.deps.clock(), 'Asia/Tehran');
+    const rows = await store().query<{ status: string }>({
+      collection: `push_automation_queue/${day}`,
+    });
+    expect(rows.filter((r) => r.status === 'pending')).toHaveLength(1);
+    // (resumed through the service, not the API: the 6-hour jump has expired the test's access token)
+    await setPaused(ctx.deps, { id: 'test', role: 'admin' }, false);
+    expect((await runPushAutomations(ctx.deps)).queue?.sent).toBe(1);
+    expect(ctx.deps.push.sent).toHaveLength(1);
+    // and the same drain is idempotent
     expect((await runPushAutomations(ctx.deps)).queue?.sent).toBe(0);
   });
 

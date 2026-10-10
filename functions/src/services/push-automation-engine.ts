@@ -676,6 +676,9 @@ export async function drainQueue(
   budgetMs: number | null = null,
 ): Promise<{ scanned: number; sent: number; closed: number }> {
   const day = dayKey(d.clock(), (await getPolicy(d)).timezone);
+  // A paused engine must leave the queue alone: items stay `pending` and are delivered after the
+  // pause is lifted. Closing them here would silently delete follow-ups scheduled during an outage.
+  if (settings.paused) return { scanned: 0, sent: 0, closed: 0 };
   const rows = await d.store.query<QueueItem>({
     collection: `${QUEUE}/${day}`,
     where: [['status', '==', 'pending']],
@@ -885,7 +888,9 @@ export async function runPushAutomations(
     skippedTotals: {},
     paused: settings.paused,
   };
-  if (settings.paused && !opts.force) {
+  // The kill-switch is not bypassable — `force` only skips the time window, never the pause. A manual
+  // «اجرای الان» while paused must still send nothing.
+  if (settings.paused) {
     result.pruned = await pruneExpiredShards(d);
     return result;
   }

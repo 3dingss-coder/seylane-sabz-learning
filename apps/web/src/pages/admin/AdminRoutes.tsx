@@ -24,6 +24,7 @@ import { BrandDetailPage } from './BrandDetailPage';
 import { ContentPage } from './ContentPage';
 import { NotificationsPage } from './NotificationsPage';
 import { PushCampaignEditorPage } from './PushCampaignEditorPage';
+import { PushAutomationsPage } from './PushAutomationsPage';
 import { PushCampaignsPage } from './PushCampaignsPage';
 import { MediaLibraryPage } from './MediaLibraryPage';
 import { MentorGuidesPage } from './MentorGuidesPage';
@@ -73,6 +74,10 @@ export default function AdminRoutes() {
         <Route path="reports" element={<ReportsPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="push-campaigns" element={<PushCampaignsPage />} />
+        {/* The automation engine lives inside the same section: one URL namespace, one mental model
+            («کمپین‌های Push» = دستی + خودکار). Registered before `:id` for readability only — React
+            Router already prefers a static segment over a param. */}
+        <Route path="push-campaigns/automations" element={<PushAutomationsPage />} />
         <Route path="push-campaigns/new" element={<PushCampaignEditorPage />} />
         <Route path="push-campaigns/:id" element={<PushCampaignEditorPage />} />
         <Route path="policies" element={<PoliciesPage />} />
