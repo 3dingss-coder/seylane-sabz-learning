@@ -12,6 +12,7 @@ import * as voice from '../services/voice';
 import { ApiError } from '../http/errors';
 import { myNudges } from '../services/mentor-rules';
 import * as notify from '../services/notify';
+import * as automationPrefs from '../services/push-automation-governor';
 import * as reports from '../services/reports';
 import * as rewards from '../services/rewards';
 import * as users from '../services/users';
@@ -170,6 +171,19 @@ export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
     '/me/notifications/:id/read',
     h(async (req) => notify.markNotificationRead(d, me(req).id, String(req.params.id))),
   );
+  // What the user may switch off themselves (spec §4: push only — the in-app card always arrives,
+  // and deadline categories are protected server-side, not just hidden in the UI).
+  r.get(
+    '/me/notification-prefs',
+    h(async (req) => automationPrefs.readPrefsView(d, me(req).id)),
+  );
+  r.put(
+    '/me/notification-prefs',
+    h(async (req) =>
+      automationPrefs.writePrefsSafe(d, me(req).id, parse(automationPrefs.prefsSchema, req.body)),
+    ),
+  );
+
   r.get(
     '/me/messages',
     h(async (req) => reports.myMessages(d, me(req).id)),

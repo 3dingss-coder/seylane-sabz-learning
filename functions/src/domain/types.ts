@@ -293,7 +293,9 @@ export type NotificationType =
   | 'weekly_digest'
   | 'badge_earned'
   | 'escalation'
-  | 'manual';
+  | 'manual'
+  /** Push automation engine (see services/push-automations.ts). Never used by a template editor. */
+  | 'automation';
 
 export interface Notification {
   userId: string;
@@ -305,6 +307,10 @@ export interface Notification {
   imageUrl?: string | null;
   /** Set when the notification was created by a push campaign (see services/push-campaigns.ts). */
   campaignId?: string | null;
+  /** Automation key when the notification came from the push-automation engine (data.push too). */
+  automationKey?: string | null;
+  /** An admin test-send: shown in the panel, never counted in automation stats (see governor). */
+  isTest?: boolean | null;
   readAt: string | null;
   pushStatus: 'none' | 'sent' | 'deferred' | 'skipped' | 'failed';
   deliverAfter: string | null;
@@ -603,4 +609,168 @@ export interface PushCampaignBatch {
   lastError: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+}
+
+// ─── Push automation engine (موتور اتوماسیون پوش) ─────────────────────────────
+/**
+ * One rule the admin can turn on/off and edit from the panel. Everything is stored in the generic
+ * document store (`push_automations/<key>`), so no SQL migration is required.
+ *
+ * Triggers:
+ *  • `event`         — fired inline by `fireAutomationEvent` at the hook site.
+ *  • `event_delay`   — same, but parked in `push_automation_queue/<dayKey>` until `dueAt`.
+ *  • `inactivity`    — evaluated in the daily window against `users.lastActiveAt` (ladder-aware).
+ *  • `schedule_daily`/`schedule_weekly` — evaluated once per matching Tehran window.
+ *  • `condition`     — evaluated in its window from the behaviour signals (B-rules reuse).
+ */
+export type AutomationTriggerKind =
+  'event' | 'event_delay' | 'inactivity' | 'schedule_daily' | 'schedule_weekly' | 'condition';
+
+export interface AutomationCondition {
+  field: string;
+  op: 'gte' | 'lte' | 'eq' | 'neq';
+  value: number | string | boolean;
+}
+
+export interface PushAutomationTrigger {
+  kind: AutomationTriggerKind;
+  /** Event name for `event`/`event_delay`, e.g. `quiz.failed`. */
+  event?: string | null;
+  delayMinutes?: number | null;
+  inactivityDays?: number | null;
+  /** Ladder members share one «inactivity episode»: only the highest matched step is sent. */
+  ladderGroup?: string | null;
+  /** 'HH:mm' in the policy timezone — the daily/evaluation window. Weekly: also needs `weekday`. */
+  time?: string | null;
+  /** 0=Sunday … 6=Saturday (same convention as `Policy.weeklyDigestDay`). */
+  weekday?: number | null;
+  conditions?: AutomationCondition[] | null;
+}
+
+export interface PushAutomationAudience {
+  type: 'all' | 'team' | 'role' | 'user';
+  targetId: string | null;
+  channel: 'any' | 'web' | 'android';
+}
+
+export type AutomationPriority = 'urgent' | 'high' | 'normal' | 'low';
+
+export interface PushAutomationMessage {
+  title: string;
+  body: string;
+  /** Internal route, validated by `isSafeAutomationPath`. */
+  actionRef: string;
+  imageUrl: string | null;
+}
+
+export interface PushAutomationDelivery {
+  priority: AutomationPriority;
+  push: boolean;
+  inApp: boolean;
+  respectQuietHours: boolean;
+  /** Minimum distance between two sends of THIS automation to the SAME user. */
+  cooldownMs: number;
+  maxPerUserPerDay?: number | null;
+  /** At most once per user lifetime (e.g. first_course_done). */
+  sendOnce?: boolean | null;
+  /** Managers receive one summary message instead of N per-member messages. */
+  aggregateForManager?: boolean | null;
+}
+
+export interface PushAutomationStats {
+  lastRunAt: string | null;
+  sent7d: number;
+  accepted7d: number;
+  skipped7d: number;
+}
+
+export interface PushAutomation {
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+  audienceRole: 'marketer' | 'manager' | 'admin' | 'all';
+  enabled: boolean;
+  /** Seeded by the catalog: cannot be deleted, only disabled. */
+  isSystem: boolean;
+  /**
+   * System automation = the gate in front of an existing template. Text stays in
+   * `DEFAULT_TEMPLATES`/the template editor; the panel only owns enable/priority/caps/stats.
+   */
+  templateKey?: string | null;
+  /** Template keys whose Push must stand down for a user while this automation is enabled. */
+  supersedes?: string[] | null;
+  trigger: PushAutomationTrigger;
+  audience: PushAutomationAudience;
+  message: PushAutomationMessage;
+  delivery: PushAutomationDelivery;
+  /** Seeded but needing data that v1 does not compute (Q3): never enable-able, explained in UI. */
+  requiresFeature?: string | null;
+  /** Only for users who explicitly opted in (`notification_prefs`) — e.g. the evening nudge. */
+  optInOnly?: boolean | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy: string;
+  stats?: PushAutomationStats | null;
+}
+
+/** Global rules of the engine (`push_automation_settings/global`). Never cached (kill-switch). */
+export interface PushAutomationSettings {
+  /** Emergency kill-switch: every send stands down while true. */
+  paused: boolean;
+  maxPerUserPerDay: number;
+  maxPerUserPerWeek: number;
+  /** Minimum distance between ANY two pushes of one user (urgent is exempt). */
+  minGapMs: number;
+  /** Default Tehran hour for windows the admin did not choose explicitly. */
+  defaultHourTehran: number;
+  /** Days a «why nothing was sent» decision stays readable. */
+  decisionTtlDays: number;
+  /** Alert the admins when the 24h push failure rate exceeds this percentage. */
+  failureAlertPct: number;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+/** One processed window of one automation (`push_automation_runs/<id>`). */
+export interface PushAutomationRun {
+  key: string;
+  kind: 'sweep' | 'event' | 'queue' | 'manual';
+  windowKey: string;
+  startedAt: string;
+  finishedAt: string | null;
+  evaluated: number;
+  matched: number;
+  sent: number;
+  skipped: Record<string, number>;
+  failed: number;
+  error: string | null;
+}
+
+/** Per-user decision log (`push_automation_decisions/<dayKey>`): one doc per user per day. */
+export interface PushAutomationDecisionItem {
+  at: string;
+  key: string;
+  reason: string;
+  detail?: string | null;
+}
+
+export interface PushAutomationDecisions {
+  userId: string;
+  dayKey: string;
+  items: PushAutomationDecisionItem[];
+  expireAt: string;
+}
+
+/** `notification_prefs/<userId>` — what the marketer may switch off. Deadline types are always on. */
+export interface NotificationPrefs {
+  /** Categories the user switched OFF (push only; in-app is always created). */
+  mutedCategories: string[];
+  /** Optional preferred hour (Tehran) used by `preferred_time` once that feature exists. */
+  preferredHour: number | null;
+  /** Opt-in extras (e.g. the evening nudge) — off by default. */
+  optIns: Record<string, boolean>;
+  updatedAt: string;
 }

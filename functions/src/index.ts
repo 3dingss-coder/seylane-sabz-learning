@@ -61,6 +61,8 @@ export const dailyReminders = scheduled('0 10 * * *', 'daily-reminders');
 export const weeklyDigest = scheduled('0 * * * *', 'weekly-digest');
 export const mentorDaily = scheduled('0 8 * * *', 'mentor-daily');
 export const flushDeferredPush = scheduled('every 15 minutes', 'flush-push');
+// The automation engine runs on the same 15-minute rhythm on both platforms (services/cron.ts).
+export const pushAutomations = scheduled('every 15 minutes', 'push-automations');
 export const dailyBackup = job('0 3 * * *', 'backup', async () =>
   (await import('./services/backup')).exportFirestore(),
 );

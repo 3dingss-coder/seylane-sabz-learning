@@ -67,7 +67,10 @@ const ALLOWED_ROUTE_PREFIXES = [
   '/profile',
 ];
 
-export function isSafeInternalPath(value: string): boolean {
+export function isSafeInternalPath(
+  value: string,
+  allowedPrefixes: readonly string[] = ALLOWED_ROUTE_PREFIXES,
+): boolean {
   if (value.length > 300) return false;
   // Only a plain path with an optional query string: no scheme, no protocol-relative `//`,
   // no backslash, no whitespace, no traversal.
@@ -75,7 +78,7 @@ export function isSafeInternalPath(value: string): boolean {
   if (value.includes('//') || value.includes('..')) return false;
   const path = value.split('?')[0] ?? '/';
   if (path === '/') return true;
-  return ALLOWED_ROUTE_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
+  return allowedPrefixes.some((p) => path === p || path.startsWith(`${p}/`));
 }
 
 export function isSafeImageUrl(value: string): boolean {
