@@ -62,6 +62,13 @@
 - [ ] Rate limiter درون‌حافظه‌ای است (به‌ازای هر instance)؛ برای مقیاس بالا → Redis/Firestore counter (V1)
 - [ ] بازیابی رمز با شماره موبایل: از طریق «بازنشانی رمز» توسط ادمین (ارسال SMS هزینه دارد)
 - [x] **Cron Triggers روی Cloudflare فعال شد** (یادآوری‌ها، هشدار مهلت‌ها، خلاصهٔ هفتگی، flush Push): بلوک `[triggers] crons` در `wrangler.toml` باز است و `functions/src/services/cron.ts` چهار schedule را dispatch می‌کند؛ تست `functions/test/cron.test.ts` هم‌سانی لیست را نگهبانی می‌کند. پس از هر استقرار، در Workers → Settings → Triggers باید چهار schedule دیده شود. اجرای دستی هر کار: `POST /v1/admin/jobs/<name>`.
+- [ ] **فعال‌سازی تدریجی «اتوماسیون اعلان» پس از استقرار** (`/admin/push-campaigns` → تب اتوماسیون): با
+      deploy هیچ اعلانی روشن نمی‌شود؛ ترتیب پیشنهادی و چک‌لیست پس از استقرار در
+      [`admin-push-automation.md`](./admin-push-automation.md) §۰ و §۲ است (اول کارت سلامت: زمان‌بندی و
+      سرویس ارسال، بعد یک قانون روی یک کاربر آزمایشی، بعد یک تیم، بعد همه). برای بردن تنظیمات از Preview
+      به پروداکشن: `GET /v1/admin/push-automations/export` و `POST …/import` (حالت `dryRun` را اول بزنید؛
+      import هر چیزی را روشن نمی‌کند). سه سناریو (`preferred_time`، `team_rank_change`،
+      `manager_score_drop`) آگاهانه «نسخه ۲» هستند و تا محاسبهٔ داده‌شان سوییچ‌شدنی نیستند.
 - [ ] صفحه مدیریت Jobها در پنل ادمین ساخته نشده (اجرای دستی: `POST /v1/admin/jobs/:name`؛ همان جدولی که cron از آن استفاده می‌کند)
 - [ ] `mentor_chat_opened` و رویدادهای صوتی در `analytics_events` ثبت می‌شوند؛ مصرف آن‌ها در «گزارش‌ها → کیفیت منتور» دیده می‌شود (داشبورد تحلیلی جداگانه ساخته نشده)
 

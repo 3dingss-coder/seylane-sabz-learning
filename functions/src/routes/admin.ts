@@ -685,6 +685,12 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     '/admin/push-automations/runs',
     h(async (req) => automations.recentRuns(d, parse(automations.runsQuery, req.query))),
   );
+  // Static paths first: `export`/`import` are valid automation keys, so they would otherwise be read
+  // as a `:key` lookup.
+  r.get(
+    '/admin/push-automations/export',
+    h(async (req) => automations.exportAutomations(d, parse(automations.exportQuery, req.query))),
+  );
   r.get(
     '/admin/push-automations/:key/revisions',
     h(async (req) => automations.listTextRevisions(d, id(req, 'key'))),
@@ -714,6 +720,25 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   r.post(
     '/admin/push-automations/seed',
     h(async (req) => automations.seedCatalog(d, actorOf(req)), 200),
+  );
+  // The transfer pair: `export` is a read an operator can diff in review, `import` writes through the
+  // very same create/update paths the panel uses (so validation, revisions and audit are not a second
+  // implementation). It never enables anything; see docs/admin-push-automation.md.
+  r.post(
+    '/admin/push-automations/import',
+    rateLimit(
+      limiter,
+      'push-automation-import',
+      10,
+      5 * 60_000,
+      (req) => me(req).id,
+      'در هر ۵ دقیقه حداکثر ۱۰ بار می‌توانید کاتالوگ را درون‌ریزی کنید.',
+    ),
+    h(
+      async (req) =>
+        automations.importAutomations(d, actorOf(req), parse(automations.importSchema, req.body)),
+      200,
+    ),
   );
   r.post(
     '/admin/push-automations/run',

@@ -16,7 +16,7 @@ import {
   type NotificationCategory,
 } from '../domain/notification-categories';
 import { ApiError } from '../http/errors';
-import { text } from '../http/validate';
+import { parse, text } from '../http/validate';
 import { audit, getPolicy, SYSTEM, type Actor, type Deps } from './context';
 import { DEFAULT_TEMPLATES, getTemplates, render } from './notify';
 import {
@@ -239,6 +239,202 @@ export async function seedCatalog(
   if (created.length)
     await audit(d, actor, 'push_automation.seeded', SETTINGS, 'global', null, { created });
   return { created, existing: existing.size, total: CATALOG_KEYS.length };
+}
+
+// ─── Export / import (transfer between environments) ──────────────────────────
+
+/**
+ * What a transfer file carries: exactly the fields an admin can edit, and nothing this environment
+ * computes for itself (`version`, `stats`, `id`, timestamps). `enabled` is exported so a snapshot says
+ * what the source looked like, and is deliberately **ignored** on import — turning a send on is the
+ * operator's click, not a file's (§4.1). Names and message text only: no phone, no token, no key.
+ */
+const EXPORT_FIELDS = [
+  'key',
+  'name',
+  'description',
+  'category',
+  'audienceRole',
+  'enabled',
+  'trigger',
+  'audience',
+  'message',
+  'delivery',
+  'supersedes',
+  'optInOnly',
+] as const;
+
+export const AUTOMATION_EXPORT_FORMAT = 'seylane.push-automation/1';
+/** Above this an "import" is a data pipeline, not a deliberate transfer between two environments. */
+export const IMPORT_MAX_ROWS = 100;
+
+export type AutomationExportRow = Pick<PushAutomation, (typeof EXPORT_FIELDS)[number]>;
+
+export interface AutomationExport {
+  format: string;
+  exportedAt: string;
+  timezone: string;
+  count: number;
+  rows: AutomationExportRow[];
+}
+
+export const exportQuery = z.object({
+  /** `?keys=inactive_1d,quiz_abandoned`; absent means every non-gate row of this environment. */
+  keys: z.string().max(2000).optional(),
+  /** Gate rows (`templateKey`) are left out unless asked for: they own no text of their own. */
+  gates: z
+    .enum(['0', '1'])
+    .optional()
+    .transform((v) => v === '1'),
+});
+
+/** `q` is `exportQuery`'s parsed shape, typed structurally so callers (and tests) need no zod. */
+export async function exportAutomations(
+  d: Deps,
+  q: { keys?: string; gates?: boolean },
+): Promise<AutomationExport> {
+  const wanted = (q.keys ?? '')
+    .split(',')
+    .map((k) => k.trim().slice(0, 40))
+    .filter(Boolean);
+  const only = wanted.length ? new Set(wanted) : null;
+  const rows: AutomationExportRow[] = [];
+  for (const a of await loadAutomations(d)) {
+    if (only && !only.has(a.key)) continue;
+    if (!q.gates && a.templateKey) continue;
+    const picked: Record<string, unknown> = {};
+    for (const field of EXPORT_FIELDS) picked[field] = a[field] ?? null;
+    rows.push(picked as unknown as AutomationExportRow);
+  }
+  rows.sort((x, y) => x.key.localeCompare(y.key));
+  return {
+    format: AUTOMATION_EXPORT_FORMAT,
+    exportedAt: d.clock().toISOString(),
+    timezone: (await getPolicy(d)).timezone,
+    count: rows.length,
+    rows,
+  };
+}
+
+export const importSchema = z.object({
+  rows: z.array(z.record(z.unknown())).min(1).max(IMPORT_MAX_ROWS),
+  /** Every check runs and nothing is written — the way to review a file before it meets production. */
+  dryRun: z.boolean().optional(),
+  /**
+   * Gate rows are refused unless you say you mean it: a gate owns no wording of its own (§۵), and even
+   * with this flag its `message` is not transferred — only caps, priority and window.
+   */
+  allowGates: z.boolean().optional(),
+});
+
+export interface ImportRowResult {
+  key: string;
+  /** In `dryRun` this is the action the import *would* take. */
+  action: 'created' | 'updated' | 'skipped';
+  message?: string;
+}
+
+export interface AutomationImportReport {
+  dryRun: boolean;
+  checked: number;
+  /** Rows actually written — always 0 in a dry run. */
+  created: number;
+  updated: number;
+  skipped: number;
+  results: ImportRowResult[];
+}
+
+/**
+ * Create-or-update by `key`, through the same two functions the panel calls, so an import inherits the
+ * identical validation, the same Persian error messages, a text revision for every row it overwrites
+ * (§6.6) and one audit record per row. A bad row is reported and does not stop the rest: a transfer of
+ * 30 rules must not fail on row 4 and leave the operator guessing what happened to rows 1-3.
+ */
+export async function importAutomations(
+  d: Deps,
+  actor: Actor,
+  input: z.infer<typeof importSchema>,
+): Promise<AutomationImportReport> {
+  const report: AutomationImportReport = {
+    dryRun: !!input.dryRun,
+    checked: 0,
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    results: [],
+  };
+  const existing = new Map((await loadAutomations(d)).map((a) => [a.key, a] as const));
+  const skip = (key: string, message: string) => {
+    report.skipped++;
+    report.results.push({ key, action: 'skipped', message });
+  };
+
+  for (const raw of input.rows) {
+    report.checked++;
+    const rawKey = typeof raw.key === 'string' ? raw.key.slice(0, 40) : '';
+    let parsed: z.infer<typeof automationSchema>;
+    try {
+      parsed = parse(automationSchema, raw);
+    } catch (e) {
+      failOrSkip(rawKey, e, skip);
+      continue;
+    }
+    const cur = existing.get(parsed.key);
+    if (cur?.templateKey && !input.allowGates) {
+      skip(parsed.key, 'این سطر دروازه‌ی یک قالب است؛ متنش در «قالب‌های اعلان» ویرایش می‌شود.');
+      continue;
+    }
+    if (!cur && CATALOG_KEYS.includes(parsed.key)) {
+      skip(parsed.key, 'این کلید کاتالوگ است ولی هنوز ساخته نشده؛ اول `POST …/seed` را بزنید.');
+      continue;
+    }
+    try {
+      if (input.dryRun) {
+        // The same cross-field rules the write path applies; the write counters stay at zero on
+        // purpose, and `action` reports what the import would do.
+        validateSemantics({
+          trigger: parsed.trigger,
+          audience: parsed.audience,
+          message: parsed.message,
+        });
+      } else if (cur) {
+        const patch: Record<string, unknown> = { ...parsed };
+        // The key identifies the row and `enabled` is never a file's decision.
+        delete patch.key;
+        delete patch.enabled;
+        // A gate borrows its wording from the template editor; letting a file rewrite the gate's copy
+        // would create text the product never sends. The rest of the row (caps, priority, window) is
+        // exactly what a transfer should carry for a gate.
+        if (cur.templateKey) delete patch.message;
+        await updateAutomation(d, actor, cur.id, patch as z.infer<typeof automationPatchSchema>);
+      } else {
+        await createAutomation(d, actor, { ...parsed, enabled: false });
+      }
+      if (!input.dryRun) {
+        if (cur) report.updated++;
+        else report.created++;
+      }
+      report.results.push({ key: parsed.key, action: cur ? 'updated' : 'created' });
+    } catch (e) {
+      // Both write paths validate before they touch the store, so a rejected row leaves no half
+      // document behind — which is what makes reporting-and-continuing safe here.
+      failOrSkip(parsed.key, e, skip);
+    }
+  }
+
+  if (!input.dryRun && report.created + report.updated > 0)
+    await audit(d, actor, 'push_automation.imported', AUTOMATIONS, 'import', null, {
+      created: report.created,
+      updated: report.updated,
+      skipped: report.skipped,
+    });
+  return report;
+}
+
+/** A zod or cross-field failure becomes the row's Persian message; an empty key still needs reporting. */
+function failOrSkip(key: string, e: unknown, skip: (key: string, message: string) => void): void {
+  const message = (e as { message?: string }).message ?? 'سطر نامعتبر است.';
+  skip(key || '(بی‌کلید)', message);
 }
 
 // ─── Reads ───────────────────────────────────────────────────────────────────

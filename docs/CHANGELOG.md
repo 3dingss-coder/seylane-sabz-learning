@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-10 — موتور اتوماسیون اعلان (PR0 تا PR8)
+
+- پنل «کمپین‌های Push ← اتوماسیون اعلان» حالا یک موتور واقعی پشت دارد: ۳۸ سطر کاتالوگ (۲۵ سناریو + ۱۳ درگاه روی قالب‌های موجود + ۲ هشدار سلامت خودِ موتور)، ویزارد ۴ مرحله‌ای با پیش‌نمایش زنده، «ارسال آزمایشی»، تاریخچه اجرا (`/runs`) و صفحه «ردیابی کاربر» برای سؤال «چرا به این نفر نرسید؟».
+- هیچ اعلانی با deploy روشن نمی‌شود: هر سناریو با `enabled: false` seed می‌شود و روشن‌کردن فقط یک سوییچ است. کلید «توقف همه اتوماسیون‌ها» کش نمی‌شود، پس از اولین درخواست/اجرای بعدی اثر می‌کند.
+- قواعد حاکم بر ارسال: سقف ۲ پوش در روز و ۱۰ در هفته برای هر کاربر، حداقل ۴ ساعت فاصله، ساعت سکوت Tehran، ضدتکرار اتمی به‌ازای هر پنجره زمانی، «یک بار برای همیشه» (`sendOnce`) و پله بی‌فعالیتی (داخل یک دوره فقط بالاترین پله می‌فرستد). هر ردّ یک دلیل فارسی دارد و در لاگ تصمیم می‌نشیند.
+- رویدادها از باکس خروجی (`push_automation_events`) می‌آیند: آزمون، تکمیل قسمت/بسته، به‌روزرسانی بسته، و «عضو تازه به تیم اضافه شد» (`{memberName}`)؛ نوشتن در باکس فقط وقتی اتفاق می‌افتد که واقعاً قانونی گوش می‌دهد (یک read کش‌شده، وگرنه صفر نوشتن).
+- `supersedes`: وقتی «یک/دو/سه/هفت روز بی‌فعالیتی» روشن باشد، پوشِ قالب `reminder` حذف می‌شود و کارت داخل‌اپ می‌ماند — دو یادآوری هم‌زمان برای یک نفر نداریم.
+- `GET /v1/admin/push-automations/export` و `POST …/import` برای بردن تنظیمات بین Preview و پروداکشن (با `dryRun`، سقف ۱۰۰ سطر، و revision برای هر سطرِ بازنویسی‌شده).
+- سند: [`admin-push-automation-api.md`](./admin-push-automation-api.md) (قرارداد) و [`admin-push-automation.md`](./admin-push-automation.md) (فعال‌سازی تدریجی، اندازه‌گیری، عقب‌نشینی). رفتار کمپین‌های دستی، `DEFAULT_TEMPLATES` و مسیرهای `/v1/me/*` تغییر نکردند.
+- پیش‌تر: کمپین‌های Push (استودیو + `push-campaigns`) هم ورودی CHANGELOG نداشتند؛ مستندشان در [`admin-push-campaign-api.md`](./admin-push-campaign-api.md) و [`admin-push-campaign-setup.md`](./admin-push-campaign-setup.md) است.
+
+
 ## 2026-10-06 (2) — Fix: D1 -> R2 migration stalled on the smallest files
 
 - With `R2_MIGRATE_PURGE = "off"` the `migrate-blobs` job re-checked the same smallest files every run and never reached the larger ones (already-copied files used up the batch). Files already verified in R2 no longer count against the batch limits.
