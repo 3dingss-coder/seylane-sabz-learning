@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { CRON_JOBS, runCron } from '../src/services/cron';
-import { runPushCampaigns, INLINE_BATCHES } from '../src/services/push-campaigns';
+import { runPushCampaigns } from '../src/services/push-campaigns';
 import type { PushMessage, PushSender } from '../src/push/types';
 import { createCtx, type TestCtx } from './support/ctx';
 
@@ -42,10 +42,16 @@ async function createDraft(over: Record<string, unknown> = {}) {
 }
 
 async function send(id: string, key = KEY) {
-  return ctx
+  const response = await ctx
     .api(admin.token)
     .post(`/v1/admin/push-campaigns/${id}/send`)
     .set('Idempotency-Key', key);
+  if (response.status === 200) {
+    await runPushCampaigns(ctx.deps);
+    const detail = await ctx.api(admin.token).get(`/v1/admin/push-campaigns/${id}`);
+    response.body.data = detail.body.data;
+  }
+  return response;
 }
 
 class FailingSender implements PushSender {
@@ -174,13 +180,16 @@ describe('push campaigns: immediate send', () => {
     expect(ctx.deps.push.sent).toHaveLength(0);
   });
 
-  it('sends the exact admin content, image and internal link through the real push service', async () => {
+  it('returns quickly with a queued campaign; cron sends the exact admin content, image and internal link', async () => {
     const other = await ctx.user('marketer');
     await addDevice(marketer.token, 'fcm-token-aaaaaaaa1');
     await addDevice(other.token, 'fcm-token-bbbbbbbb2', 'web');
     const c = await createDraft({ title: 'عنوان دستی ادمین', body: 'متن دستی ادمین' });
-    const r = await send(c.id);
-    expect(r.status).toBe(200);
+    const immediate = await ctx.api(admin.token).post(`/v1/admin/push-campaigns/${c.id}/send`).set('Idempotency-Key', 'fast-key-000001');
+    expect(immediate.status).toBe(200);
+    expect(immediate.body.data.campaign.status).toBe('queued');
+    await runPushCampaigns(ctx.deps);
+    const r = await ctx.api(admin.token).get(`/v1/admin/push-campaigns/${c.id}`);
     expect(r.body.data.campaign.status).toBe('sent_with_errors');
     expect(r.body.data.campaign.summary.attempted).toBe(2);
     expect(r.body.data.campaign.summary.accepted).toBe(2);
@@ -337,7 +346,7 @@ describe('push campaigns: scheduling (server-side cron)', () => {
 });
 
 describe('push campaigns: batching, budgets and interruption safety', () => {
-  it('splits a large audience into batches; inline send drains only part, the cron finishes', async () => {
+  it('splits a large audience into batches; the cron drains them without blocking the send request', async () => {
     // Audience = 80 device users + admin + marketer (no devices) = 82 users → 4 batches of 25.
     const devices = 80;
     for (let i = 0; i < devices; i++) {
@@ -347,10 +356,9 @@ describe('push campaigns: batching, budgets and interruption safety', () => {
     const c = await createDraft();
     const r = await send(c.id);
     expect(r.status).toBe(200);
-    expect(r.body.data.campaign.status).toBe('sending');
+    expect(r.body.data.campaign.status).toBe('sent_with_errors');
     expect(r.body.data.campaign.summary.batchesTotal).toBe(4);
-    expect(r.body.data.campaign.summary.batchesDone).toBe(INLINE_BATCHES);
-    await runPushCampaigns(ctx.deps);
+    expect(r.body.data.campaign.summary.batchesDone).toBe(4);
     const done = await ctx.api(admin.token).get(`/v1/admin/push-campaigns/${c.id}`);
     expect(done.body.data.campaign.status).toBe('sent_with_errors');
     expect(done.body.data.campaign.summary.batchesDone).toBe(4);
