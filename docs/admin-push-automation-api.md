@@ -1,4 +1,4 @@
-# موتور اتوماسیون Push — API، قواعد و پنل (PR1 تا PR3)
+# موتور اتوماسیون Push — API، قواعد و پنل (PR1 تا PR5)
 
 این سند رفتار اتوماسیون اعلان‌ها را ثبت می‌کند: مجموعه‌ها، قواعد حاکم بر ارسال، مسیرهای ادمین و
 پنل «اتوماسیون اعلان». ویزارد/جزئیات (PR4) هنوز ساخته نشده و همان قرارداد را مصرف می‌کند. تحلیل و دلیل هر تصمیم در
@@ -17,6 +17,7 @@
 | `push_automation_counters/user/<userId>` | userId | یک سند غلتان: شمارنده روز/هفته + آخرین ارسال هر اتوماسیون + آخرین پوش |
 | `push_automation_decisions/<dayKey>/<userId>` | userId | «چرا ارسال نشد؟» — حداکثر ۲۰ مورد در روز برای هر کاربر |
 | `push_automation_queue/<dayKey>/<key>__<userId>` | — | صف اتفاق‌های با تأخیر (`event_delay`) |
+| `push_automation_events/<dayKey>/<hash>` | hash(`event\|userId`) | باکس خروجیِ اتفاق‌ها (PR5)؛ بعد از زهکشی پاک می‌شود و TTL شش‌ساعته دارد |
 | `push_automation_runs/<id>` | id | تاریخچه اجرا (evaluated / sent / skipped به تفکیک دلیل / failed / error) |
 | `push_automation_text_revs/<key>/<version>` | — | نسخه‌های متن و نحوه ارسال، برای ویرایش‌های بعدی |
 | `notification_prefs/<userId>` | userId | انتخاب کاربر: دسته‌های خاموش‌شده، ساعت دلخواه، opt-inها |
@@ -196,9 +197,60 @@
 `expectedVersion`، بلوک گام نامعتبر، ۴۰۹، خطای فیلد سرور روی input، dry-run، test-send، درگاه
 فقط‌خواندنی، حذف با تأیید، ساخت خاموش).
 
-## ۸) چه چیزی هنوز انجام نشده
+## ۸) رویدادها و باکس خروجی (PR5)
 
-Trace کاربر و تاریخچه کامل اجرا در UI (PR6 — مسیرهای API‌شان از همین حالا هست:
-`/trace/:userId` و `/runs`)، hookهای اتفاق در `learning.ts` / `submitAttempt` /
-`rewards.ts` / `users.ts` / `content.ts` (PR5) و مستندات فعال‌سازی تدریجی (PR7). تا پیش از PR5،
-سناریوهای `event` تنها با `fireAutomationEvent` (که از موتور در دسترس است) یا اجرای دستی فعال می‌شوند.
+تنها مسیر اتصال کد کسب‌وکار به موتور، `functions/src/services/push-automation-events.ts` است؛ هیچ
+سرویسی مستقیم `fireAutomationEvent` را صدا نمی‌زند. چرخه: ثبت اتفاق → یک سطر کوچک در
+`push_automation_events/<روزِ تهران>/<hash(event|userId)>` (`emitAutomationEvent`) → زهکشی یا بلافاصله
+بعد از پاسخ (`cloudflare-worker.ts` → `backgroundJob`) یا در کران ۱۵ دقیقه‌ای (`cron.ts` → شغل
+`push-automations`، پیش از `drainQueue`) → `fireAutomationEvent`.
+
+| ویژگی | رفتار | کجا |
+| --- | --- | --- |
+| هزینه در وضعیت پیش‌فرض | اگر برای آن اتفاق قاعده‌ی روشنی وجود نداشته باشد، ثبت اتفاق **هیچ** نوشتنی ندارد: `listeningEvents` مجموعه شنونده‌ها را از `loadRunnable` می‌خواند و ۳۰ ثانیه به‌ازای `Deps` کش می‌کند. موتورِ متوقف‌شده هم «شنونده‌ای نیست» برمی‌گرداند، پس در دوران توقف چیزی صف نمی‌شود. | `push-automation-events.ts → listeningEvents` |
+| ایدمپوتنسی (§4.2) | کلید سطر `hash(event|userId)` داخل شارد روز است و با `store.create` نوشته می‌شود؛ تکرارِ همان کاربر و همان اتفاق در همان روز با `StoreConflictError` بی‌صدا رد می‌شود (اولین مقدار متغیرها برنده است، مثل کلید idempotency). | `emitAutomationEvent` |
+| مصرف یک‌بار | سطر چه به ارسال برسد چه به یک ردّ مستند، پاک می‌شود؛ «cap» یا «سکوت شب» نباید ساعت بعد همان یادآوری را برگرداند. | `drainAutomationEvents` |
+| سقف‌ها | هر زهکشی حداکثر `EVENTS_PER_RUN = 30` سطر جلو می‌برد و برای هر کاربر `EVENTS_PER_USER_RUN = 4` تا؛ باقی‌مانده به تیک بعدی می‌ماند (کران تکرار می‌کند، پس چیزی گم نمی‌شود). | `drainAutomationEvents` |
+| انقضا | یک اتفاق بعد از شش ساعت تاریخ می‌خورد؛ یادآوریِ سه‌ساعته‌ای که کسی لازم نداشت، دیگر نباید برود. | `EVENT_TTL_MS` |
+| بدون استثنا | نه `emitAutomationEvent` و نه `drainAutomationEvents` به فراخوان خطا نمی‌دهند؛ خرابی در `automation_event_failed` ثبت می‌شود. | همان فایل |
+| متغرها | `fireAutomationEvent` یک‌بار برای هر اتفاق `eventVars` را اجرا می‌کند (فقط اگر متن یکی از قواعد واقعاً `{…}` داشته باشد) و مقدارهای ارسالی فراخوان روی آن سوار می‌شود؛ به همین دلیل جای hook لازم نیست `learning-state` را import کند. این مقدارها داخل سطر صفِ `event_delay` منجمد می‌شوند، چون `drainQueue` همان‌ها را می‌خواند. | `push-automation-engine.ts → eventVars` |
+
+اتفاق‌هایی که حالا ثبت می‌شوند:
+
+| اتفاق | کجا ثبت می‌شود | قواعد مصرف‌کننده |
+| --- | --- | --- |
+| `attempt.started` | `learning.ts → startAttempt`، فقط برای تلاش تازه (resume تایمر را عقب نمی‌اندازد) | `quiz_abandoned` (تأخیر ۳۰ دقیقه) |
+| `quiz.passed` | `learning.ts → submitAttempt`، شاخه قبولی و فقط `outcome.fresh` | — (قالب `quiz_passed` دروازه است) |
+| `quiz.failed` / `quiz.failed_twice` | همان‌جا در شاخه ردّ؛ `twice` وقتی `attempt.attemptNumber >= 2` | `quiz_failed_nudge` (تأخیر ۱۲۰ دقیقه) / `two_fails_mentor` |
+| `section.completed` | `learning.ts → recordProgressInner` داخل `step('section_completed_event')`؛ `sectionId` هم می‌رود چون `stillValid()` پیش از ارسال دوباره چک می‌کند | `section_ready_quiz` (تأخیر ۳۰ دقیقه) |
+| `package.completed` | `learning.ts → onPackageCompleted`، درست بعد از ساخته‌شدن رکورد تکمیل (پس یک‌بار به‌ازای هر بسته) | `first_course_done` (`sendOnce` + ۳۶۵ روز) |
+| `package.updated` | `content.ts → updatePackage` وقتی بسته منتشرشده است و `title`/`description` عوض شده (نه هر بار ذخیره فرم) | `package_updated` — فقط برای کسانی که در همان بسته پیشرفت دارند (`packageLearnerIds`)؛ مخاطب سطر `role: marketer` است که در این محصول همان «کارآموز» است |
+
+عمداً hook نشده‌اند: `user.registered`، `assignment.created`، `badge.earned`، `retake.*`،
+`manager.message`، `deadline.*` و `escalation` — این‌ها دروازه‌ی `templateKey` هستند (متن در تب
+«قالب‌های اعلان» می‌ماند و `fireAutomationEvent` دروازه‌ها را اصلاً بررسی نمی‌کند)، پس ثبت‌شان فقط
+سطر بی‌مصرف تولید می‌کرد. `team.member_joined` هم تا تعیین تکلیف متنش نوشته نمی‌شود: `{name}` در پیام
+آن به مدیر باید اسم عضو تازه باشد، ولی `resolveVars` اسم خودِ گیرنده را می‌دهد.
+
+`supersedes` از قبل وصل بود (`push-automation-governor.ts → templateGate` و
+`notify.ts → notifyTemplate`؛ حالت `superseded` فقط `push: false` می‌کند و پیام داخل‌اپ نگه داشته
+می‌شود — §4.5). بررسی `DEFAULT_TEMPLATES` نشان می‌دهد تنها قالبِ `push: true` که یک سناریوی غیردروازه
+جای آن را می‌گیرد `reminder` است و هر چهار سطر `inactive_*` همان را اعلام کرده‌اند؛ برای بقیه (مثل
+`quiz_failed`) خودِ قالب `push: false` دارد، پس mapping تازه‌ای اضافه نشد.
+
+`AUTOMATION_EVENT_PATH` سه مسیر `POST /v1/me/…` را می‌شناسد. ویرایش بسته (`PATCH`) عمداً بیرون فهرست
+است: `backgroundJob` فقط POST را اجرا می‌کند و یک یادآوری «محتوا به‌روز شد» با حداکثر پانزده دقیقه
+تأخیر فرقی نمی‌کند. تست `the routes that emit are the routes the Worker drains after` روی منبع چک
+می‌کند این دو فهرست از هم جدا نشوند.
+
+تست‌ها: `functions/test/push-automation-events.test.ts` (۱۸ تست: شنونده‌ها، صف‌نشدن در حالت خاموش یا
+متوقف، ایدمپوتنسی، مصرف یک‌باره، انقضا، سقف‌ها، resolve متغرها، و یک submit واقعی که سطر
+`quiz_failed_nudge` را در صف همان روز می‌اندازد).
+
+## ۹) چه چیزی هنوز انجام نشده
+
+Trace کاربر و تاریخچه کامل اجرا در UI (PR6 — مسیرهای API‌شان از همین حالا هست: `/trace/:userId` و
+`/runs`) و مستندات فعال‌سازی تدریجی (PR7). سناریوهای `event` از PR5 عادی کار می‌کنند؛ برای فعال‌سازی
+کلیدشان را یک‌بار در پنل روشن کنید و اگر خواستید همان لحظه بررسی شود، «ارسال آزمایشی»
+(`POST …/test-send`) را به‌کار بگیرید — اجرای دستیِ «اجرای الان» عمداً باکس خروجی را خالی نمی‌کند،
+چون فقط قواعد زمان‌بندی‌شده را مربوط می‌داند.

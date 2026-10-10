@@ -602,6 +602,34 @@ export interface EventResult {
   skipped: number;
 }
 
+/** A rule only pays for variable resolution if its wording actually contains a `{placeholder}`. */
+function usesVariables(a: PushAutomation): boolean {
+  return /\{[a-zA-Z]/.test(`${a.message.title} ${a.message.body}`);
+}
+
+/**
+ * The variables an event handler cannot know: package title, next item, streak. A hook site passes
+ * only what it alone has seen (a score, a section id) and the engine fills the rest from the
+ * learner's own state — otherwise every new hook would need to import `learning-state`.
+ */
+export async function eventVars(
+  d: Deps,
+  user: Doc<User>,
+  a?: PushAutomation,
+): Promise<Record<string, string | number>> {
+  try {
+    const ctx = await buildSweepContext(d, [user], { health: a?.category === 'health' });
+    return resolveVars(
+      user,
+      ctx.packagesByUser.get(user.id) ?? [],
+      ctx.nextByUser.get(user.id) ?? null,
+      a ? factsForRule(a, ctx, user) : (ctx.facts.get(user.id) ?? {}),
+    );
+  } catch {
+    return {};
+  }
+}
+
 /**
  * The one entry point for code-side events (quiz submit, package publish, …). Cheap by construction:
  * two reads (settings + catalogue), then at most one write per matching rule; `event_delay` rules only
@@ -621,17 +649,25 @@ export async function fireAutomationEvent(
     const { automations } = await loadRunnable(d);
     const nowMs = d.clock().getTime();
     const day = dayKey(new Date(nowMs), (await getPolicy(d)).timezone);
-    for (const a of automations) {
+    const matching = automations.filter((a) => a.trigger.event === event && !isSystemGate(a));
+    if (!matching.length) return out;
+    const user = await d.store.get<User>(`users/${userId}`);
+    if (!user) {
+      out.skipped += matching.length; // a deleted account is not an error, and not a send
+      return out;
+    }
+    // Resolved once per event, not per rule: the learner's state is the same for all of them, and a
+    // delayed rule needs the values inside its queue document (see `drainQueue`).
+    const base = matching.some(usesVariables) ? await eventVars(d, user as Doc<User>) : {};
+    const allVars = { ...base, ...vars };
+    for (const a of matching) {
       const t = a.trigger;
-      if (t.event !== event || isSystemGate(a)) continue;
       if (t.kind === 'event') {
         out.matched++;
-        const user = await d.store.get<User>(`users/${userId}`);
-        if (!user) {
-          out.skipped++;
-          continue;
-        }
-        const r = await sendAutomation(d, a, user as Doc<User>, vars, { settings, kind: 'event' });
+        const r = await sendAutomation(d, a, user as Doc<User>, allVars, {
+          settings,
+          kind: 'event',
+        });
         if (r.sent) out.sent++;
         else out.skipped++;
       } else if (t.kind === 'event_delay') {
@@ -643,7 +679,7 @@ export async function fireAutomationEvent(
           key: a.key,
           userId,
           event,
-          vars,
+          vars: allVars,
           dueAt: new Date(dueAt).toISOString(),
           createdAt: new Date(nowMs).toISOString(),
           status: 'pending',

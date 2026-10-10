@@ -1,6 +1,7 @@
 import { D1Store } from './store/d1';
 import { flushDeferredPush } from './services/notify';
 import { runPushCampaigns } from './services/push-campaigns';
+import { AUTOMATION_EVENT_PATH, drainAutomationEvents } from './services/push-automation-events';
 import {
   buildCloudflareDeps,
   createFetchHandler,
@@ -167,6 +168,10 @@ function logFailure(
 function backgroundJob(path: string): ((d: Deps) => Promise<unknown>) | null {
   if (/^\/v1\/admin\/push-campaigns\/[^/]+\/send$/.test(path)) return runPushCampaigns;
   if (path === '/v1/admin/notifications/send') return flushDeferredPush;
+  // Automation events queued by this request. The learner-facing routes in `AUTOMATION_EVENT_PATH`
+  // are the ones where «right now» matters (a nudge two hours after a failed quiz cannot wait for
+  // the next cron tick); the 15-minute job is only the guarantee that nothing is lost.
+  if (AUTOMATION_EVENT_PATH.test(path)) return drainAutomationEvents;
   return null;
 }
 

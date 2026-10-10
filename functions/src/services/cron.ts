@@ -7,6 +7,7 @@ import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
 import { runPushCampaigns } from './push-campaigns';
 import { runPushAutomations } from './push-automation-engine';
+import { drainAutomationEvents } from './push-automation-events';
 import { recordCronRun } from './system-health';
 import type { Deps } from './context';
 
@@ -76,7 +77,14 @@ export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>
   // The automation engine. Deliberately FIRST in the 15-minute group: a message the quiet-hours rule
   // defers is written as `pushStatus: 'deferred'` and `flush-push` (right after it) can pick it up in
   // the same run, so a 10:00 nudge never waits an extra 15 minutes.
-  'push-automations': (d, o) => runPushAutomations(d, { deadlineAtMs: o?.deadlineAtMs ?? null }),
+  'push-automations': async (d, o) => {
+    // Outbox first: an event recorded during the last 15 minutes becomes a notification (or a
+    // queued follow-up) before the sweeps run, so a push deferred by quiet hours can still be
+    // flushed by `flush-push` in this same tick.
+    const events = await drainAutomationEvents(d);
+    const run = await runPushAutomations(d, { deadlineAtMs: o?.deadlineAtMs ?? null });
+    return { ...run, events };
+  },
 };
 
 export const JOB_NAMES = Object.keys(JOBS) as JobName[];

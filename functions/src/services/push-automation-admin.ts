@@ -54,6 +54,7 @@ import { AUTOMATION_PATH_VARS, AUTOMATION_VAR_NAMES } from './push-automation-ca
 import {
   buildSweepContext,
   evaluateSweep,
+  eventVars,
   factsForRule,
   sendAutomation,
   resolveVars,
@@ -726,17 +727,7 @@ async function testVars(
   a: PushAutomation,
   user: Doc<User>,
 ): Promise<Record<string, string | number>> {
-  try {
-    const ctx = await buildSweepContext(d, [user], { health: a.category === 'health' });
-    return resolveVars(
-      user,
-      ctx.packagesByUser.get(user.id) ?? [],
-      ctx.nextByUser.get(user.id) ?? null,
-      factsForRule(a, ctx, user),
-    );
-  } catch {
-    return {};
-  }
+  return eventVars(d, user, a);
 }
 
 export interface RunRow extends PushAutomationRun {

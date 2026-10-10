@@ -376,6 +376,9 @@ export const packageSchema = z.object({
   estimatedMinutes: z.number().int().min(0).max(1000).optional(),
   coverUrl: z.string().url().max(500).nullable().optional(),
 });
+/** Learner-visible wording of a package: the fields a «محتوا به‌روز شد» nudge is about. */
+const CONTENT_FIELDS = ['title', 'description'] as const;
+
 export const packagePatchSchema = packageSchema.partial();
 
 async function validateLinks(
@@ -501,6 +504,18 @@ export async function updatePackage(
   await d.store.update(`packages/${id}`, patch);
   await audit(d, actor, 'package.updated', 'packages', id, pkg, patch);
   await track(d, 'admin_package_updated', actor.id, { packageId: id });
+  // Prompt §5.3 «محتوای یک آموزش به‌روز شد»: the people who already started the package, and only for
+  // a change they would actually notice — not for every save of the edit form. Lazy `import()` like
+  // the `assignments` call below, because this file is reached from the engine's own dependency chain.
+  if (pkg.status === 'published' && CONTENT_FIELDS.some((f) => patch[f] !== undefined)) {
+    const { emitAutomationEventForUsers, isListening, packageLearnerIds } =
+      await import('./push-automation-events');
+    if (await isListening(d, 'package.updated'))
+      await emitAutomationEventForUsers(d, 'package.updated', await packageLearnerIds(d, id), {
+        title: (patch.title as string | undefined) ?? pkg.title,
+        packageId: id,
+      });
+  }
   return { ...pkg, ...patch, id };
 }
 
