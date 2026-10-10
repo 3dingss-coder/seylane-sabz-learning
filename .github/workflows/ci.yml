@@ -6,16 +6,18 @@ on:
     branches: [main, dev]
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # PRs: a new push cancels the superseded run. Pushes to main/dev get their own group per
+  # commit so a quick follow-up merge no longer cancels the previous commit's checks.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
     name: Lint · Typecheck · Unit tests · Cloudflare Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -34,11 +36,11 @@ jobs:
 
   e2e:
     name: E2E (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: quality
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -47,7 +49,7 @@ jobs:
         working-directory: apps/web
       - run: npm run test:e2e
         working-directory: apps/web
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: playwright-report
@@ -56,11 +58,11 @@ jobs:
 
   lighthouse:
     name: Lighthouse (≥ 90, LCP < 3s)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: quality
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -90,7 +92,7 @@ jobs:
           export CHROME_PATH="$(command -v google-chrome || command -v google-chrome-stable)"
           echo "Chrome: $CHROME_PATH ($("$CHROME_PATH" --version))"
           npx -y -p @lhci/cli@0.15 -p puppeteer-core@24 lhci autorun --config=./lighthouserc.cjs
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: lighthouse-report

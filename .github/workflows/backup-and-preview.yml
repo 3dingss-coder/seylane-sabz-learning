@@ -9,10 +9,10 @@ permissions:
 jobs:
   backup:
     name: Export production D1 and record Time Travel bookmark
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Export production D1
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -25,7 +25,7 @@ jobs:
           date -u +%Y-%m-%dT%H:%M:%SZ > backup-artifact/created-at-${GITHUB_RUN_ID}.txt
           sha256sum backup-artifact/seylane-sabz-db-${GITHUB_RUN_ID}.sql > backup-artifact/sha256-${GITHUB_RUN_ID}.txt
       - name: Upload protected backup artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: seylane-sabz-db-backup-${{ github.run_id }}
           path: backup-artifact/
