@@ -7,7 +7,9 @@ const script = process.env.CF_SCRIPT || 'seylane-sabz-learning';
 const dbId = process.env.CF_D1_ID || 'f7a2ed30-00f4-42e6-b26f-343c24fe1853';
 const hours = Number(process.env.REPORT_HOURS || 24);
 if (!token || !account) {
-  console.log('CF_API_TOKEN / CF_ACCOUNT_ID not set; nothing to report.');
+  console.log(
+    `Secrets missing in this run: CF_API_TOKEN ${token ? 'set' : 'MISSING'}, CF_ACCOUNT_ID ${account ? 'set' : 'MISSING'}. Create them under Settings > Secrets and variables > Actions > Repository secrets (exact names, not Environment/Dependabot/Codespaces secrets).`,
+  );
   process.exit(0);
 }
 const to = new Date();
