@@ -388,8 +388,22 @@ describe('engine: one send per window, with reasons', () => {
     expect(second.sweeps[0]?.sent).toBe(0);
     expect(ctx.deps.push.sent).toHaveLength(1);
     const trace = await traceUser(ctx.deps, marketer.id);
-    expect(trace.decisions.some((x) => x.reason === 'duplicate')).toBe(true);
-    expect(trace.decisions.find((x) => x.reason === 'duplicate')?.label).toContain('پنجره');
+    // The reason that refuses first is the rule's own spacing. That is a consequence of persisting the
+    // counters a sweep advances: `delivery.cooldownMs` and the day caps used to bind only *inside* one
+    // run (the map was thrown away with it), which made a per-rule cadence unenforceable across the
+    // windows of a day. The refusal is still recorded, in Persian, for the same user.
+    const refusal = trace.decisions.find((x) => x.reason === 'cooldown');
+    expect(refusal?.label).toContain('فاصله تکرار');
+    // …and the window itself is claimed, which is the mechanism that does not depend on which reason
+    // the gate happens to reach first: one send per (rule, user, window), for any rule.
+    const auto = (await store().get<PushAutomation>(
+      'push_automations/inactive_1d',
+    )) as PushAutomation;
+    const w = await windowKeyFor(ctx.deps, auto, auto.delivery.cooldownMs ?? 0);
+    expect(await isClaimed(ctx.deps, 'inactive_1d', marketer.id, w)).toBe(true);
+    const again = await runPushAutomations(ctx.deps, { force: true });
+    expect(again.sweeps[0]?.sent).toBe(0);
+    expect(ctx.deps.push.sent).toHaveLength(1);
   });
 
   it('the inactivity ladder sends only the highest matched step of one episode', async () => {

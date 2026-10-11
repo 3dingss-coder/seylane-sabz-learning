@@ -405,7 +405,7 @@ export async function sendAutomation(
           hasDevice: hasDeviceFor(a, user, tokens),
           ignoreGap: a.delivery.priority === 'urgent',
         });
-  if (!decision.ok) return await skip(decision.reason);
+  if (!decision.ok) return await skip(decision.reason, decision.detail);
   if (ctx.dry) return { sent: true, windowKey: 'preview' };
 
   const opts: NotifyOptions = {
@@ -435,8 +435,12 @@ export async function sendAutomation(
   if (!ctx.test) {
     const now = d.clock().toISOString();
     const next = advanceCounter(counter, a.key, true, counter.day, counter.week, now);
+    // Both, on purpose. The in-memory map keeps *this* run consistent (a second rule in the same sweep
+    // must see the send the first one just did); the write is what makes the *next* run see it. Without
+    // the write a scheduled rule's day counters only ever bound a single run, so a per-rule repeat
+    // policy — or the inherited cap — could not be enforced across the windows of a day.
     if (ctx.counters) ctx.counters.set(user.id, next);
-    else await writeCounter(d, user.id, next);
+    await writeCounter(d, user.id, next);
     await track(d, 'automation_sent', user.id, { key: a.key, kind: ctx.kind ?? 'sweep' });
   }
   await logDecision(d, user.id, {

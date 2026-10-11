@@ -200,12 +200,15 @@ group/leaf. خروجی `nodes` (سقف ۴۰ سطر) در همان `push_automati
 
 ## ۷) مهاجرت (بدون روشن‌کردن چیزی، بدون نوشتن اجباری)
 
-۱. **سازگار در خواندن**: `withDefaults(a)` در `loadAutomations`، سطر v1 را به v2 می‌برد —
-   `when = conditionsToExpr(trigger.conditions)` (فقط برای `kind:'condition'` مثل قبل)،
-   `audience.filter = null`، `steps = [notify(message)]`،
-   `repeatPolicy = { scope:'window', maxPerDay: a.delivery.maxPerUserPerDay ?? settings.maxPerUserPerDay,
-   minGapMs: settings.minGapMs, dedupeKey:'rule' }`. یعنی همان رفتار، با مدل تازه؛ هیچ سطر جدیدی
-   نوشته نمی‌شود.
+۱. **سازگار در خواندن** (انجام‌شده): `withDefaults(a)` در `loadAutomations` شکلِ سطر را به مدل تازه
+   می‌برد، بی‌آنکه چیزی بنویسد — `schemaVersion: 1`، `when: a.when ?? null`، `audience.filter ?? null`،
+   `repeatPolicy ?? null`. عمداً `trigger.conditions` به `when` **کپی نمی‌شود**: `matchesTrigger` همان
+   فهرست را برای `kind:'condition'` می‌خواند، و بازنویسی ضمنی‌اش یک تغییر رفتارِ لباس‌پوشیده بود (و
+   برای `event`/`schedule` یعنی شرط‌هایی که هیچ‌وقت اعمال نمی‌شدند ناگهان اعمال می‌شوند). آنچه اعمال
+   نمی‌شود گزارش می‌شود: `deadConditions(a)`. سیاست تکرار v1 هم حدس نیست —
+   `policyFromLegacySettings(settings)` همان `perDay`/`perWeek`/فاصله‌ی سراسری را می‌سازد و
+   `legacyParity()` همین را در تست می‌گیرد. تبدیل واقعیِ یک قاعده به درخت `when` کار
+   `POST …/migrate` است: قاعده‌به‌قاعده، با `dryRun`، و بدون تغییر `enabled`.
 ۲. `POST /migrate {dryRun:true}`: گزارش می‌دهد کدام کلیدها بازنویسی می‌شوند و چه چیزی در مدل‌شان
    عوض می‌شود (و اینکه هیچ `enabled` ای تغییر نمی‌کند). `dryRun:false` فقط با سوپرادمین.
 ۳. **هیچ migration SQL لازم نیست** و هیچ کلیدی حذف/ریست نمی‌شود؛ claim/شمارنده/audit/decisions
@@ -264,6 +267,12 @@ group/leaf. خروجی `nodes` (سقف ۴۰ سطر) در همان `push_automati
 | D3 | `RepeatPolicy` و برداشتن سقف تحمیلی از `gate` (settings → پیش‌فرض)، ادعای «تکرار مجاز ≠ retry» | تست ۱۵ ارسال/روز + دو تست تکرار |
 | D4 | `steps`: notify/wait/stop، صف گام‌ها، `recheckWhen`، لغو، claim سطح گام، stale-retry | تست چرخه‌ی کامل لغو/ادامه |
 | D5 | پنل: RuleTreeEditor، AudienceFilterEditor، StepsEditor، RepeatPolicyEditor، برچسب ظرفیت، duplicate/archive/rollback، dry-run با ردپا | تست‌های کامپوننت (render + تعامل) |
+**وضعیت اجرا (همین PR، به ترتیبِ جدول):** D1 ✓ `c1cbf27` (هسته ارزیابی + رجیستری‌ها + سیاست تکرار،
+۳۲ تست) · D2 ✓ `b5a1257` (اتصال `when`/فیلتر مخاطب/ردپا به موتور و API، ۲۱ تست روی مسیر واقعی) ·
+D3 ✓ (سیاست تکرار در `gate` + شمارنده سطح قاعده + نوشتن شمارنده sweep) · D4 (گام‌ها/صفِ گام‌ها) و
+D5 (ویرایشگرهای پنل) و D6 (`/validate`، `/pending-steps`، `/migrate`) **انجام نشده‌اند**؛ گزارش پایانی
+هر کدام را صریح «انجام‌نشده» اعلام می‌کند، نه «در پنل هست ولی اجرا نمی‌شود».
+
 | D6 | API تکمیلی (`validate`, `pending-steps`, cancel, `migrate`), سند API/runbook، migration واقعی با dryRun | به‌روزرسانی §۳/§۱۰ سند API |
 
 **خارج از این طرح (عمداً، و در گزارش پایانی هم «انجام‌نشده» اعلام می‌شود):** اقدام‌های غیرازاعلان

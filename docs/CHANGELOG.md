@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-10-10 — موتور قاعده‌ی پویا: لایه‌های D1 تا D3 (هسته‌ی ارزیابی، اتصال به موتور، سیاست تکرار)
+
+- سه ماژول تازه در `functions/src/services/automation/`: `fields.ts` (رجیستری فیلدها — ۱۳ فکت
+  یادگیری، ۱۲ فیلد خودِ کاربر، ۳ فیلد رویداد؛ هر فیلد یک `kind` و دو پرچم `sweep`/`audience` دارد که
+  هزینه و جای مجاز استفاده را تعیین می‌کند)، `operators.ts` (۲۱ عملگر type-aware با `evaluate` +
+  `explain` + `validate`)، و `expr.ts` (`RuleNode`: گروه‌های `and`/`or`/`not` روی برگه‌های type-checked،
+  بودجه‌های `RULE_LIMITS`، `validateRuleExpr`، `evaluateRuleExpr` که `truncated` و ردپای «چرا» برمی‌گرداند).
+  افزودن فیلد/عملگر تنها با `registerField`/`registerOperator` ممکن است؛ موتور هیچ فهرست خصوصی‌ای از
+  سناریوها ندارد و هیچ‌جا `eval` یا کدِ ذخیره‌شده‌ای اجرا نمی‌شود.
+- **سقف «۶ شرط» رفت**: قاعده‌ی v2 درختش را در `when` می‌آورد و تنها محدودیتش بودجه‌ی ارزیابی است
+  (۶۴ گره / ۶ سطح / ۴۸ شرط). `.max(6)` روی `trigger.conditions` مانده و فقط نگهبانِ شکلِ قدیمی است.
+- `repeat.ts`: `RepeatPolicy` (فاصله، سقف روز/هفته/ماه، «یک‌بار برای همین رخداد»، «چندبار در روز»،
+  «یک‌بار در عمر»، override هر قاعده و هر گام) + `decideRepeat` خالص +
+  `policyFromLegacySettings`/`legacyParity` برای مهاجرت.
+- موتور (D2): `ruleMatch` = ماشینه‌ی روشن‌کننده ∧ درخت `when` ∧ فیلتر مخاطب، با `why`/`lines`/`truncated`.
+  `evaluateSweep` در حالت preview برای هر کاربر رد/قبول را گزارش می‌کند و `reviewed` را از `evaluated`
+  جدا نگه می‌دارد. `sendAutomation` فیلتر مخاطب را **لحظه‌ی تحویل** دوباره می‌سنجد (تست: کاربر بین
+  صف‌شدن و تحویل از تیم می‌رود ⇒ ارسال نمی‌شود) و جمله‌ی سیاست را در لاگ ردّ می‌نویسد.
+- API: `POST`/`PATCH` حالا `when`، `audience.filter` و `repeatPolicy` را می‌پذیرند و هر درخت را پیش از
+  ذخیره مقابل رجیستری می‌سنجند (۴۰۰ با مسیرِ گره‌ی بد). `GET …/catalog` رجیستری‌ها، بودجه‌ها و
+  `eventProducers`/`unproducedEvents` را می‌دهد؛ `detail` هم `when`، `policySource`، `whenSummary` و
+  `deadConditions`. فرمت فایل export به `seylane.push-automation/2` رفت تا سه فیلد موتور قاعده در فایل
+  بمانند (یک قاعده بی‌شرط‌هایش در مقصد قاعده‌ی دیگری می‌شد).
+- D3: `gate` برای قاعده‌ای که `repeatPolicy` دارد سه عدد سراسری را **نمی‌خواند**؛ شمارنده‌ی سطح قاعده
+  (`UserCounter.perRule`: روز/هفته/ماه/کل/آخرین ارسال) اضافه شد و شمارنده در مسیر sweep هم نوشتن می‌شود —
+  همان «پیداِ سومِ مرور PR #84» که باز مانده بود. دست‌نخورده و تست‌شده: کلید توقف، `enabled`،
+  `requiresFeature`، وضعیت حساب، انتخاب خودِ کاربر (mute/opt-in)، متغیر ناتمام، نبودِ دستگاه معتبر،
+  ساعت سکوت و ضدتکرار هر پنجره. `PRODUCED_EVENTS` + تستِ پیمایش src هم تضمین می‌کند هیچ اتفاقی که
+  تولیدکننده ندارد «در اجرا پشتیبانی‌شده» اعلام نشود.
+- تست: `rule-eval.test.ts` (۳۲) و `automation-rule-engine.test.ts` (۲۱، روی مسیر واقعی HTTP → فروشگاه →
+  sweep → نوتیفیکیشن، با «۱۲ ارسال در روز برای یک کاربر» و «سیاست ≠ اجازه‌ی تکرارِ همان ارسال»).
+  functions ۴۷ فایل / ۴۷۰ تست و web ۳۴ / ۲۳۱ ✓؛ lint/typecheck/format/build/`check:indexes` (۱۰۲ شکل،
+  ۰ کمبود) ✓. یک ادعای قدیمی در `push-automation.test.ts` («دلیلِ ردّ دوم duplicate است») با دلیل
+  `cooldown` بازنویسی شد — چون فاصله‌ی خودِ قاعده از اجرای قبلی آگاه شده است — و ادعای claim مستقل و
+  قوی‌تر نگه داشته شد (`isClaimed`).
+- **انجام‌نشده، صریح:** گام‌های چندمرحله‌ای (`steps` با wait/branch/cancel و لغو گام‌های معلق)،
+  ویرایشگرهای پنل (`RuleTreeEditor`/`AudienceFilterEditor`/`StepsEditor`/`RepeatPolicyEditor`)،
+  «تکثیر/بایگانی/بازگردانی نسخه» و endpoint های `validate`/`pending-steps`/`migrate`. تا ساخته‌شدن
+  آن‌ها ساختن درخت از UI ممکن نیست و فقط API آن را می‌پذیرد؛ هیچ قاعده‌ای هم در پروداکشن روشن نشده است.
+
 ## 2026-10-10 — مرور PR #84: کلید توقف و ساعت سکوت، بستن دو مسیر دورزدن (PR8.1)
 
 - **`sendAutomation`** (push-automation-engine.ts): `settings.paused` حالا **پیش از** bypassهای

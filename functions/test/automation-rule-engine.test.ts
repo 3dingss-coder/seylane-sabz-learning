@@ -6,6 +6,8 @@ import { seedCatalog } from '../src/services/push-automation-admin';
 import { PRODUCED_EVENTS } from '../src/services/push-automation-events';
 import { EVENT_LABELS } from '../src/services/push-automation-catalog';
 import { fireAutomationEvent, runPushAutomations } from '../src/services/push-automation-engine';
+import { recentDecisions, writePrefs } from '../src/services/push-automation-governor';
+import type { RepeatPolicy } from '../src/domain/types';
 import { deadConditions, repeatPolicyOf, withDefaults } from '../src/services/automation/migrate';
 import type { PushAutomation, RuleNode } from '../src/domain/types';
 
@@ -82,6 +84,7 @@ async function makeRule(
     },
     when: over.when ?? null,
     ...(over.repeatPolicy ? { repeatPolicy: over.repeatPolicy } : {}),
+    ...(over.delivery ? { delivery: over.delivery } : {}),
   });
   expect(r.status, JSON.stringify(r.body)).toBe(201);
   return key;
@@ -413,6 +416,180 @@ describe('migration leaves v1 rows alone', () => {
     });
     // An event rule that carried conditions: the engine never read them, so they are reported, not obeyed.
     expect(deadConditions(withWhen)).toHaveLength(1);
+  });
+});
+
+describe('the rule’s own repeat policy replaces the imposed caps', () => {
+  const minutes = (n: number) => n * 60_000;
+  const policy = (over: Partial<RepeatPolicy> = {}): RepeatPolicy => ({
+    minIntervalMs: 60_000,
+    perDay: 12,
+    perWeek: 0,
+    perMonth: 0,
+    oncePerEventInstance: false,
+    allowSameDayMultiple: true,
+    onceInLivespan: false,
+    ...over,
+  });
+  /** The tree every one of these rules uses: true for the fixture user, so only cadence decides. */
+  const always = () =>
+    group('and', [
+      leaf('activePackages', 'lte', 0),
+      group('not', [leaf('startedEver', 'isTrue', null)]),
+    ]);
+  const rollingWindow = {
+    priority: 'high' as const,
+    push: true,
+    inApp: true,
+    respectQuietHours: true,
+    // A one-minute window: the idempotency claim dedupes per window, so this is what lets the same
+    // rule reach the same user again *as a new send* rather than as a duplicate of one.
+    cooldownMs: 60_000,
+  };
+  const sweep = async () => {
+    await runPushAutomations(ctx.deps, { force: true });
+  };
+
+  it('sends twelve times in one day to one user, then the policy itself says stop', async () => {
+    const key = await makeRule({
+      key: 'pol_12',
+      trigger: { kind: 'schedule_daily', time: '10:00' },
+      when: always(),
+      repeatPolicy: policy(),
+      delivery: rollingWindow,
+    });
+    await enable(key);
+    for (let i = 0; i < 12; i++) {
+      ctx.advance(minutes(5));
+      await sweep();
+    }
+    expect(await notesFor(marketer.id)).toHaveLength(12);
+
+    // The very same minute again: refused by the claim, not by the policy — a repetition the policy
+    // allows is never a licence to re-deliver one send.
+    await sweep();
+    expect(await notesFor(marketer.id)).toHaveLength(12);
+
+    ctx.advance(minutes(5));
+    await sweep();
+    expect(await notesFor(marketer.id)).toHaveLength(12);
+    // Read through the service, not the HTTP trace route: this test has moved the clock past an hour,
+    // and a test access token is shorter-lived than that.
+    const trace = await recentDecisions(ctx.deps, marketer.id, 40);
+    expect(JSON.stringify(trace)).toContain('سقف روزانه');
+  });
+
+  it('three rules with perDay 1 each do not eat one another’s allowance', async () => {
+    for (const k of ['pol_a', 'pol_b', 'pol_c']) {
+      await makeRule({
+        key: k,
+        trigger: { kind: 'schedule_daily', time: '10:00' },
+        when: always(),
+        repeatPolicy: policy({ perDay: 1, minIntervalMs: 0 }),
+        delivery: rollingWindow,
+      });
+      await enable(k);
+    }
+    ctx.advance(minutes(5));
+    await sweep();
+    // The old global cap was two per user per day, so the third of these could not have arrived.
+    expect((await notesFor(marketer.id)).map((n) => n.title).sort()).toEqual([
+      'عنوان pol_a',
+      'عنوان pol_b',
+      'عنوان pol_c',
+    ]);
+    ctx.advance(minutes(5));
+    await sweep();
+    expect(await notesFor(marketer.id)).toHaveLength(3);
+  });
+
+  it('without a policy the inherited caps still bind, exactly as they did before', async () => {
+    const key = await makeRule({
+      key: 'pol_legacy',
+      trigger: { kind: 'schedule_daily', time: '10:00' },
+      when: always(),
+      repeatPolicy: null,
+      delivery: rollingWindow,
+    });
+    await enable(key);
+    for (let i = 0; i < 4; i++) {
+      ctx.advance(minutes(5));
+      await sweep();
+    }
+    // The 4-hour platform gap: the first send goes, the next three are too close.
+    expect(await notesFor(marketer.id)).toHaveLength(1);
+    // Three more sweeps, each past the 4-hour gap, and all of them inside the same Tehran day: the day
+    // rolls at midnight and a rolled counter would be a fresh allowance, not a bug in the cap.
+    for (let i = 0; i < 3; i++) {
+      ctx.advance(4 * 60 * 60_000 + minutes(5));
+      await sweep();
+    }
+    // …and the second one is the last of the day: `maxPerUserPerDay: 2` still governs a rule with no
+    // policy of its own. Migration parity is this assertion, not a promise in a document.
+    expect(await notesFor(marketer.id)).toHaveLength(2);
+  });
+
+  it('`sendOnce`, the kill-switch and the user’s own choice are not caps a policy can raise', async () => {
+    const key = await makeRule({
+      key: 'pol_once',
+      trigger: { kind: 'schedule_daily', time: '10:00' },
+      when: always(),
+      repeatPolicy: policy({ perDay: 12 }),
+      delivery: { ...rollingWindow, sendOnce: true },
+    });
+    await enable(key);
+    for (let i = 0; i < 3; i++) {
+      ctx.advance(minutes(5));
+      await sweep();
+    }
+    expect(await notesFor(marketer.id)).toHaveLength(1);
+
+    await ctx.api(admin.token).post('/v1/admin/push-automations/pause', { paused: true });
+    for (let i = 0; i < 3; i++) {
+      ctx.advance(minutes(5));
+      await sweep();
+    }
+    expect(await notesFor(marketer.id)).toHaveLength(1);
+    await ctx.api(admin.token).post('/v1/admin/push-automations/pause', { paused: false });
+
+    // The user mutes the category: a policy that allows twelve sends does not reach them at all.
+    await writePrefs(ctx.deps, marketer.id, {
+      mutedCategories: ['messages'],
+      preferredHour: null,
+      optIns: {},
+    });
+    for (let i = 0; i < 3; i++) {
+      ctx.advance(minutes(5));
+      await sweep();
+    }
+    expect(await notesFor(marketer.id)).toHaveLength(1);
+  });
+
+  it('a month ceiling and a lifetime switch are measured on the rule’s own counters', async () => {
+    const key = await makeRule({
+      key: 'pol_month',
+      trigger: { kind: 'schedule_daily', time: '10:00' },
+      when: always(),
+      repeatPolicy: policy({ perDay: 0, perMonth: 1 }),
+      delivery: rollingWindow,
+    });
+    await enable(key);
+    ctx.advance(minutes(5));
+    await sweep();
+    expect(await notesFor(marketer.id)).toHaveLength(1);
+    ctx.advance(minutes(5));
+    await sweep();
+    expect(await notesFor(marketer.id)).toHaveLength(1);
+    const trace = await recentDecisions(ctx.deps, marketer.id, 40);
+    expect(JSON.stringify(trace)).toContain('سقف ماهانه');
+
+    const counter = (await store().get<{
+      perRule?: Record<string, { total: number; monthSent: number }>;
+    }>(`push_automation_counters/user/${marketer.id}`)) as {
+      perRule?: Record<string, { total: number; monthSent: number }>;
+    } | null;
+    expect(counter?.perRule?.pol_month?.total).toBe(1);
+    expect(counter?.perRule?.pol_month?.monthSent).toBe(1);
   });
 });
 

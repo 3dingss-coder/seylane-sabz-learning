@@ -17,6 +17,8 @@ import { isCategory, isMutable, PROTECTED_CATEGORIES } from '../domain/notificat
 import { ApiError } from '../http/errors';
 import { AUTOMATION_PATH_VARS } from './push-automation-catalog';
 import { withDefaults } from './automation/migrate';
+import { decideRepeat, type RepeatState } from './automation/repeat';
+import type { RepeatPolicy } from '../domain/types';
 import { audit, getPolicy, type Actor, type Deps } from './context';
 
 /**
@@ -72,6 +74,7 @@ export type SkipReason =
   | 'gap'
   | 'capDay'
   | 'capWeek'
+  | 'capMonth'
   | 'priority'
   | 'duplicate'
   | 'ladder'
@@ -95,6 +98,7 @@ export const SKIP_LABELS: Record<SkipReason, string> = {
   gap: 'حداقل فاصله بین دو پوش کاربر رعایت نشده است',
   capDay: 'سقف روزانه پوش کاربر پر شده است',
   capWeek: 'سقف هفتگی پوش کاربر پر شده است',
+  capMonth: 'سقف ماهانه‌ای که خودِ قاعده گذاشته پر شده است',
   priority: 'اتوماسیون با اولویت بالاتر همان لحظه ارسال شد',
   duplicate: 'این پنجره زمانی قبلاً ارسال شده است',
   ladder: 'پله بالاتر بی‌فعالیتی همان دوره ارسال شده است',
@@ -347,18 +351,56 @@ export interface UserCounter {
   daySent: number;
   week: string;
   weekSent: number;
+  /** Month window (`YYYY-MM` of the Tehran day key), for a policy that caps a month. */
+  month?: string;
+  monthSent?: number;
   lastAt: string | null;
   /** automationKey → ISO time of its last send (cooldown + sendOnce). */
   keys: Record<string, string>;
+  /**
+   * automationKey → its own windows. The global numbers above answer «how many pushes has this *user*
+   * had today», which is what a cap on the platform means; a rule's `repeatPolicy` must answer «how
+   * many times has *this rule* reached this user today», and that is only knowable per rule.
+   */
+  perRule?: Record<string, RuleCounter>;
 }
+
+/** One rule's counters for one user. Rolls on the same Tehran windows as the global ones. */
+export interface RuleCounter {
+  day: string;
+  daySent: number;
+  week: string;
+  weekSent: number;
+  month: string;
+  monthSent: number;
+  total: number;
+  lastAt: string | null;
+}
+
+export const emptyRuleCounter = (day: string, week: string, month: string): RuleCounter => ({
+  day,
+  daySent: 0,
+  week,
+  weekSent: 0,
+  month,
+  monthSent: 0,
+  total: 0,
+  lastAt: null,
+});
+
+/** The month a Tehran day key belongs to (`2026-10-03` → `2026-10`). */
+export const monthOf = (day: string): string => day.slice(0, 7);
 
 const emptyCounter = (day: string, week: string): UserCounter => ({
   day,
   daySent: 0,
   week,
   weekSent: 0,
+  month: monthOf(day),
+  monthSent: 0,
   lastAt: null,
   keys: {},
+  perRule: {},
 });
 
 /** Re-derives today's counters from a stored doc, resetting whatever window has rolled over. */
@@ -368,13 +410,29 @@ export function normalizeCounter(
   week: string,
 ): UserCounter {
   if (!stored) return emptyCounter(day, week);
+  const month = monthOf(day);
+  const perRule: Record<string, RuleCounter> = {};
+  for (const [k, v] of Object.entries(stored.perRule ?? {})) {
+    if (!v) continue;
+    perRule[k] = {
+      ...emptyRuleCounter(day, week, month),
+      daySent: v.day === day ? v.daySent : 0,
+      weekSent: v.week === week ? v.weekSent : 0,
+      monthSent: v.month === month ? v.monthSent : 0,
+      total: v.total ?? 0,
+      lastAt: v.lastAt ?? null,
+    };
+  }
   return {
     day,
     daySent: stored.day === day ? stored.daySent : 0,
     week,
     weekSent: stored.week === week ? stored.weekSent : 0,
+    month,
+    monthSent: stored.month === month ? (stored.monthSent ?? 0) : 0,
     lastAt: stored.lastAt ?? null,
     keys: stored.keys ?? {},
+    perRule,
   };
 }
 
@@ -401,15 +459,8 @@ export async function readCounter(d: Deps, userId: string): Promise<UserCounter>
   const day = dayKey(now, policy.timezone);
   const week = weekKey(now, policy.timezone);
   const stored = await d.store.get<UserCounter>(counterPath(userId));
-  if (!stored) return emptyCounter(day, week);
-  return {
-    day,
-    daySent: stored.day === day ? stored.daySent : 0,
-    week,
-    weekSent: stored.week === week ? stored.weekSent : 0,
-    lastAt: stored.lastAt ?? null,
-    keys: stored.keys ?? {},
-  };
+  // One roll function for both paths, so a per-rule window can never be counted twice in one read.
+  return normalizeCounter(stored ?? null, day, week);
 }
 
 /** `patch = null` records a skip only (no send); otherwise the counters move forward. */
@@ -442,13 +493,44 @@ export function advanceCounter(
     .sort((a, b) => (keys[a] ?? '').localeCompare(keys[b] ?? ''))
     .slice(-24))
     trimmed[k] = keys[k] as string;
+  const month = monthOf(day);
+  const prev = cur.perRule?.[key] ?? emptyRuleCounter(day, week, month);
+  const rolled: RuleCounter = {
+    day,
+    daySent: prev.day === day ? prev.daySent : 0,
+    week,
+    weekSent: prev.week === week ? prev.weekSent : 0,
+    month,
+    monthSent: prev.month === month ? prev.monthSent : 0,
+    total: prev.total ?? 0,
+    lastAt: prev.lastAt ?? null,
+  };
+  // Bounded like `keys`: a per-user doc must not grow with the number of rules ever created. The rule
+  // being written is rebuilt, so no stale entry of it survives the trim.
+  const perRuleAll: Record<string, RuleCounter> = {};
+  const keep = Object.entries(cur.perRule ?? {})
+    .filter(([k]) => k !== key)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-48);
+  for (const [k, v] of keep) perRuleAll[k] = v;
+  perRuleAll[key] = {
+    ...rolled,
+    daySent: rolled.daySent + (sent ? 1 : 0),
+    weekSent: rolled.weekSent + (sent ? 1 : 0),
+    monthSent: rolled.monthSent + (sent ? 1 : 0),
+    total: rolled.total + (sent ? 1 : 0),
+    lastAt: sent ? now : rolled.lastAt,
+  };
   return {
     day,
     daySent: (cur.day === day ? cur.daySent : 0) + (sent ? 1 : 0),
     week,
     weekSent: (cur.week === week ? cur.weekSent : 0) + (sent ? 1 : 0),
+    month,
+    monthSent: (cur.month === month ? (cur.monthSent ?? 0) : 0) + (sent ? 1 : 0),
     lastAt: sent ? now : cur.lastAt,
     keys: trimmed,
+    perRule: perRuleAll,
   };
 }
 
@@ -608,7 +690,48 @@ export interface GateInput {
   dry?: boolean;
 }
 
-export type GateResult = { ok: true; windowKey: string } | { ok: false; reason: SkipReason };
+export type GateResult =
+  { ok: true; windowKey: string } | { ok: false; reason: SkipReason; detail?: string };
+
+/**
+ * What a rule's own repeat policy says about this user right now, in the shapes the gate already
+ * speaks. Exported because the panel has to explain a refusal with the same function the sender uses:
+ * a preview that re-implements cadence is a preview that drifts from reality.
+ *
+ * The counters it reads are the *per-rule* ones — «how many times has this rule reached this user
+ * today» — not the global «how many pushes has this user had today». That difference is the whole
+ * point of a per-rule policy, and it is why the global numbers are not consulted on this path.
+ */
+export function policyDecision(
+  policy: RepeatPolicy,
+  automationKey: string,
+  counter: UserCounter,
+  nowMs: number,
+): { allow: true } | { allow: false; reason: SkipReason; detail?: string } {
+  const rc = counter.perRule?.[automationKey];
+  const state: RepeatState = {
+    lastSentAt: rc?.lastAt ? Date.parse(rc.lastAt) : null,
+    daySent: rc?.daySent ?? 0,
+    weekSent: rc?.weekSent ?? 0,
+    monthSent: rc?.monthSent ?? 0,
+    lifetimeSent: rc?.total ?? 0,
+  };
+  const d = decideRepeat(policy, state, nowMs);
+  if (d.allow) return { allow: true };
+  const reason: SkipReason =
+    d.reason === 'per_week'
+      ? 'capWeek'
+      : d.reason === 'per_month'
+        ? 'capMonth'
+        : d.reason === 'min_interval'
+          ? 'cooldown'
+          : d.reason === 'once_in_livespan'
+            ? 'sendOnce'
+            : d.reason === 'same_event_instance'
+              ? 'duplicate'
+              : 'capDay';
+  return { allow: false, reason, detail: d.message };
+}
 
 /**
  * The whole rulebook in one function: kill-switch → enabled → audience → status → prefs → caps →
@@ -631,17 +754,40 @@ export async function gate(d: Deps, g: GateInput): Promise<GateResult> {
   if (g.hasDevice === false) return { ok: false, reason: 'noDevice' };
   if (g.lostToPriority) return { ok: false, reason: 'priority' };
 
-  const capDay = a.delivery.maxPerUserPerDay ?? settings.maxPerUserPerDay;
-  if (capDay >= 0 && counter.daySent >= capDay) return { ok: false, reason: 'capDay' };
-  if (settings.maxPerUserPerWeek > 0 && counter.weekSent >= settings.maxPerUserPerWeek)
-    return { ok: false, reason: 'capWeek' };
-
   const cooldown = Math.max(0, a.delivery.cooldownMs ?? 0);
   const lastForKey = counter.keys?.[a.key];
+
+  if (a.repeatPolicy) {
+    // The rule owns its cadence. The global per-user caps are deliberately NOT consulted on this path:
+    // they were an imposed limit on every rule at once, and the plan replaces them with the policy
+    // above. What is not a cap and therefore still stands, untouched: the kill-switch, `enabled`,
+    // `requiresFeature`, the user's status and audience, the user's own muted categories and opt-ins,
+    // a missing variable, no valid device, the cooldown this rule asked for, and the idempotency
+    // claim below. A policy can raise a *send count*; it cannot buy a permission.
+    const own = policyDecision(a.repeatPolicy, a.key, counter, d.clock().getTime());
+    if (!own.allow) return { ok: false, reason: own.reason, detail: own.detail };
+    // A day cap the admin set on THIS rule still binds (it is the rule's own choice, not the platform's).
+    const ownDay = a.delivery.maxPerUserPerDay;
+    if (ownDay !== null && ownDay !== undefined && ownDay >= 0 && counter.daySent >= ownDay)
+      return {
+        ok: false,
+        reason: 'capDay',
+        detail: 'سقف روزانه‌ای که روی همین قاعده گذاشته شده پر است.',
+      };
+  } else {
+    const capDay = a.delivery.maxPerUserPerDay ?? settings.maxPerUserPerDay;
+    if (capDay >= 0 && counter.daySent >= capDay) return { ok: false, reason: 'capDay' };
+    if (settings.maxPerUserPerWeek > 0 && counter.weekSent >= settings.maxPerUserPerWeek)
+      return { ok: false, reason: 'capWeek' };
+  }
+
   if (a.delivery.sendOnce && lastForKey) return { ok: false, reason: 'sendOnce' };
   if (cooldown > 0 && lastForKey && d.clock().getTime() - Date.parse(lastForKey) < cooldown)
     return { ok: false, reason: 'cooldown' };
+  // The global minimum gap is part of the inherited cadence: a rule with its own policy has already
+  // answered the spacing question in `minIntervalMs`, so the platform-wide gap does not add to it.
   if (
+    !a.repeatPolicy &&
     !g.ignoreGap &&
     settings.minGapMs > 0 &&
     a.delivery.priority !== 'urgent' &&
