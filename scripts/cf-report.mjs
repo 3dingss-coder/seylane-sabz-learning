@@ -2,7 +2,7 @@
 // CF_ACCOUNT_ID. Prints markdown; never prints the token. Each section is independent: one failing
 // query shows its error text and the rest still run.
 const token = process.env.CF_API_TOKEN;
-const account = process.env.CF_ACCOUNT_ID;
+const account = process.env.CF_ACCOUNT_ID || 'fbaa3925a072e80c9c778ef5a16d8efd'; // not a secret (it is in dashboard URLs)
 const script = process.env.CF_SCRIPT || 'seylane-sabz-learning';
 const dbId = process.env.CF_D1_ID || 'f7a2ed30-00f4-42e6-b26f-343c24fe1853';
 const hours = Number(process.env.REPORT_HOURS || 24);
