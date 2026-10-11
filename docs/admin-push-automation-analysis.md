@@ -294,17 +294,23 @@ claim = `store.create` که روی `StoreConflictError` رد می‌شود — �
 
 **سه واقعیت که اصلاح را بی‌خطر می‌کنند (بررسی‌شده در کاتالوگ و تست‌ها):**
 
-- هر ۳۸ سطر کاتالوگ `respectQuietHours: true` دارند، پس هیچ قانون آماده‌ای با حذف آن spread رفتار عوض
-  نمی‌کند؛ تنها دو سطر `priority: 'urgent'` دارند (`deadline_passed`، `push_cron_stalled`) که مثل قبل از
-  ساعت سکوت رد می‌شوند — از راه درست (`{ priority: 'high', urgent: true }`).
+- سه سطر کاتالوگ `respectQuietHours: false` داشتند: `deadline_passed` و `push_cron_stalled` که
+  `priority: 'urgent'` دارند و مثل قبل از ساعت سکوت رد می‌شوند — از راه درست
+  (`{ priority: 'high', urgent: true }`) — و `deadline_warning` با `priority: 'high'` که همان راه را با
+  جعلِ جفتِ اضطراری می‌رفت. چون آن سطر دروازه‌ی قالبِ `deadline-sweep` است و `jobs.ts:55` خودش همین
+  اعلان را با `urgent: left < 24h` می‌فرستد، **اولویتش در کاتالوگ به `urgent` عوض شد** (نه
+  `respectQuietHours: true`): رفتارِ دیده‌شده برای کاربر همان می‌ماند و ادعای «اضطراری» حالا از کانال
+  مجاز §۴.۴ می‌آید. یک تست تازه در همان فایل، سازگاری کل کاتالوگ با قاعده‌ی نوشتن را می‌سنجد
+  («هیچ سطرِ آماده‌ای بدون `urgent` نخواهد ساعت سکوت را رد کند») — وگرنه هر ویرایشِ بی‌ربطِ آن سطر
+  با ۴۰۰ برمی‌گشت. بقیه ۳۵ سطر `respectQuietHours: true` دارند و دست‌نخورده‌اند.
 - کمپین‌های دستی اصلاً از `notifyUsers` رد نمی‌شوند (`d.push.send` در `push-campaigns.ts:636` و سطر
   `notifications` خودشان)، پس هیچ‌کدام از این دو اصلاح به رفتار کمپین نمی‌خورد؛ قالب‌های سیستمی از
-  `notifyUsers` می‌روند ولی `urgent` را خودشان تعیین می‌کند — و `jobs.ts` همان `urgent: true` را برای
+  `notifyUsers` می‌روند و `urgent` بودنش را خودشان تعیین می‌کنند — `jobs.ts` همان `urgent: true` را برای
   مهلتِ زیر ۲۴ ساعت می‌فرستد. هیچ‌کدام تغییر نکردند.
 - ویزارد از قبل درست نوشته بود («فقط «فوری» از ساعت سکوت رد می‌شود»); فقط hintِ همان چک‌باکس
   صریح‌تر شد که چرا برای اولویت عادی خاموش‌کردنش مجاز نیست.
 
-**تست‌ها (۸ تای تازه، رفتار واقعی روی همان `RecordingPushSender` و دیتابیس حافظه‌ای):**
+**تست‌ها (۹ تای تازه، رفتار واقعی روی همان `RecordingPushSender` و دیتابیس حافظه‌ای):**
 `functions/test/push-automation.test.ts → describe('the kill-switch and the quiet-hours window cannot be
 talked around')` (۷): test-send در حالت توقف هیچ `notifications` و هیچ `push.sent` تولید نمی‌کند و ردیف
 audit را با `sent: false` و `reason: 'paused'` می‌گذارد؛ بعد از ادامه‌دادن همان درخواست work می‌کند و
@@ -314,7 +320,7 @@ audit را با `sent: false` و `reason: 'paused'` می‌گذارد؛ بعد �
 پس از پایان بازه با `flushDeferredPush` **یکی** ارسال می‌شود (موکول، نه حذف); urgent همان لحظه رد می‌شود؛
 و `PATCH` با ترکیب نامعتبر ۴۰۰ می‌دهد و سطر و نسخه‌اش دست نمی‌خورد.
 `push-automation-export-import.test.ts` (۱): همان سطرِ نامعتبر از فایل import هم در dryRun و هم در نوشتن
-رد می‌شود.
+رد می‌شود. و `describe('catalogue seeding')` (۱): سازگاری ۳۸ سطر با قاعده تازه‌ی `validateSemantics`.
 
 **پیداِ سوم — ثبت شد و اصلاح نشد (بیرون از دامنه این درخواست):** شمارنده‌های کاربر در مسیر sweep
 `persist` نمی‌شوند. `sendAutomation:343` اگر `ctx.counters` باشد فقط همان map را جلو می‌برد

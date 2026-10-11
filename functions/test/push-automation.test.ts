@@ -131,6 +131,17 @@ describe('catalogue seeding', () => {
     expect((await getAuto('inactive_1d')).version).toBe(before.version);
   });
 
+  it('no seeded row asks for the quiet-hours pass without being urgent', () => {
+    // `validateSemantics` refuses that combination on the API, so the shipped catalogue has to obey it
+    // too — otherwise every admin edit of such a row would 400 on an unrelated field.
+    for (const entry of PUSH_AUTOMATION_CATALOG) {
+      expect(
+        entry.delivery.respectQuietHours || entry.delivery.priority === 'urgent',
+        `${entry.key}: priority ${entry.delivery.priority} with respectQuietHours: false`,
+      ).toBe(true);
+    }
+  });
+
   it('every destination in the catalogue is a safe internal path template', () => {
     for (const entry of PUSH_AUTOMATION_CATALOG) {
       expect(

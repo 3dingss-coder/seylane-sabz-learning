@@ -11,13 +11,16 @@
 - **`sendAutomation`** (همان فایل): `respectQuietHours: false` دیگر جفت `priority: 'high'` + `urgent`
   را نمی‌سازد. طبق §۴.۴ سند، فقط اولویت `urgent` از ساعت سکوت رد می‌شود؛ یک یادآوری عادی حالا حتی با
   آن تنظیم، `pushStatus: 'deferred'` با `deliverAfter` می‌گیرد و در `flushDeferredPush` تحویل می‌شود.
-  هر ۳۸ سطر کاتالوگ `respectQuietHours: true` دارند و دو سطر `priority: 'urgent'` مثل قبل رد می‌شوند؛
-  کمپین‌های دستی اصلاً از این مسیر نمی‌روند (`d.push.send`) — یعنی هیچ رفتارِ موجودی عوض نشد.
+  سه سطر کاتالوگ این گزینه را خاموش داشتند: دو سطرِ `urgent` (`deadline_passed`، `push_cron_stalled`)
+  مثل قبل رد می‌شوند، و `deadline_warning` که `high` بود — اولویتش در کاتالوگ به `urgent` رسید تا همان
+  رفتاری که `jobs.ts:55` برای مهلتِ زیر ۲۴ ساعت دارد از راه مجاز §۴.۴ ادامه پیدا کند (نه با جعل).
+  کمپین‌های دستی اصلاً از این مسیر نمی‌روند (`d.push.send`) — یعنی هیچ رفتارِ دیگری عوض نشد.
 - **`validateSemantics`** (push-automation-admin.ts): ترکیب «اولویت غیرفوری + عدم رعایت ساعت سکوت» در
   `POST`/`PATCH` و در `POST …/import` (و dryRunش) رد می‌شود، تا ویزارد کلیدی را نشان ندهد که موتور
   اجرا نمی‌کند. یک hint هم در همان گام صریح‌تر شد.
-- تست: ۸ تای تازه (۷ در `push-automation.test.ts`، ۱ در `push-automation-export-import.test.ts`) روی
-  store حافظه‌ای و `RecordingPushSender` — نه snapshot. functions ۴۵ فایل / ۴۱۶ تست، web ۳۴ / ۲۳۱ ✓
+- تست: ۹ تای تازه (۷ + یک تست سازگاری کاتالوگ در `push-automation.test.ts`، ۱ در
+  `push-automation-export-import.test.ts`) روی store حافظه‌ای و `RecordingPushSender` — نه snapshot.
+  functions ۴۵ فایل / ۴۱۷ تست، web ۳۴ / ۲۳۱ ✓
 - **پیداِ سوم، ثبت‌شده و اصلاح‌نشده:** شمارنده کاربر در مسیر sweep نوشتن نمی‌شود
   (`sendAutomation:343` فقط map را جلو می‌برد؛ flushی وجود ندارد)، پس سقف روزانه/هفتگی و `minGapMs`
   داخل یک اجرا نگهبانی می‌کنند نه بین دو اجرای همان روز. تحلیل و گزینه‌ها: §۹ سند تحلیل و یک بند در

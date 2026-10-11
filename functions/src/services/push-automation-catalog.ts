@@ -961,6 +961,13 @@ export const PUSH_AUTOMATION_CATALOG: CatalogEntry[] = [
     category: 'deadlines',
     templateKey: 'deadline_warning',
     trigger: { kind: 'event', event: 'deadline.warning' },
+    // The delivery block below is `urgent` on purpose. §4.4 gives the quiet-hours pass to priority
+    // `urgent` and nothing else, and `jobs.ts:55` already marks this very notification urgent when the
+    // deadline is under 24h away — so the gate mirrors the system template by *saying* urgent, the way
+    // `deadline_passed` does. It used to read `high` + `respectQuietHours: false`, which reached the same
+    // result by forging the emergency pair inside the sender; keeping that pair out of the sender (PR8.1)
+    // would otherwise have made this gate wait until the end of quiet hours for a message about a
+    // deadline that is expiring tonight.
     message: {
       title: '{hours} ساعت تا پایان مهلت',
       body: 'مهلت «{title}» نزدیک است. همین حالا ادامه بده.',
@@ -968,7 +975,7 @@ export const PUSH_AUTOMATION_CATALOG: CatalogEntry[] = [
       imageUrl: null,
     },
     delivery: {
-      priority: 'high',
+      priority: 'urgent',
       push: true,
       inApp: true,
       respectQuietHours: false,
