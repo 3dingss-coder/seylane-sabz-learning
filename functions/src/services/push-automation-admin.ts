@@ -6,8 +6,14 @@ import type {
   PushAutomation,
   PushAutomationRun,
   PushAutomationSettings,
+  RuleNode,
   User,
 } from '../domain/types';
+import { allFields } from './automation/fields';
+import { describeExpr, RULE_LIMITS, validateRuleExpr } from './automation/expr';
+import { deadConditions, usesInheritedPolicy, withDefaults } from './automation/migrate';
+import { allOperators } from './automation/operators';
+import { POLICY_LIMITS, validateRepeatPolicy } from './automation/repeat';
 import {
   CATEGORY_HINTS,
   CATEGORY_LABELS,
@@ -19,6 +25,7 @@ import { ApiError } from '../http/errors';
 import { parse, text } from '../http/validate';
 import { audit, getPolicy, SYSTEM, type Actor, type Deps } from './context';
 import { DEFAULT_TEMPLATES, getTemplates, render } from './notify';
+import { PRODUCED_EVENTS, unproducedEvents } from './push-automation-events';
 import {
   AUTOMATION_DESTINATIONS,
   CATALOG_KEYS,
@@ -59,6 +66,7 @@ import {
   sendAutomation,
   resolveVars,
   sweepUsers,
+  type SweepExplain,
 } from './push-automation-engine';
 
 /**
@@ -73,6 +81,73 @@ import {
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 export const AUTOMATION_KEY = /^[a-z0-9][a-z0-9_]{2,39}$/;
+
+/**
+ * One node of a v2 rule tree, as *input shape* only. What a leaf may point at (a known field, a known
+ * operator, a value of the right type, a tree within budget) is decided by
+ * `services/automation/expr.ts#validateRuleExpr`, which the semantics check below calls — zod draws the
+ * outline, the registry decides the meaning. There is no code path in this shape by construction: a
+ * rule is data, and nothing a rule carries is ever executed.
+ */
+const ruleLeafSchema = z.object({
+  type: z.literal('leaf'),
+  field: z.string().trim().min(1).max(60),
+  operator: z.string().trim().min(1).max(40),
+  value: z.union([z.number(), z.string().max(80), z.boolean(), z.null()]),
+  value2: z.union([z.number(), z.string().max(80), z.boolean(), z.null()]).optional(),
+});
+
+export const ruleExprSchema: z.ZodType<RuleNode> = z.lazy(() =>
+  z.union([
+    ruleLeafSchema,
+    z.object({
+      type: z.literal('group'),
+      op: z.enum(['and', 'or', 'not']),
+      children: z.array(ruleExprSchema).max(RULE_LIMITS.maxChildren),
+    }),
+  ]),
+) as z.ZodType<RuleNode>;
+
+const repeatPolicySchema = z.object({
+  minIntervalMs: z
+    .number()
+    .int()
+    .min(0)
+    .max(180 * DAY)
+    .default(0),
+  perDay: z.number().int().min(0).max(POLICY_LIMITS.maxPerDay).default(0),
+  perWeek: z.number().int().min(0).max(POLICY_LIMITS.maxPerWeek).default(0),
+  perMonth: z.number().int().min(0).max(POLICY_LIMITS.maxPerMonth).default(0),
+  oncePerEventInstance: z.boolean().default(true),
+  allowSameDayMultiple: z.boolean().default(true),
+  onceInLivespan: z.boolean().default(false),
+  perRule: z
+    .object({
+      maxPerDay: z.number().int().min(0).max(POLICY_LIMITS.maxPerDay).optional(),
+      minIntervalMs: z
+        .number()
+        .int()
+        .min(0)
+        .max(180 * DAY)
+        .optional(),
+    })
+    .optional(),
+  perStep: z
+    .record(
+      z.string().trim().min(1).max(64),
+      z.object({
+        minIntervalMs: z
+          .number()
+          .int()
+          .min(0)
+          .max(180 * DAY)
+          .optional(),
+        maxPerDay: z.number().int().min(0).max(POLICY_LIMITS.maxPerDay).optional(),
+      }),
+    )
+    .optional(),
+  respectQuietHoursAlways: z.boolean().optional(),
+});
 
 const triggerSchema = z.object({
   kind: z.enum([
@@ -98,6 +173,11 @@ const triggerSchema = z.object({
     .regex(/^([01]?\d|2[0-3]):[0-5]\d$/, 'ساعت را به قالب HH:mm بنویسید.')
     .nullish(),
   weekday: z.number().int().min(0).max(6).nullish(),
+  /**
+   * The v1 flat list. Its `.max(6)` is a *legacy shape* guard — a v1 row on the store must keep parsing
+   * and old exports must keep importing. It is NOT the condition limit of the engine any more: a v2
+   * rule carries its tree in `when`, where the only limits are the evaluation budgets.
+   */
   conditions: z
     .array(
       z.object({
@@ -114,6 +194,8 @@ const audienceSchema = z.object({
   type: z.enum(['all', 'team', 'role', 'user']),
   targetId: z.string().trim().max(60).nullish(),
   channel: z.enum(['any', 'web', 'android']).default('any'),
+  /** v2: an extra AND/OR tree over the user row, re-checked at the moment of sending. */
+  filter: ruleExprSchema.nullish(),
 });
 
 const deliverySchema = z.object({
@@ -147,6 +229,10 @@ export const automationSchema = z.object({
   delivery: deliverySchema,
   supersedes: z.array(z.string().max(40)).max(8).nullish(),
   optInOnly: z.boolean().nullish(),
+  /** Absent or `1` keeps the flat `trigger.conditions`; `2` switches the rule to the tree below. */
+  schemaVersion: z.union([z.literal(1), z.literal(2)]).nullish(),
+  when: ruleExprSchema.nullish(),
+  repeatPolicy: repeatPolicySchema.nullish(),
 });
 
 export const automationPatchSchema = automationSchema
@@ -160,16 +246,26 @@ export const automationPatchSchema = automationSchema
   });
 
 /** The store keeps `null`, not `undefined`, so optional inputs are normalised once here. */
+/** The store keeps `null`, not `undefined`, so optional inputs are normalised once here. */
 function normAudience(aud: z.infer<typeof audienceSchema>): PushAutomation['audience'] {
-  return { type: aud.type, targetId: aud.targetId ?? null, channel: aud.channel ?? 'any' };
+  return {
+    type: aud.type,
+    targetId: aud.targetId ?? null,
+    channel: aud.channel ?? 'any',
+    filter: aud.filter ?? null,
+  };
 }
 
 /** Cross-field rules a plain object schema cannot express. */
-function validateSemantics(input: {
+export function validateSemantics(input: {
   trigger: PushAutomation['trigger'];
-  audience: { type: string; targetId?: string | null };
+  /** The normalised row *and* the raw wizard/import input, which may still omit the optional bits. */
+  audience: { type: string; targetId?: string | null; filter?: RuleNode | null };
   message: PushAutomation['message'];
   delivery?: PushAutomation['delivery'];
+  schemaVersion?: 1 | 2 | null;
+  when?: PushAutomation['when'];
+  repeatPolicy?: PushAutomation['repeatPolicy'];
 }): void {
   const t = input.trigger;
   const bad = (msg: string): never => {
@@ -180,7 +276,12 @@ function validateSemantics(input: {
   if (t.kind === 'event_delay' && !t.delayMinutes)
     bad('برای اتفاق با تأخیر، تعداد دقیقه لازم است.');
   if (t.kind === 'inactivity' && !t.inactivityDays) bad('برای بی‌فعالیتی، تعداد روز لازم است.');
-  if (t.kind === 'condition' && !(t.conditions ?? []).length)
+  if (
+    t.kind === 'condition' &&
+    input.schemaVersion !== 2 &&
+    !(t.conditions ?? []).length &&
+    !input.when
+  )
     bad('حداقل یک شرط لازم است؛ مثلاً پیشرفت کمتر از ۸۰.');
   if (t.kind === 'condition') {
     const known = new Set(FACT_FIELDS.map((f) => f.field));
@@ -189,6 +290,24 @@ function validateSemantics(input: {
   }
   if (t.kind === 'schedule_weekly' && (t.weekday ?? null) === null)
     bad('برای برنامه هفتگی، روز هفته لازم است.');
+
+  // The rule engine: every tree is checked against the field/operator registries, not against a list
+  // this file keeps. An ill-typed or over-budget tree is refused on save, so the panel never shows a
+  // rule that the sender would have to guess about.
+  const trees: Array<[RuleNode | null | undefined, 'trigger' | 'audience']> = [
+    [input.when ?? null, 'trigger'],
+    [input.audience?.filter ?? null, 'audience'],
+  ];
+  for (const [tree, scope] of trees) {
+    const v = validateRuleExpr(tree, { scope });
+    if (!v.ok) bad(v.issues.map((i) => `${i.path}: ${i.message}`).join(' | '));
+  }
+  if (input.schemaVersion === 2 && (t.conditions ?? []).length)
+    bad('قاعده‌ی نسخه ۲ شرطش را در «when» نگه می‌دارد؛ فهرست شرط‌های قدیمی را خالی بگذارید.');
+  if (input.repeatPolicy) {
+    const policyBad = validateRepeatPolicy(input.repeatPolicy);
+    if (policyBad.length) bad(policyBad.join(' | '));
+  }
   if (input.audience.type !== 'all' && !input.audience.targetId)
     bad('برای مخاطب تیمی/نقشی/فردی، شناسه هدف لازم است.');
   const used = [...`${input.message.title} ${input.message.body}`.matchAll(/\{(\w+)\}/g)].map(
@@ -271,9 +390,12 @@ const EXPORT_FIELDS = [
   'delivery',
   'supersedes',
   'optInOnly',
+  'schemaVersion',
+  'when',
+  'repeatPolicy',
 ] as const;
 
-export const AUTOMATION_EXPORT_FORMAT = 'seylane.push-automation/1';
+export const AUTOMATION_EXPORT_FORMAT = 'seylane.push-automation/2';
 /** Above this an "import" is a data pipeline, not a deliberate transfer between two environments. */
 export const IMPORT_MAX_ROWS = 100;
 
@@ -406,6 +528,9 @@ export async function importAutomations(
           audience: parsed.audience,
           message: parsed.message,
           delivery: parsed.delivery,
+          schemaVersion: parsed.schemaVersion,
+          when: parsed.when,
+          repeatPolicy: parsed.repeatPolicy,
         });
       } else if (cur) {
         const patch: Record<string, unknown> = { ...parsed };
@@ -587,6 +712,18 @@ function timeLabel(a: PushAutomation): string {
 
 export interface AutomationDetail extends AutomationRow {
   trigger: PushAutomation['trigger'];
+  /** Which shape this row is stored in: `2` owns a tree, `1` still means the flat legacy list. */
+  schemaVersion: 1 | 2;
+  /** The rule's own condition tree (`null` on a v1 row, whose conditions sit in `trigger`). */
+  when: PushAutomation['when'];
+  /** Its own cadence policy, or `null` when the legacy global caps still govern it. */
+  repeatPolicy: PushAutomation['repeatPolicy'];
+  /** Where the cadence comes from — the list row and the editor must not imply a rule owns one it does not. */
+  policySource: 'rule' | 'inherited';
+  /** A short Persian reading of the tree, for the read-only summary beside the builder. */
+  whenSummary: string;
+  /** Conditions the row carries but its trigger kind never evaluates — reported, never silently obeyed. */
+  deadConditions: NonNullable<PushAutomation['trigger']['conditions']>;
   audience: PushAutomation['audience'];
   message: PushAutomation['message'];
   delivery: PushAutomation['delivery'];
@@ -644,6 +781,12 @@ export async function automationDetail(d: Deps, key: string): Promise<Automation
     version: a.version,
     trigger: a.trigger,
     audience: a.audience,
+    schemaVersion: (a.schemaVersion ?? 1) as 1 | 2,
+    when: a.when ?? null,
+    repeatPolicy: a.repeatPolicy ?? null,
+    policySource: usesInheritedPolicy(a) ? 'inherited' : 'rule',
+    whenSummary: describeExpr(a.when ?? null),
+    deadConditions: deadConditions(withDefaults(a)) ?? [],
     message: a.message,
     delivery: a.delivery,
     supersedes: a.supersedes ?? [],
@@ -757,7 +900,9 @@ function describeChange(body: Record<string, unknown>): string {
   if (body.message) parts.push('متن');
   if (body.delivery) parts.push('نحوه ارسال');
   if (body.trigger) parts.push('زمان‌بندی');
+  if (body.when) parts.push('شرط‌ها');
   if (body.audience) parts.push('مخاطب');
+  if (body.repeatPolicy) parts.push('سیاست تکرار');
   if (body.name) parts.push('نام');
   if (body.enabled !== undefined) parts.push(body.enabled ? 'روشن' : 'خاموش');
   return parts.length ? `ویرایش: ${parts.join('، ')}` : 'ویرایش';
@@ -841,7 +986,16 @@ export interface DryRunResult {
   wouldSend: number;
   skipped: Record<string, number>;
   skippedLabels: Array<{ reason: string; count: number; label: string }>;
+  /** Users the rule was evaluated against — never 0 just because none of them matched. */
+  reviewed: number;
   sample: Array<{ userId: string; name: string; title: string; body: string; reason: string }>;
+  /**
+   * Per-user verdict of the rule's own evaluation — the same `ruleMatch` the sender calls, so an
+   * explanation cannot drift from a send. `why` is the first condition that refused; `lines` is every
+   * condition with the value it saw. This is what makes «چرا این کاربر مشمول نشد؟» a panel answer
+   * instead of a code reading exercise.
+   */
+  explain: SweepExplain[];
   note: string | null;
 }
 
@@ -855,7 +1009,11 @@ export async function dryRun(d: Deps, key: string): Promise<DryRunResult> {
   const policy = await getPolicy(d);
   const users = await sweepUsers(d);
   const ctx = await buildSweepContext(d, users, { health: a.category === 'health' });
-  const sweep = await evaluateSweep(d, { ...a, enabled: true }, ctx, { dry: true, settings });
+  const sweep = await evaluateSweep(d, { ...a, enabled: true }, ctx, {
+    dry: true,
+    settings,
+    explain: true,
+  });
   const sample: DryRunResult['sample'] = [];
   for (const m of sweep.matched.slice(0, 12)) {
     const u = users.find((x) => x.id === m.userId);
@@ -878,12 +1036,14 @@ export async function dryRun(d: Deps, key: string): Promise<DryRunResult> {
     key,
     windowKey: dayKey(d.clock(), policy.timezone),
     evaluated: sweep.evaluated,
+    reviewed: sweep.reviewed,
     wouldSend: sweep.sent,
     skipped: sweep.skipped,
     skippedLabels: Object.entries(sweep.skipped)
       .map(([reason, count]) => ({ reason, count, label: skipLabel(reason) }))
       .sort((x, y) => y.count - x.count),
     sample,
+    explain: sweep.explain,
     note: a.requiresFeature
       ? 'این سناریو هنوز اجرا نمی‌شود: داده‌ی لازم محاسبه نمی‌شود.'
       : !a.enabled || settings.paused
@@ -1122,6 +1282,35 @@ export function catalogMeta() {
     triggerKinds: TRIGGER_KIND_LABELS,
     facts: FACT_FIELDS,
     events: EVENT_LABELS,
+    /**
+     * What the builder may offer and what the runtime can actually do, as two separate answers.
+     * `ruleFields`/`ruleOperators` are the live registries (the evaluator keeps no private list of its
+     * own); `eventProducers` names the events a hook really emits, so a rule on any other event may be
+     * saved as a draft but must be labelled «تولیدکننده‌اش هنوز نوشته نشده» instead of pretending.
+     */
+    ruleFields: allFields().map((f) => ({
+      id: f.id,
+      label: f.label,
+      kind: f.kind,
+      group: f.group,
+      source: f.source,
+      sweep: f.sweep,
+      audience: f.audience,
+      hint: f.hint ?? null,
+      min: f.min ?? null,
+      max: f.max ?? null,
+      options: f.options ?? [],
+    })),
+    ruleOperators: allOperators().map((o) => ({
+      id: o.id,
+      label: o.label,
+      kinds: o.kinds,
+      arity: o.arity,
+    })),
+    ruleLimits: RULE_LIMITS,
+    repeatLimits: POLICY_LIMITS,
+    eventProducers: PRODUCED_EVENTS,
+    unproducedEvents: unproducedEvents(),
     weekdays: WEEKDAYS,
     limits: { titleMax: 80, bodyMax: 300 },
   };

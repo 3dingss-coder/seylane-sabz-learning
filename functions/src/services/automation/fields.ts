@@ -128,10 +128,10 @@ const USER_FIELDS: FieldDef[] = [
     group: 'حساب کاربر',
     source: 'user',
     audience: true,
+    // Exactly `UserStatus`: a rule must not be able to ask for a state the store cannot hold.
     options: [
       { value: 'active', label: 'فعال' },
       { value: 'inactive', label: 'غیرفعال' },
-      { value: 'suspended', label: 'معلق' },
     ],
   }),
   F('user.name', 'نام کاربر', 'text', { group: 'حساب کاربر', source: 'user', audience: true }),
@@ -150,12 +150,18 @@ const USER_FIELDS: FieldDef[] = [
   }),
   F('user.onboardedAt', 'تاریخ ثبت‌نام', 'date', { group: 'حساب کاربر', source: 'user' }),
   F('user.lastActiveAt', 'آخرین فعالیت', 'date', { group: 'حساب کاربر', source: 'user' }),
-  F('user.points', 'امتیاز کاربر', 'number', {
+  F('user.pointsBalance', 'موجودی امتیاز کاربر', 'number', {
     min: 0,
-    max: 1e9,
+    max: 1_000_000_000,
     group: 'حساب کاربر',
     source: 'user',
-    audience: false,
+    audience: true,
+  }),
+  F('user.brandIds', 'برند دارد', 'presence', {
+    group: 'حساب کاربر',
+    source: 'user',
+    audience: true,
+    hint: 'آرایه‌ی برند‌های کاربر خالی نیست',
   }),
 ];
 

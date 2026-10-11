@@ -19,7 +19,14 @@ import { notifyUsers, render, type NotifyOptions } from './notify';
 import { getPolicy, track, type Deps } from './context';
 import { systemHealth } from './system-health';
 import { isSafeAutomationPath } from './push-automation-governor';
-import { AUTOMATION_VAR_NAMES } from './push-automation-catalog';
+import { AUTOMATION_VAR_NAMES, TRIGGER_KIND_LABELS } from './push-automation-catalog';
+import {
+  audienceAllows,
+  evaluateFor,
+  explainFor,
+  firstFailure,
+  type RuleData,
+} from './automation/rule';
 import {
   addSkip,
   advanceCounter,
@@ -172,6 +179,85 @@ export function matchesTrigger(a: PushAutomation, facts: Facts): boolean {
   }
 }
 
+/**
+ * Everything a rule must answer yes to for one user, and *why*. The three parts stay separate on
+ * purpose: the trigger kind (an event, a window, a ladder step, the legacy flat condition list), the
+ * v2 `when` tree, and the audience filter — an admin reading a decision log has to be able to tell
+ * «the window had not opened» from «your condition said no».
+ */
+export interface RuleMatch {
+  ok: boolean;
+  /** The one sentence for the decision log: the first condition that refused. */
+  why: string | null;
+  /** Every evaluated condition, as ✓/✗ lines with the value the rule actually saw. */
+  lines: string[];
+  /** A budget stopped the evaluation, so `ok: false` here is not a real refusal. */
+  truncated: boolean;
+}
+
+export function ruleMatch(a: PushAutomation, data: RuleData): RuleMatch {
+  const now = data.now ?? new Date();
+  const facts = data.facts ?? {};
+  const lines: string[] = [];
+  let why: string | null = null;
+  let truncated = false;
+  let ok = true;
+
+  if (!matchesTrigger(a, facts)) {
+    ok = false;
+    why = triggerWhy(a, facts);
+    lines.push(`✗ ${why ?? 'ماشین‌روشن‌کننده‌ی این قاعده الان برقرار نیست'}`);
+  } else {
+    const kindLine = TRIGGER_KIND_LABELS[a.trigger.kind] ?? a.trigger.kind;
+    lines.push(`✓ ${kindLine}`);
+  }
+
+  // The v2 tree. A v1 row has no `when` (its flat conditions were just evaluated by `matchesTrigger`),
+  // so the two shapes never double-report and a migrated row cannot start meaning something else.
+  const when = evaluateFor(a.when ?? null, data, now);
+  truncated = truncated || when.truncated;
+  if (when.nodes > 0) {
+    lines.push(...explainFor(when));
+    if (!when.ok) {
+      ok = false;
+      why = why ?? firstFailure(when) ?? 'شرط قاعده برقرار نبود';
+    }
+  }
+  if (when.truncated) {
+    ok = false;
+    why = 'بودجه‌ی ارزیابی قاعده تمام شد؛ برای روشن‌شدن این قاعده را ساده‌تر کنید.';
+  }
+
+  if (a.audience.filter && data.user) {
+    const aud = evaluateFor(a.audience.filter, { ...data, now }, now);
+    lines.push(...explainFor(aud));
+    if (!aud.ok) {
+      ok = false;
+      why = why ?? firstFailure(aud) ?? 'فیلتر مخاطب این کاربر را راه نداد';
+    }
+    truncated = truncated || aud.truncated;
+  }
+  return { ok, why, lines, truncated };
+}
+
+/** Why the *trigger* itself refused — the part no `when` tree can speak about. */
+function triggerWhy(a: PushAutomation, facts: Facts): string | null {
+  const t = a.trigger;
+  if (t.kind === 'inactivity') {
+    const days = t.inactivityDays ?? 1;
+    const inactive = num(facts.inactiveDays, 9999);
+    if (inactive >= 9999)
+      return 'این کاربر هرگز وارد نشده است (قاعده‌های بی‌فعالیتی با او کار ندارند)';
+    if (inactive < days)
+      return `${new Intl.NumberFormat('fa-IR').format(inactive)} روز بی‌فعالیتی، لازم ${new Intl.NumberFormat('fa-IR').format(days)} روز`;
+    if (num(facts.activePackages) === 0 && num(facts.overduePackages) === 0)
+      return 'چیزی باز ندارد؛ برای یک آموزش‌دیده پوش فرستاده نمی‌شود';
+    return null;
+  }
+  if (t.kind === 'condition') return 'شرط‌های وضعیتی این قاعده برقرار نیست';
+  return null;
+}
+
 // ─── Message variables ───────────────────────────────────────────────────────
 
 const faNum = (n: number): string => new Intl.NumberFormat('fa-IR').format(n);
@@ -282,6 +368,15 @@ export async function sendAutomation(
   // `dry` is exempt because a preview delivers nothing at all and the wizard's report is the
   // membership estimate (`dryRun`'s `note` says so out loud when the engine is stopped).
   if (settings.paused && !ctx.dry) return await skip('paused');
+
+  // Re-evaluated here, at the action: a rule that parked this user in the queue three days ago, or
+  // picked them in an earlier window, must not reach someone whose team/role/status changed since.
+  // A test send is exempt (the admin is naming the recipient on purpose); a dry-run is NOT, or the
+  // preview would promise a send reality refuses.
+  if (!ctx.test) {
+    const aud = audienceAllows(a, user);
+    if (!aud.ok) return await skip('audience', firstFailure(aud) ?? undefined);
+  }
 
   const title = render(a.message.title, vars);
   const body = render(a.message.body, vars);
@@ -460,6 +555,15 @@ function isCandidate(a: PushAutomation, u: Doc<User>): boolean {
 
 // ─── Sweeps (tier 2) ─────────────────────────────────────────────────────────
 
+export interface SweepExplain {
+  userId: string;
+  name: string;
+  ok: boolean;
+  why: string | null;
+  lines: string[];
+  truncated?: boolean;
+}
+
 export interface SweepResult {
   evaluated: number;
   sent: number;
@@ -467,6 +571,13 @@ export interface SweepResult {
   failed: number;
   error: string | null;
   matched: Array<{ userId: string; name: string; reason: string }>;
+  /**
+   * How many users the rule was evaluated against at all (`evaluated` counts the ones it got to).
+   * A preview that says «۰ بررسی شد» while the rule walked 120 users would be a lie about cost.
+   */
+  reviewed: number;
+  /** Filled only when the caller asked for it (dry-run / trace page): why each user passed or failed. */
+  explain: SweepExplain[];
 }
 
 const emptySweep = (): SweepResult => ({
@@ -476,7 +587,12 @@ const emptySweep = (): SweepResult => ({
   failed: 0,
   error: null,
   matched: [],
+  reviewed: 0,
+  explain: [],
 });
+
+/** How many users a dry-run explanation is built for: enough to spot a wrong rule, bounded per tick. */
+const EXPLAIN_USERS_PER_RUN = 120;
 
 /**
  * Evaluates one rule over the population. `dry` means "report, do not touch anything" — the same code
@@ -487,15 +603,39 @@ export async function evaluateSweep(
   d: Deps,
   a: PushAutomation,
   ctx: SweepContext,
-  opts: { dry?: boolean; test?: boolean; settings?: Awaited<ReturnType<typeof readSettings>> } = {},
+  opts: {
+    dry?: boolean;
+    test?: boolean;
+    /** Per-user ✓/✗ report for the preview panel. Costs nothing but memory; the data is already here. */
+    explain?: boolean;
+    settings?: Awaited<ReturnType<typeof readSettings>>;
+  } = {},
 ): Promise<SweepResult> {
   const out = emptySweep();
   const settings = opts.settings ?? (await readSettings(d));
   // A manager summary is not «does this manager match the rule» but «how many of their team do».
   const aggregate = !!a.delivery.aggregateForManager && a.trigger.kind === 'inactivity';
-  const candidates = ctx.users
-    .filter((u) => isCandidate(a, u))
-    .filter((u) => (aggregate ? u.role === 'manager' : matchesTrigger(a, factsForRule(a, ctx, u))))
+  const inAudience = ctx.users.filter((u) => isCandidate(a, u));
+  out.reviewed = inAudience.length;
+  if (opts.explain) {
+    for (const u of inAudience.slice(0, EXPLAIN_USERS_PER_RUN)) {
+      const m = ruleMatch(a, { facts: factsForRule(a, ctx, u), user: u, now: ctx.now });
+      out.explain.push({
+        userId: u.id,
+        name: u.name,
+        ok: m.ok,
+        why: m.why,
+        lines: m.lines,
+        truncated: m.truncated,
+      });
+    }
+  }
+  const candidates = inAudience
+    .filter((u) =>
+      aggregate
+        ? u.role === 'manager'
+        : ruleMatch(a, { facts: factsForRule(a, ctx, u), user: u, now: ctx.now }).ok,
+    )
     .slice(0, SWEEP_USERS_PER_RUN);
   out.evaluated = candidates.length;
   const ladder = await ladderFilter(d, a, candidates, ctx);

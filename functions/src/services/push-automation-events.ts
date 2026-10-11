@@ -29,12 +29,39 @@
 
 import { dayKey } from '../lib/time';
 import type { Doc } from '../store/types';
+import { EVENT_LABELS } from './push-automation-catalog';
 import { fireAutomationEvent } from './push-automation-engine';
 import { loadRunnable } from './push-automation-governor';
 import { getPolicy, track, type Deps } from './context';
 
 /** Collection of daily outbox shards: `push_automation_events/<YYYY-MM-DD>/<hash>`. */
 export const EVENTS = 'push_automation_events';
+
+/**
+ * The event names a hook site actually produces today. A name belongs here only if some file outside
+ * this module calls `emitAutomationEvent` / `emitAutomationEventForUsers` with it —
+ * `test/automation-capabilities.test.ts` greps the source tree and fails on a lie in either direction
+ * (a producer without an entry, or an entry without a producer).
+ *
+ * This is the answer to «a new event is only executable if its producer is implemented and tested»:
+ * the panel may *list* every label in `EVENT_LABELS`, but only these names are advertised as
+ * runtime-supported, and a rule on a name outside this list can never fire.
+ */
+export const PRODUCED_EVENTS: readonly string[] = [
+  'attempt.started',
+  'package.completed',
+  'package.updated',
+  'quiz.failed',
+  'quiz.failed_twice',
+  'quiz.passed',
+  'section.completed',
+  'team.member_joined',
+];
+
+/** Events listed for admins but with no producer yet: selectable in a draft, useless in a send. */
+export function unproducedEvents(): string[] {
+  return Object.keys(EVENT_LABELS).filter((e) => !PRODUCED_EVENTS.includes(e));
+}
 /** Past this point an event is history: a nudge nobody needed for six hours is noise. */
 export const EVENT_TTL_MS = 6 * 60 * 60_000;
 const LISTENERS_TTL_MS = 30_000;

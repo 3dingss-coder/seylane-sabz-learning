@@ -423,7 +423,7 @@ describe('field registry: consistency with the catalogue the panel already shows
   it('keeps sweep-unsafe data out of the scheduled path', () => {
     expect(fieldById('event.score')?.sweep).toBe(false);
     expect(fieldById('user.teamId')?.audience).toBe(true);
-    expect(fieldById('user.points')?.audience).toBe(false);
+    expect(fieldById('user.pointsBalance')?.audience).toBe(true);
   });
 
   it('reads facts by id and reports absent for anything else', () => {

@@ -16,6 +16,7 @@ import { isSafeImageUrl, isSafeInternalPath } from './push-campaigns';
 import { isCategory, isMutable, PROTECTED_CATEGORIES } from '../domain/notification-categories';
 import { ApiError } from '../http/errors';
 import { AUTOMATION_PATH_VARS } from './push-automation-catalog';
+import { withDefaults } from './automation/migrate';
 import { audit, getPolicy, type Actor, type Deps } from './context';
 
 /**
@@ -212,7 +213,11 @@ export async function writeSettings(
 // ─── Catalogue reads shared by engine + admin API ────────────────────────────
 
 export async function loadAutomations(d: Deps): Promise<Array<Doc<PushAutomation>>> {
-  return d.store.query<PushAutomation>({ collection: AUTOMATIONS });
+  const rows = await d.store.query<PushAutomation>({ collection: AUTOMATIONS });
+  // The one place a stored rule becomes a runnable rule: a v1 row gains the v2 fields with their
+  // legacy-equivalent defaults, so nothing in the store has to be rewritten (and nothing that is not
+  // written can accidentally start sending). See `services/automation/migrate.ts`.
+  return rows.map(withDefaults);
 }
 
 /** Only what the engine may act on now: enabled, not paused, not awaiting a v2 feature. */

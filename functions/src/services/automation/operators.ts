@@ -8,8 +8,8 @@
  * no `Function`, no template compiled from the database).
  */
 
+import type { RuleLeaf } from '../../domain/types';
 import type { Actual, FieldDef } from './fields';
-import type { RuleLeaf } from './expr';
 
 const faNum = (n: number): string => new Intl.NumberFormat('fa-IR').format(n);
 

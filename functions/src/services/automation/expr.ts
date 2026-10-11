@@ -18,31 +18,12 @@
  * a typo'd field simply never sends instead of sending to everyone.
  */
 
+import type { RuleExpr, RuleGroup, RuleLeaf, RuleNode } from '../../domain/types';
 import { fieldById, type Actual } from './fields';
 import { operatorById } from './operators';
 
-export interface RuleLeaf {
-  type: 'leaf';
-  /** A field id in the field registry. */
-  field: string;
-  /** An operator id in the operator registry. */
-  operator: string;
-  /** Data only: a scalar the operator compares against. Never code, never a path. */
-  value: string | number | boolean | null;
-  /** Second operand (`between`). */
-  value2?: string | number | boolean | null;
-}
-
-export interface RuleGroup {
-  type: 'group';
-  op: 'and' | 'or' | 'not';
-  children: RuleNode[];
-}
-
-export type RuleNode = RuleLeaf | RuleGroup;
-
-/** The name the plan document and the panel use for the same tree. */
-export type RuleExpr = RuleNode;
+// The persisted shape lives in the data model; this module owns everything that *means* something.
+export type { RuleExpr, RuleGroup, RuleLeaf, RuleNode };
 
 /** Where a tree is used: audiences filter on per-user fields only, never on trigger metadata. */
 export type RuleScope = 'trigger' | 'audience';

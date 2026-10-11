@@ -68,9 +68,11 @@
 
 ### ۳.۱) `/export` و `/import` — نقل‌وانتقال بین محیط‌ها (PR8)
 
-- فایل: `{ format: 'seylane.push-automation/1', exportedAt, timezone, count, rows[] }`. هر سطر فقط
+- فایل: `{ format: 'seylane.push-automation/2', exportedAt, timezone, count, rows[] }`. هر سطر فقط
   `key, name, description, category, audienceRole, enabled, trigger, audience, message, delivery,
-  supersedes, optInOnly` است؛ `version` و `stats` و شناسه‌ها و زمان‌ها را مقصد خودش می‌سازد، پس چیزی که
+  supersedes, optInOnly` است، و از format/2 سه فیلد موتور قاعده هم: `schemaVersion`، `when`،
+  `repeatPolicy` (بدون آن‌ها یک قاعده‌ی v2 در مقصد به معنی دیگری روشن می‌شد؛ برای همین نسخه‌ی فایل بالا
+  رفت و نه‌تنها مجاز بلکه لازم است). `version` و `stats` و شناسه‌ها و زمان‌ها را مقصد خودش می‌سازد، پس چیزی که
   در یک Issue پیوست می‌شود نه می‌تواند بازنویسی هم‌زمان ایجاد کند نه لو بدهد (هیچ شماره، توکن یا کلیدی
   در آن نیست — تست همین را روی کل فایل می‌گیرد).
 - سطرهای **دروازه** (`templateKey`) به‌طور پیش‌فرض در فایل نیستند (`?gates=1` آن‌ها را اضافه می‌کند)،

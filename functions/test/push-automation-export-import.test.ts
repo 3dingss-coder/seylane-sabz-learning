@@ -44,7 +44,7 @@ const exportAll = (q: { keys?: string; gates?: string } = {}) =>
 describe('export', () => {
   it('carries the editable fields of every non-gate row, and nothing else', async () => {
     const out = await exportAll();
-    expect(out.format).toBe('seylane.push-automation/1');
+    expect(out.format).toBe('seylane.push-automation/2');
     expect(out.timezone).toBe('Asia/Tehran');
     // 38 seeded rows minus the 13 that are gates in front of an existing template.
     expect(out.count).toBe(25);
@@ -64,6 +64,11 @@ describe('export', () => {
         'optInOnly',
         'supersedes',
         'trigger',
+        // v2 (format /2): a rule's meaning lives in these three, so a transfer file that dropped them
+        // would import the wording of a rule without its conditions — a different rule wearing its name.
+        'repeatPolicy',
+        'schemaVersion',
+        'when',
       ].sort(),
     );
     // Fields the target environment computes for itself must not be transferable at all.

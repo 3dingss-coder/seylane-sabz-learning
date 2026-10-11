@@ -632,6 +632,52 @@ export interface AutomationCondition {
   value: number | string | boolean;
 }
 
+/**
+ * The v2 condition tree (`when`, and `audience.filter`). Persisted data, never code: every `field`
+ * and `operator` id is resolved against the registries in `services/automation/{fields,operators}.ts`
+ * and every `value` is a scalar compared by that registry, so nothing stored here is ever executed.
+ * `expr.ts` owns the budgets, validation and evaluation; this file owns the shape.
+ */
+export interface RuleLeaf {
+  type: 'leaf';
+  /** A field id from the field registry, e.g. `progress`, `streakDays`, `user.city`, `event.score`. */
+  field: string;
+  /** An operator id from the operator registry, e.g. `gte`, `in`, `daysAgoGte`. */
+  operator: string;
+  value: number | string | boolean | null;
+  /** Second operand, only for `between`. */
+  value2?: number | string | boolean | null;
+}
+
+export interface RuleGroup {
+  type: 'group';
+  op: 'and' | 'or' | 'not';
+  children: RuleNode[];
+}
+
+export type RuleNode = RuleLeaf | RuleGroup;
+
+/** The name the panel and `docs/admin-push-automation-rules-engine.md` use for the same tree. */
+export type RuleExpr = RuleNode;
+
+/**
+ * How often one rule (or one step of it) may send. Cadence used to live only in the global settings,
+ * which made it a cap imposed on every rule at once; it is a property of the rule now. `0` means
+ * "unlimited in this window". Bounds and the decision itself live in `services/automation/repeat.ts`.
+ */
+export interface RepeatPolicy {
+  minIntervalMs: number;
+  perDay: number;
+  perWeek: number;
+  perMonth: number;
+  oncePerEventInstance: boolean;
+  allowSameDayMultiple: boolean;
+  onceInLivespan: boolean;
+  perRule?: { maxPerDay?: number; minIntervalMs?: number };
+  perStep?: Record<string, { minIntervalMs?: number; maxPerDay?: number }>;
+  respectQuietHoursAlways?: boolean;
+}
+
 export interface PushAutomationTrigger {
   kind: AutomationTriggerKind;
   /** Event name for `event`/`event_delay`, e.g. `quiz.failed`. */
@@ -651,6 +697,12 @@ export interface PushAutomationAudience {
   type: 'all' | 'team' | 'role' | 'user';
   targetId: string | null;
   channel: 'any' | 'web' | 'android';
+  /**
+   * v2: an extra filter on the user row, evaluated again at the moment of sending (not at pick time),
+   * so a user who left the team or changed role between the sweep and the send is not reached.
+   * Only fields the user record itself carries are allowed — see `FieldDef.audience`.
+   */
+  filter?: RuleExpr | null;
 }
 
 export type AutomationPriority = 'urgent' | 'high' | 'normal' | 'low';
@@ -704,6 +756,16 @@ export interface PushAutomation {
   audience: PushAutomationAudience;
   message: PushAutomationMessage;
   delivery: PushAutomationDelivery;
+  /**
+   * Which shape this row is written in. `1` (or absent) = the flat `trigger.conditions` era; `2` = the
+   * rule engine (`when`, `audience.filter`, `repeatPolicy`). Read-time `withDefaults()` upgrades v1 rows,
+   * so nothing has to be rewritten in the store and no rule changes behaviour just by being read.
+   */
+  schemaVersion?: 1 | 2 | null;
+  /** v2: the whole condition tree. Derived from `trigger.conditions` for a v1 row, never both at once. */
+  when?: RuleExpr | null;
+  /** v2: cadence of this rule. Absent on a v1 row means "the legacy global caps", exactly as before. */
+  repeatPolicy?: RepeatPolicy | null;
   /** Seeded but needing data that v1 does not compute (Q3): never enable-able, explained in UI. */
   requiresFeature?: string | null;
   /** Only for users who explicitly opted in (`notification_prefs`) — e.g. the evening nudge. */

@@ -16,7 +16,10 @@
  *    function and can veto it.
  */
 
-import type { PushAutomationSettings } from '../../domain/types';
+import type { PushAutomationSettings, RepeatPolicy } from '../../domain/types';
+
+// The persisted shape lives in the data model; this module owns the limits and the decision.
+export type { RepeatPolicy };
 
 /** Hard technical bounds of the policy itself — a typo here would be a bug, not a product decision. */
 export const POLICY_LIMITS = {
@@ -30,27 +33,6 @@ export const POLICY_LIMITS = {
   /** 0 means "no limit for this window". */
   unlimited: 0,
 } as const;
-
-export interface RepeatPolicy {
-  /** Minimum time between two sends of the same rule to the same user. 0 = no spacing. */
-  minIntervalMs: number;
-  /** 0 = unlimited. */
-  perDay: number;
-  perWeek: number;
-  perMonth: number;
-  /** Never send twice for the same event occurrence, even if the rule re-evaluates it. */
-  oncePerEventInstance: boolean;
-  /** Allow several sends on one day when the policy's interval permits them. */
-  allowSameDayMultiple: boolean;
-  /** At most one send per user per rule, ever — the welcome-push shape. */
-  onceInLivespan: boolean;
-  /** Tighter limit for this rule (per user, keyed by rule id). */
-  perRule?: { maxPerDay?: number; minIntervalMs?: number };
-  /** Tighter limit for one step id, applied when that step executes. */
-  perStep?: Record<string, { minIntervalMs?: number; maxPerDay?: number }>;
-  /** Bind even an urgent push to quiet hours. Off by default; urgent is a deliberate exception. */
-  respectQuietHoursAlways?: boolean;
-}
 
 export const DEFAULT_REPEAT_POLICY: RepeatPolicy = {
   minIntervalMs: 0,
