@@ -17,7 +17,11 @@ import * as mediaIngest from '../services/media-ingest';
 import * as mediaLibrary from '../services/media-library';
 import * as notify from '../services/notify';
 import * as pushCampaigns from '../services/push-campaigns';
+import * as automations from '../services/push-automation-admin';
+import * as automationGovernor from '../services/push-automation-governor';
+import { runPushAutomations } from '../services/push-automation-engine';
 import * as policies from '../services/policies';
+import * as systemHealth from '../services/system-health';
 import * as reports from '../services/reports';
 import * as users from '../services/users';
 
@@ -31,8 +35,11 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   // Anything an admin changes may be something the mentor teaches from: flag the index as stale so
   // the next mentor question re-indexes it (incremental — unchanged items cost nothing).
   r.use('/admin', (req, _res, next) => {
+    // Automation writes (a wording tweak, an on/off flip) are never mentor knowledge: re-indexing on
+    // them would burn an embedding batch for nothing (services/system-health.ts has the same rationale).
     const write =
-      req.method !== 'GET' && !/^\/admin\/(jobs|mentor|knowledge\/reindex)/.test(req.path ?? '');
+      req.method !== 'GET' &&
+      !/^\/admin\/(jobs|mentor|knowledge\/reindex|push-automations)/.test(req.path ?? '');
     if (!write) return next();
     void knowledge.markKnowledgeDirty(d).finally(() => next());
   });
@@ -662,6 +669,158 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
     h(async (req) => pushCampaigns.archiveCampaign(d, actorOf(req), id(req))),
   );
 
+  // ─── Push automations (the engine behind «کمپین‌های Push ← اتوماسیون») ──────────────────────
+  // Reads are cheap (one query per collection); every write is audited, version-checked and validated
+  // against the same schemas the engine uses, so nothing can be saved that the sender would reject.
+  // `:key` routes are registered last so the static paths below are never shadowed.
+  r.get(
+    '/admin/push-automations',
+    h(async () => automations.listAutomations(d)),
+  );
+  r.get(
+    '/admin/push-automations/catalog',
+    h(async () => automations.catalogMeta()),
+  );
+  r.get(
+    '/admin/push-automations/runs',
+    h(async (req) => automations.recentRuns(d, parse(automations.runsQuery, req.query))),
+  );
+  // Static paths first: `export`/`import` are valid automation keys, so they would otherwise be read
+  // as a `:key` lookup.
+  r.get(
+    '/admin/push-automations/export',
+    h(async (req) => automations.exportAutomations(d, parse(automations.exportQuery, req.query))),
+  );
+  r.get(
+    '/admin/push-automations/:key/revisions',
+    h(async (req) => automations.listTextRevisions(d, id(req, 'key'))),
+  );
+  r.get(
+    '/admin/push-automations/trace/:userId',
+    h(async (req) => automations.traceUser(d, id(req, 'userId'))),
+  );
+  r.put(
+    '/admin/push-automations/settings',
+    h(async (req) =>
+      automations.updateGlobalSettings(
+        d,
+        actorOf(req),
+        parse(automationGovernor.settingsSchema, req.body),
+      ),
+    ),
+  );
+  // Kill-switch: read uncached on both sides, so «stop everything» applies to the next send and the
+  // next panel poll, not after a cache expiry.
+  r.post(
+    '/admin/push-automations/pause',
+    h(async (req) =>
+      automations.setPaused(d, actorOf(req), parse(automations.pauseSchema, req.body).paused),
+    ),
+  );
+  r.post(
+    '/admin/push-automations/seed',
+    h(async (req) => automations.seedCatalog(d, actorOf(req)), 200),
+  );
+  // The transfer pair: `export` is a read an operator can diff in review, `import` writes through the
+  // very same create/update paths the panel uses (so validation, revisions and audit are not a second
+  // implementation). It never enables anything; see docs/admin-push-automation.md.
+  r.post(
+    '/admin/push-automations/import',
+    rateLimit(
+      limiter,
+      'push-automation-import',
+      10,
+      5 * 60_000,
+      (req) => me(req).id,
+      'در هر ۵ دقیقه حداکثر ۱۰ بار می‌توانید کاتالوگ را درون‌ریزی کنید.',
+    ),
+    h(
+      async (req) =>
+        automations.importAutomations(d, actorOf(req), parse(automations.importSchema, req.body)),
+      200,
+    ),
+  );
+  r.post(
+    '/admin/push-automations/run',
+    rateLimit(
+      limiter,
+      'push-automation-run',
+      6,
+      60 * 60_000,
+      (req) => me(req).id,
+      'اجرای دستی اتوماسیون حداکثر ۶ بار در ساعت ممکن است.',
+    ),
+    h(async (req) =>
+      runPushAutomations(d, parse(automations.runNowSchema, req.body).force ? { force: true } : {}),
+    ),
+  );
+  r.post(
+    '/admin/push-automations',
+    h(
+      async (req) =>
+        automations.createAutomation(
+          d,
+          actorOf(req),
+          parse(automations.automationSchema, req.body),
+        ),
+      201,
+    ),
+  );
+  r.get(
+    '/admin/push-automations/:key',
+    h(async (req) => automations.automationDetail(d, id(req, 'key'))),
+  );
+  r.patch(
+    '/admin/push-automations/:key',
+    h(async (req) =>
+      automations.updateAutomation(
+        d,
+        actorOf(req),
+        id(req, 'key'),
+        parse(automations.automationPatchSchema, req.body),
+      ),
+    ),
+  );
+  r.post(
+    '/admin/push-automations/:key/enabled',
+    h(async (req) =>
+      automations.setAutomationEnabled(
+        d,
+        actorOf(req),
+        id(req, 'key'),
+        parse(automations.enabledSchema, req.body).enabled,
+        parse(automations.enabledSchema, req.body).confirmCritical ?? false,
+      ),
+    ),
+  );
+  r.post(
+    '/admin/push-automations/:key/dry-run',
+    h(async (req) => automations.dryRun(d, id(req, 'key'))),
+  );
+  r.post(
+    '/admin/push-automations/:key/test-send',
+    rateLimit(
+      limiter,
+      'push-automation-test',
+      10,
+      60 * 60_000,
+      (req) => me(req).id,
+      'ارسال آزمایشی حداکثر ۱۰ بار در ساعت ممکن است.',
+    ),
+    h(async (req) =>
+      automations.testSend(
+        d,
+        actorOf(req),
+        id(req, 'key'),
+        parse(automations.testSendSchema, req.body).userId,
+      ),
+    ),
+  );
+  r.delete(
+    '/admin/push-automations/:key',
+    h(async (req) => automations.deleteAutomation(d, actorOf(req), id(req, 'key'))),
+  );
+
   // Policies & audit
   r.get(
     '/admin/policies',
@@ -676,6 +835,16 @@ export function adminRouter(d: Deps, limiter: RateLimiter): LightRouter {
   r.get(
     '/admin/audit-logs',
     h(async (req) => reports.listAudit(d, parse(reports.auditQuery, req.query))),
+  );
+
+  // System health: is Push configured? did the scheduler run? (see services/system-health.ts)
+  r.get(
+    '/admin/system-health',
+    h(async () => systemHealth.systemHealth(d)),
+  );
+  r.post(
+    '/admin/system-health/check',
+    h(async (req) => systemHealth.runHealthCheck(d, actorOf(req))),
   );
 
   // Manual job trigger (superadmin) — useful on dev / when schedules are paused.

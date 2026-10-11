@@ -8,6 +8,12 @@ export interface PushMessage {
 export interface PushSender {
   /** Returns tokens that are permanently invalid and should be removed. */
   send(tokens: string[], msg: PushMessage): Promise<{ sent: number; invalidTokens: string[] }>;
+  /**
+   * Identity of the delivery service for the admin health card. Reports only *which* provider is
+   * wired up and whether it is usable — never a key, a token or any other secret (services/
+   * system-health.ts). Optional: a sender without it is treated as configured-but-unknown.
+   */
+  describe?(): { provider: 'fcm' | 'unconfigured' | 'recording'; configured: boolean };
 }
 
 /** Records messages instead of sending (tests / local). */
@@ -17,6 +23,9 @@ export class RecordingPushSender implements PushSender {
     this.sent.push({ tokens, msg });
     const invalidTokens = tokens.filter((t) => t.startsWith('invalid'));
     return { sent: tokens.length - invalidTokens.length, invalidTokens };
+  }
+  describe() {
+    return { provider: 'recording' as const, configured: true };
   }
 }
 
@@ -34,5 +43,8 @@ export class UnconfiguredPushSender implements PushSender {
     throw new Error(
       'سرویس Push پیکربندی نشده است: Secret با نام FCM_SERVICE_ACCOUNT_JSON روی این Worker (یا محیط Preview آن) تنظیم نشده یا نامعتبر است.',
     );
+  }
+  describe() {
+    return { provider: 'unconfigured' as const, configured: false };
   }
 }

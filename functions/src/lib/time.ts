@@ -54,6 +54,44 @@ export function dayKey(d: Date, timeZone: string): string {
   return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
 }
 
+/**
+ * `YYYY-Www` ISO week key in the given timezone. Weekly automation windows and the weekly push cap
+ * are keyed by this, so a window can never overlap two calendar weeks.
+ */
+export function weekKey(d: Date, timeZone: string): string {
+  const p = zonedParts(d, timeZone);
+  const DAY_MS = 86_400_000;
+  const day = Date.UTC(p.year, p.month - 1, p.day);
+  const dow = (p.weekday + 6) % 7; // 0 = Monday
+  // ISO-8601: a week belongs to the year that holds its Thursday.
+  const thursday = day + (3 - dow) * DAY_MS;
+  const t = new Date(thursday);
+  const year = t.getUTCFullYear();
+  const jan1 = Date.UTC(year, 0, 1);
+  const jan1Dow = (new Date(jan1).getUTCDay() + 6) % 7;
+  // The first Thursday of the ISO year, i.e. the Thursday of the week that contains Jan 4.
+  const week1Thursday = jan1 + ((3 - jan1Dow + 7) % 7) * DAY_MS;
+  const week = Math.floor((thursday - week1Thursday) / (7 * DAY_MS)) + 1;
+  return `${year}-W${String(week).padStart(2, '0')}`;
+}
+
+/** Minutes since midnight in `timeZone` (0..1439). */
+export function minutesOfDay(d: Date, timeZone: string): number {
+  const p = zonedParts(d, timeZone);
+  return p.hour * 60 + p.minute;
+}
+
+/** 'HH:mm' → minutes since midnight, or null when malformed. */
+export function parseHhmm(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(min) || h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
+
 function toMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number);
   return (h ?? 0) * 60 + (m ?? 0);

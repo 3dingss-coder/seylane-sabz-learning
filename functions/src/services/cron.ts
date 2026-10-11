@@ -6,6 +6,9 @@ import { extractPendingMedia } from './media-ingest';
 import { invalidateIndexCache } from './retrieval';
 import { flushDeferredPush } from './notify';
 import { runPushCampaigns } from './push-campaigns';
+import { runPushAutomations } from './push-automation-engine';
+import { drainAutomationEvents } from './push-automation-events';
+import { recordCronRun } from './system-health';
 import type { Deps } from './context';
 import { archiveOldEvents } from './retention';
 
@@ -18,6 +21,7 @@ export type JobName =
   | 'knowledge-reindex'
   | 'migrate-blobs'
   | 'push-campaigns'
+  | 'push-automations'
   | 'archive-events';
 
 export interface JobOptions {
@@ -72,6 +76,17 @@ export const JOBS: Record<JobName, (d: Deps, o?: JobOptions) => Promise<unknown>
   'migrate-blobs': async (d) => (await d.blob.migrateToObjectStorage?.()) ?? { skipped: true },
   // Admin push campaigns: starts due scheduled campaigns and sends pending batches (budgeted).
   'push-campaigns': (d) => runPushCampaigns(d),
+  // The automation engine. Deliberately FIRST in the 15-minute group: a message the quiet-hours rule
+  // defers is written as `pushStatus: 'deferred'` and `flush-push` (right after it) can pick it up in
+  // the same run, so a 10:00 nudge never waits an extra 15 minutes.
+  'push-automations': async (d, o) => {
+    // Outbox first: an event recorded during the last 15 minutes becomes a notification (or a
+    // queued follow-up) before the sweeps run, so a push deferred by quiet hours can still be
+    // flushed by `flush-push` in this same tick.
+    const events = await drainAutomationEvents(d);
+    const run = await runPushAutomations(d, { deadlineAtMs: o?.deadlineAtMs ?? null });
+    return { ...run, events };
+  },
   // Copies event-log rows older than 30 days to R2 (verified), and only when EVENT_ARCHIVE_PRUNE=on
   // removes them from D1. Nothing is ever deleted without a verified copy.
   'archive-events': (d, o) => archiveOldEvents(d, o?.deadlineAtMs ?? null),
@@ -87,14 +102,15 @@ export function runJob(d: Deps, name: JobName, o: JobOptions = {}): Promise<unkn
 
 // Cloudflare Cron Triggers fire in UTC (Iran has no DST any more: Asia/Tehran = UTC+03:30 all
 // year), so the Tehran wall-clock times of spec §26 are converted here:
-//   every 15 min   → web push deferred by quiet hours + scheduled push campaigns + blob migration
+//   every 15 min   → automation engine (queue + windows) + web push deferred by quiet hours + scheduled
+//                    push campaigns + blob migration (a no-op without an R2 bucket)
 //   hourly         → deadline sweep + weekly digest (the digest checks its own policy slot) + knowledge-reindex
 //                    (reads up to 8 new media files per run, re-indexes only what changed)
 //   08:00 Tehran   → mentor daily nudges + behaviour sweep + knowledge reindex
 //   10:00 Tehran   → inactivity reminders
 // Keep this map and `[triggers] crons` in wrangler.toml in sync (guarded by cron.test.ts).
 export const CRON_JOBS: Record<string, JobName[]> = {
-  '*/15 * * * *': ['flush-push', 'push-campaigns', 'migrate-blobs'],
+  '*/15 * * * *': ['push-automations', 'flush-push', 'push-campaigns', 'migrate-blobs'],
   // knowledge-reindex rescans every knowledge item and media row (D1 is single-threaded); it took
   // 12-23 s per run in production logs and slowed learners' requests. Hourly is plenty; admins can
   // run it on demand via POST /v1/admin/jobs/knowledge-reindex.
@@ -151,6 +167,13 @@ export async function runCron(
       jobs[name] = { ok: false, error: (e as Error).message?.slice(0, 300) ?? 'failed' };
       console.error(`[cron:${name}] failed after ${Date.now() - started}ms ${describeError(e)}`);
     }
+  }
+  // Persisted heartbeat: without it, "is the scheduler alive at all?" is only answerable from the
+  // Cloudflare dashboard. Best-effort — a health write must never fail the cron itself.
+  try {
+    await recordCronRun(d, cron, jobs);
+  } catch (e) {
+    console.warn('[cron] health record failed', (e as Error).message);
   }
   return { cron, jobs };
 }

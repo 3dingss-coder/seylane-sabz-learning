@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { extractYoutubeId, normalizePhone } from '../src/lib/ids';
 import { mp4DurationFromBuffer, sniff } from '../src/lib/media';
-import { dayKey, inQuietHours, quietHoursEnd } from '../src/lib/time';
+import { dayKey, inQuietHours, parseHhmm, quietHoursEnd, weekKey } from '../src/lib/time';
 import { applyHeartbeat, grade } from '../src/services/learning';
 import { assignedPackageIds, computeNextItem, sectionScore } from '../src/services/learning-state';
 import { checkInput, checkOutput, retrieve, tokenize } from '../src/services/mentor';
@@ -328,5 +328,21 @@ describe('webpushLink (FCM needs an absolute https link)', () => {
     );
     expect(webpushLink('', '/x')).toBeUndefined();
     expect(webpushLink('http://localhost:5173', '/x')).toBeUndefined();
+  });
+});
+
+describe('time helpers for automation windows', () => {
+  it('weekKey is the ISO week and stays monotonic across the year boundary', () => {
+    expect(weekKey(new Date('2026-10-10T06:00:00.000Z'), 'Asia/Tehran')).toBe('2026-W41');
+    // 2027-01-01 in Tehran still belongs to the ISO week of 2026.
+    expect(weekKey(new Date('2027-01-01T03:00:00.000Z'), 'Asia/Tehran')).toBe('2026-W53');
+    expect(weekKey(new Date('2027-01-04T03:00:00.000Z'), 'Asia/Tehran')).toBe('2027-W01');
+  });
+  it('parseHhmm accepts only real 24h clock times', () => {
+    expect(parseHhmm('07:00')).toBe(420);
+    expect(parseHhmm('22:30')).toBe(1350);
+    expect(parseHhmm('24:00')).toBeNull();
+    expect(parseHhmm(null)).toBeNull();
+    expect(parseHhmm('7:1')).toBeNull();
   });
 });

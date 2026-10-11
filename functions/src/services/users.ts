@@ -163,6 +163,41 @@ export function publicUser(u: Doc<User>) {
 }
 
 // ─── Register / Login ───────────────────────────────────────────────────────
+/**
+ * `team.member_joined` (prompt §8): one outbox row per manager of the team that gained a member, with
+ * the joiner's name carried as `{memberName}` — in the event path `{name}` is resolved from the
+ * *recipient*, so a manager would otherwise read their own name.
+ *
+ * `isListening` is checked before the query, so while no such rule is enabled this costs one read
+ * cached for 30s and writes nothing (§4.9). The emit cannot throw, and a joiner who is themselves a
+ * manager of that team is not told about themselves.
+ */
+async function announceTeamJoin(
+  d: Deps,
+  teamId: string,
+  member: { id: string; name: string },
+): Promise<void> {
+  // Lazy, like the `notify` import below: `users.ts` is on the sign-up path and the automation stack is
+  // only reached when someone actually enabled a rule.
+  const { emitAutomationEventForUsers, isListening } = await import('./push-automation-events');
+  if (!(await isListening(d, 'team.member_joined'))) return;
+  const managers = await d.store.query<User>({
+    collection: 'users',
+    where: [
+      ['teamId', '==', teamId],
+      ['role', '==', 'manager'],
+      ['status', '==', 'active'],
+    ],
+  });
+  await emitAutomationEventForUsers(
+    d,
+    'team.member_joined',
+    managers.map((m) => m.id).filter((id) => id !== member.id),
+    { memberName: member.name },
+    { dedupeKey: member.id },
+  );
+}
+
 export async function register(
   d: Deps,
   input: z.infer<typeof registerSchema>,
@@ -223,7 +258,11 @@ export async function register(
   await d.store.update(`unique_keys/${keyId}`, { uid });
   await d.auth.setClaims(uid, { role: user.role });
   await track(d, 'signup_completed', uid, { method: idf.kind });
-  return { ...user, id: uid } as Doc<User>;
+  const created = { ...user, id: uid } as Doc<User>;
+  // A self sign-up lands in the default sales team when it exists (routes/auth.ts), and that is a new
+  // member for its managers — the same hook an admin's team move fires.
+  if (created.teamId) await announceTeamJoin(d, created.teamId, { id: uid, name: user.name });
+  return created;
 }
 
 async function loginGuard(d: Deps, key: string) {
@@ -504,6 +543,9 @@ export async function adminUpdateUser(
     patch,
   );
   await track(d, 'admin_user_updated', actor.id, { fields: Object.keys(patch) });
+  // Joining the team is the event, whoever moved the person in — including an admin-created account.
+  if (patch.teamId && patch.teamId !== target.teamId)
+    await announceTeamJoin(d, patch.teamId, { id: userId, name: patch.name ?? target.name });
   const updated = await d.store.get<User>(`users/${userId}`);
   return { user: updated ? publicUser(updated) : null, warnings };
 }

@@ -30,6 +30,9 @@ import {
 import { createNudge } from './mentor-rules';
 import { notifyTemplate } from './notify';
 import { awardPoints, evaluateBadges } from './rewards';
+// The outbox of the automation engine (prompt §5.2): a request records what happened and carries
+// on. `emitAutomationEvent` never throws and writes nothing while no rule listens for the event.
+import { emitAutomationEvent } from './push-automation-events';
 
 const LOCKED = 'این قسمت هنوز قفل است. ابتدا قسمت قبل را کامل کنید و در آزمون آن قبول شوید.';
 
@@ -571,6 +574,16 @@ async function recordProgressInner(
     await step('section_completed', () =>
       track(d, 'section_completed', user.id, { sectionId, elapsedSec: next.playedSeconds }),
     );
+    // «قسمت تمام شد، آزمون یادت نرود». `sectionId` is what `stillValid()` re-checks before the
+    // delayed push goes out, so the nudge dies as soon as the quiz is passed.
+    await step('section_completed_event', () =>
+      emitAutomationEvent(d, 'section.completed', user.id, {
+        sectionId,
+        section: section.title,
+        title: section.title,
+        packageId: pkg.id,
+      }),
+    );
   }
   return {
     percent: next.percent,
@@ -797,8 +810,17 @@ export async function startAttempt(d: Deps, user: Doc<User>, quizId: string) {
     tx.create(`attempts/${id}`, attempt as unknown as Record<string, unknown>);
     return { attemptId: id, attemptNumber: n, resumed: false };
   });
-  if (!res.resumed)
+  if (!res.resumed) {
     await track(d, 'quiz_started', user.id, { quizId, attemptNumber: res.attemptNumber });
+    // Prompt §8 «شروع آزمون و رها کردنش»: only a fresh attempt starts the timer — resuming an open
+    // one must not push the delayed nudge further away.
+    await emitAutomationEvent(d, 'attempt.started', user.id, {
+      quizId,
+      sectionId: quiz.sectionId,
+      packageId: view.id,
+      title: view.title,
+    });
+  }
   return res;
 }
 
@@ -924,6 +946,14 @@ export async function submitAttempt(
         score: g.score,
         attemptNumber: a.attemptNumber,
       });
+      await emitAutomationEvent(d, 'quiz.passed', user.id, {
+        sectionId: a.sectionId,
+        packageId: pkg.id,
+        quizId: a.quizId,
+        title: pkg.title,
+        section: section.title,
+        score: Math.round(g.score),
+      });
       const policy = await getPolicy(d);
       if (
         a.attemptNumber === 1 &&
@@ -975,6 +1005,19 @@ export async function submitAttempt(
         { title: pkg.title },
         { actionRef: `/packages/${pkg.id}` },
       );
+      // The 2-hour follow-up (`quiz_failed_nudge`) and the retry offer start here. `attemptNumber`
+      // counts every attempt on this quiz, so the second failure is what feeds the mentor ladder.
+      const failVars = {
+        sectionId: a.sectionId,
+        packageId: pkg.id,
+        quizId: a.quizId,
+        title: pkg.title,
+        section: section.title,
+        score: Math.round(g.score),
+      };
+      await emitAutomationEvent(d, 'quiz.failed', user.id, failVars);
+      if (a.attemptNumber >= 2)
+        await emitAutomationEvent(d, 'quiz.failed_twice', user.id, failVars);
     }
   }
   if (outcome.fresh)
@@ -1028,6 +1071,10 @@ async function onPackageCompleted(d: Deps, user: Doc<User>, pkg: Doc<Package>): 
     return 0; // already recorded (idempotent)
   }
   const policy = await getPolicy(d);
+  await emitAutomationEvent(d, 'package.completed', user.id, {
+    title: pkg.title,
+    packageId: pkg.id,
+  });
   let pts = 0;
   if (
     await awardPoints(

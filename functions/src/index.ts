@@ -27,7 +27,24 @@ const job = (schedule: string, name: JobName | 'backup', run: (d: Deps) => Promi
   onSchedule(
     { schedule, timeZone: TZ, retryCount: 1, memory: '512MiB', timeoutSeconds: 540 },
     async () => {
-      const result = await run(await deps());
+      const d = await deps();
+      let ok = true;
+      let error: string | undefined;
+      let result: unknown = null;
+      try {
+        result = await run(d);
+      } catch (e) {
+        ok = false;
+        error = (e as Error).message?.slice(0, 300) ?? 'failed';
+        throw e;
+      } finally {
+        // Same heartbeat document the Cloudflare cron writes, so the admin health card means the
+        // same thing on either deployment (services/system-health.ts).
+        const { recordCronRun } = await import('./services/system-health');
+        await recordCronRun(d, schedule, { [name]: { ok, ...(error ? { error } : {}) } }).catch(
+          () => undefined,
+        );
+      }
       console.info(`[job:${name}]`, JSON.stringify(result));
     },
   );
@@ -44,6 +61,8 @@ export const dailyReminders = scheduled('0 10 * * *', 'daily-reminders');
 export const weeklyDigest = scheduled('0 * * * *', 'weekly-digest');
 export const mentorDaily = scheduled('0 8 * * *', 'mentor-daily');
 export const flushDeferredPush = scheduled('every 15 minutes', 'flush-push');
+// The automation engine runs on the same 15-minute rhythm on both platforms (services/cron.ts).
+export const pushAutomations = scheduled('every 15 minutes', 'push-automations');
 export const dailyBackup = job('0 3 * * *', 'backup', async () =>
   (await import('./services/backup')).exportFirestore(),
 );

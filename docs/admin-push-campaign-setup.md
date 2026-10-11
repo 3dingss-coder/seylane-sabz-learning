@@ -80,6 +80,10 @@
 1. Worker `seylane-sabz-learning` را باز کنید و در بخش **Settings → Triggers** تأیید کنید که Cron با الگوی `*/15 * * * *` ثبت شده است.
 2. در **Logs / Observability** پس از اولین اجرا، پیام `scheduled` یا خروجی job `push-campaigns` را ببینید.
 3. **نامطمئن:** نحوه deploy این مخزن (GitHub Actions یا Cloudflare Workers Build) در گزارش‌های قبلی ناقص بوده است. پیش از ادعای فعال بودن، نسخه deploy‌شده را از طریق آدرس `https://seylane-sabz-learning.3dingss.workers.dev/v1/health`  و داشبورد بررسی کنید.
+4. همان Trigger با الگوی `*/15 * * * *` job `push-automations` را هم اجرا می‌کند (اتوماسیون اعلان). اگر این
+   تیک نخورده باشد، قوانین زمان‌بندی‌شدهٔ اتوماسیون اصلاً اجرا نمی‌شوند و کارت سلامت پنل «اتوماسیون
+   اعلان» این را با «زمان‌بندی سامانه: گزارشی نرسانده است» نشان می‌دهد — چک‌لیست پس از deploy و ترتیب
+   روشن‌کردن تدریجی‌اش در [`admin-push-automation.md`](./admin-push-automation.md) §۰ است.
 
 ---
 
