@@ -357,6 +357,57 @@ describe('admin: کمپین‌های Push ← اتوماسیون', () => {
     ).toBe(false);
   });
 
+  it('the estimate shows the rule’s own conditions per user, and separates «سنجیده شد» from «مشمول شد»', async () => {
+    const dry = {
+      ...DRY,
+      reviewed: 30,
+      explain: [
+        {
+          userId: 'u1',
+          name: 'سارا',
+          ok: false,
+          why: '۱ روز از آخرین فعالیتش گذشته است (نیازمند ≥ ۲ روز)',
+          lines: ['بی‌فعالیتی: ۱ روز — رد', 'نقش: marketer — قبول'],
+          truncated: false,
+        },
+        {
+          userId: 'u2',
+          name: 'نگار',
+          ok: true,
+          why: null,
+          lines: ['بی‌فعالیتی: ۳ روز — قبول'],
+          truncated: false,
+        },
+        { userId: 'u3', name: 'تید', ok: false, why: null, lines: [], truncated: true },
+      ],
+    };
+    const m = mockApi({
+      ...routes(),
+      'POST /v1/admin/push-automations/inactive_1d/dry-run': () => ({ data: dry }),
+    });
+    renderApp('/admin/push-campaigns/automations');
+    fireEvent.click(await firstAsync('button', 'چند نفر مشمول؟'));
+    // A rule nobody matched and an audience nobody was checked against are different problems; the
+    // panel used to collapse both into «۰ نفر مشمول».
+    expect(
+      await screen.findByText(
+        '۳۰ نفر با این قانون سنجیده شدند و ۱۲ نفر مشمول بودند — ۷ نفر همین حالا پوش می‌گرفتند. ردشدن‌ها: سقف روزانه پوش کاربر پر شده است (۳)، هیچ دستگاه معتبری برای این کاربر ثبت نشده است (۲).',
+      ),
+    ).toBeInTheDocument();
+    // The verdict comes from the rule's own tree, with the value each condition saw — not a guess.
+    expect(screen.getByText(/۱ روز از آخرین فعالیتش گذشته است/)).toBeInTheDocument();
+    expect(screen.getByText('· بی‌فعالیتی: ۱ روز — رد')).toBeInTheDocument();
+    expect(screen.getByText('· نقش: marketer — قبول')).toBeInTheDocument();
+    expect(screen.getByText('· بی‌فعالیتی: ۳ روز — قبول')).toBeInTheDocument();
+    expect(screen.getByText('مشمول')).toBeInTheDocument();
+    // An evaluation that hit the node budget is announced as unknown, never as a refusal or a match.
+    expect(screen.getByText(/ارزیابی کامل نشد \(سقف گره\)/)).toBeInTheDocument();
+    // and it stays a read-only preview
+    expect(
+      m.calls.some((c) => c.key === 'POST /v1/admin/push-automations/inactive_1d/enabled'),
+    ).toBe(false);
+  });
+
   it('the caps dialog validates before sending, and converts minutes to milliseconds', async () => {
     const m = mockApi(routes());
     renderApp('/admin/push-campaigns/automations');

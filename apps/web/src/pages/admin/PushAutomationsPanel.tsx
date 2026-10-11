@@ -609,6 +609,37 @@ export function EstimateDialog({
             </ul>
           </div>
         )}
+        {dry.explain && dry.explain.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <h4 className="text-sm font-extrabold text-text">
+              «چرا»ی خودِ شرط‌ها (همان چیزی که اجرا می‌خواند)
+            </h4>
+            <ul className="flex flex-col gap-2 text-xs">
+              {dry.explain.map((x) => (
+                <li key={x.userId} className="rounded-card border border-border bg-background p-2">
+                  <p className="font-bold text-text">
+                    {x.name} —{' '}
+                    {x.ok ? (
+                      <span className="text-success-fg">مشمول</span>
+                    ) : (
+                      <span className="text-danger-fg">{x.why ?? 'رد شد'}</span>
+                    )}
+                    {x.truncated ? (
+                      <span className="text-warning-fg">· ارزیابی کامل نشد (سقف گره)</span>
+                    ) : null}
+                  </p>
+                  {x.lines.length > 0 && (
+                    <ul className="mt-1 flex flex-col gap-0.5 text-text-secondary">
+                      {x.lines.map((line, i) => (
+                        <li key={`${x.userId}:${i}`}>{`· ${line}`}</li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {dry.skippedLabels.length > 0 && (
           <div className="flex flex-col gap-1">
             <h4 className="text-sm font-extrabold text-text">چرا بقیه نگرفتند؟</h4>

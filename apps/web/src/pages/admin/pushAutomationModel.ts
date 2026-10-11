@@ -85,7 +85,27 @@ export interface DryRunResult {
   skipped: Record<string, number>;
   skippedLabels: Array<{ reason: string; count: number; label: string }>;
   sample: DryRunSample[];
+  /**
+   * How many users the rule was *checked against*. `evaluated` alone cannot tell «هیچ‌کس مشمول نبود»
+   * from «کسی برای سنجیدن نبود» — and that is the difference between a wrong rule and an empty audience.
+   * Absent from an older deploy, where the panel falls back to the single number it always had.
+   */
+  reviewed?: number;
+  /** Per-user verdict of the rule's own conditions, from the same `ruleMatch` the engine calls. */
+  explain?: DryRunExplain[];
   note: string | null;
+}
+
+export interface DryRunExplain {
+  userId: string;
+  name: string;
+  ok: boolean;
+  /** The first condition that refused, in Persian; null when the user passed. */
+  why: string | null;
+  /** Every condition with the value the rule actually saw. */
+  lines: string[];
+  /** The tree hit the node budget, so the verdict is unknown and nothing was sent. */
+  truncated?: boolean;
 }
 
 export interface CronHealth {
@@ -229,7 +249,10 @@ export function capsSummary(s: AutomationSettings): string {
 
 /** What a «برآورد» result says in one sentence, including why people were skipped. */
 export function estimateSentence(dry: DryRunResult): string {
-  const head = `${faNum(dry.evaluated)} نفر در جمعیت بررسی‌شده مشمول این قانون بودند`;
+  const head =
+    dry.reviewed == null || dry.reviewed === dry.evaluated
+      ? `${faNum(dry.evaluated)} نفر در جمعیت بررسی‌شده مشمول این قانون بودند`
+      : `${faNum(dry.reviewed)} نفر با این قانون سنجیده شدند و ${faNum(dry.evaluated)} نفر مشمول بودند`;
   const send = `${faNum(dry.wouldSend)} نفر همین حالا پوش می‌گرفتند`;
   const top = dry.skippedLabels.slice(0, 3);
   if (!top.length) return `${head} — ${send}.`;
