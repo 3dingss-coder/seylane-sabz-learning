@@ -1,0 +1,46 @@
+name: Cloudflare report
+
+# Read-only usage report (requests, errors, latency, D1, R2) from the Cloudflare GraphQL Analytics API.
+# Needs repository secrets CF_API_TOKEN (read-only token) and CF_ACCOUNT_ID. Run it from the Actions tab
+# ("Run workflow"), or it runs when this workflow or its script changes in a pull request.
+on:
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: 'How many hours back'
+        default: '24'
+  pull_request:
+    paths: ['.github/workflows/cloudflare-report.yml', 'scripts/cf-report.mjs']
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Report
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          REPORT_HOURS: ${{ inputs.hours || '24' }}
+        run: node scripts/cf-report.mjs | tee report.md
+      - name: Post the report where it can be read
+        if: always() && hashFiles('report.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$PR" ]; then
+            gh pr comment "$PR" --body-file report.md
+          else
+            N=$(gh issue list --search 'Cloudflare report (auto) in:title' --state open --json number --jq '.[0].number')
+            [ -z "$N" ] && N=$(gh issue create --title 'Cloudflare report (auto)' --body 'Reports from the Cloudflare report workflow are posted below.' | grep -o '[0-9]*$')
+            gh issue comment "$N" --body-file report.md
+          fi
