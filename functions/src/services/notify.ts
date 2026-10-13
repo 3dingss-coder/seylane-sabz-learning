@@ -201,6 +201,11 @@ export interface NotifyOptions {
    * `sendPush` falls back to a per-user lookup — identical behaviour, one query per user more.
    */
   tokenIndex?: Map<string, DeviceToken[]>;
+  /**
+   * Internal delivery observation hook. Automation accounting uses it to distinguish a notification
+   * row being created from the provider actually accepting (or deferring) its Push.
+   */
+  onPushStatus?: (userId: string, status: Notification['pushStatus']) => void;
 }
 
 async function throttled(d: Deps, userId: string, key: string, windowMs: number): Promise<boolean> {
@@ -327,6 +332,11 @@ export async function notifyUsers(
         if (push && !deferred) {
           const status = await sendPush(d, { ...n, id }, type, opts.tokenIndex);
           await d.store.update(`notifications/${id}`, { pushStatus: status });
+          opts.onPushStatus?.(userId, status);
+        } else if (deferred) {
+          opts.onPushStatus?.(userId, 'deferred');
+        } else if (optedOut) {
+          opts.onPushStatus?.(userId, 'skipped');
         }
       }),
     );

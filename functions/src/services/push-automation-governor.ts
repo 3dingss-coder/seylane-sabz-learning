@@ -794,8 +794,8 @@ export function policyDecision(
 }
 
 /**
- * The whole rulebook in one function: kill-switch → enabled → audience → status → prefs → caps →
- * cooldown/gap → idempotency claim. Order matters: everything cheap and side-effect-free is checked
+ * The whole rulebook in one function: kill-switch → enabled → audience → status → prefs → rule caps →
+ * rule cooldown → idempotency claim. Order matters: everything cheap and side-effect-free is checked
  * before the claim, because a claim can never be taken back (a retried send is worse than a skip).
  */
 export async function gate(d: Deps, g: GateInput): Promise<GateResult> {
@@ -819,43 +819,26 @@ export async function gate(d: Deps, g: GateInput): Promise<GateResult> {
   const lastForKey = counter.keys?.[bucket];
 
   if (a.repeatPolicy) {
-    // The rule owns its cadence. The global per-user caps are deliberately NOT consulted on this path:
-    // they were an imposed limit on every rule at once, and the plan replaces them with the policy
-    // above. What is not a cap and therefore still stands, untouched: the kill-switch, `enabled`,
-    // `requiresFeature`, the user's status and audience, the user's own muted categories and opt-ins,
-    // a missing variable, no valid device, the cooldown this rule asked for, and the idempotency
-    // claim below. A policy can raise a *send count*; it cannot buy a permission.
+    // Cadence is owned by the rule. Platform-wide day/week/gap settings are legacy configuration
+    // fields only and must never veto automation delivery.
     const own = policyDecision(a.repeatPolicy, bucket, counter, d.clock().getTime());
     if (!own.allow) return { ok: false, reason: own.reason, detail: own.detail };
-    // A day cap the admin set on THIS rule still binds (it is the rule's own choice, not the platform's).
-    const ownDay = a.delivery.maxPerUserPerDay;
-    if (ownDay !== null && ownDay !== undefined && ownDay >= 0 && counter.daySent >= ownDay)
-      return {
-        ok: false,
-        reason: 'capDay',
-        detail: 'سقف روزانه‌ای که روی همین قاعده گذاشته شده پر است.',
-      };
-  } else {
-    const capDay = a.delivery.maxPerUserPerDay ?? settings.maxPerUserPerDay;
-    if (capDay >= 0 && counter.daySent >= capDay) return { ok: false, reason: 'capDay' };
-    if (settings.maxPerUserPerWeek > 0 && counter.weekSent >= settings.maxPerUserPerWeek)
-      return { ok: false, reason: 'capWeek' };
   }
+
+  // The legacy delivery-level daily cap is also rule-local. Count only sends from this rule/step:
+  // another automation reaching the same user must not consume this rule's allowance.
+  const ownDay = a.delivery.maxPerUserPerDay;
+  const ownDaySent = counter.perRule?.[bucket]?.daySent ?? 0;
+  if (ownDay !== null && ownDay !== undefined && ownDay >= 0 && ownDaySent >= ownDay)
+    return {
+      ok: false,
+      reason: 'capDay',
+      detail: 'سقف روزانه‌ای که روی همین قاعده گذاشته شده پر است.',
+    };
 
   if (a.delivery.sendOnce && lastForKey) return { ok: false, reason: 'sendOnce' };
   if (cooldown > 0 && lastForKey && d.clock().getTime() - Date.parse(lastForKey) < cooldown)
     return { ok: false, reason: 'cooldown' };
-  // The global minimum gap is part of the inherited cadence: a rule with its own policy has already
-  // answered the spacing question in `minIntervalMs`, so the platform-wide gap does not add to it.
-  if (
-    !a.repeatPolicy &&
-    !g.ignoreGap &&
-    settings.minGapMs > 0 &&
-    a.delivery.priority !== 'urgent' &&
-    counter.lastAt &&
-    d.clock().getTime() - Date.parse(counter.lastAt) < settings.minGapMs
-  )
-    return { ok: false, reason: 'gap' };
 
   const windowKey = await windowKeyFor(d, a, cooldown);
   if (!g.dry && !(await tryClaim(d, bucket, user.id, windowKey)))

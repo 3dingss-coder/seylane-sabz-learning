@@ -439,6 +439,7 @@ export async function sendAutomation(
   if (!decision.ok) return await skip(decision.reason, decision.detail);
   if (ctx.dry) return { sent: true, windowKey: 'preview' };
 
+  let pushStatus: 'sent' | 'failed' | 'deferred' | 'skipped' | null = null;
   const opts: NotifyOptions = {
     actionRef,
     imageUrl: a.message.imageUrl ?? null,
@@ -462,9 +463,14 @@ export async function sendAutomation(
     category: a.category,
     ...(ctx.test ? { isTest: true } : {}),
     ...(tokens ? { tokenIndex: tokens } : {}),
+    onPushStatus: (_userId, status) => {
+      if (status !== 'none') pushStatus = status;
+    },
   };
   const created = await notifyUsers(d, [user.id], 'automation', { title, body }, opts);
   if (created === 0) return await skip('cooldown', 'notification_log');
+  if (a.delivery.push && pushStatus === 'failed')
+    return await skip('error', 'FCM provider rejected or failed the Push request');
 
   if (!ctx.test) {
     const now = d.clock().toISOString();
@@ -472,7 +478,7 @@ export async function sendAutomation(
     // Both, on purpose. The in-memory map keeps *this* run consistent (a second rule in the same sweep
     // must see the send the first one just did); the write is what makes the *next* run see it. Without
     // the write a scheduled rule's day counters only ever bound a single run, so a per-rule repeat
-    // policy — or the inherited cap — could not be enforced across the windows of a day.
+    // policy could not be enforced across the windows of a day.
     if (ctx.counters) ctx.counters.set(user.id, next);
     await writeCounter(d, user.id, next);
     await track(d, 'automation_sent', user.id, { key: a.key, kind: ctx.kind ?? 'sweep' });
@@ -711,7 +717,10 @@ export async function evaluateSweep(
       if (r.sent) {
         out.sent++;
         out.matched.push({ userId: u.id, name: u.name, reason: 'sent' });
-      } else addSkip(out.skipped, r.reason);
+      } else {
+        addSkip(out.skipped, r.reason);
+        if (r.reason === 'error') out.failed++;
+      }
       continue;
     }
     if (!ladder.allow(u.id)) {
@@ -733,6 +742,7 @@ export async function evaluateSweep(
         out.matched.push({ userId: u.id, name: u.name, reason: 'sent' });
       } else {
         addSkip(out.skipped, r.reason);
+        if (r.reason === 'error') out.failed++;
         out.matched.push({ userId: u.id, name: u.name, reason: r.reason });
       }
     } catch (e) {
@@ -1006,8 +1016,8 @@ export interface FlowOutcome {
 /**
  * The rule as one `notify` step sees it: the step's own message and channel, `steps` cleared so the send
  * below is a send and not a re-entry, and — only when the rule owns its cadence — the step's slice of the
- * policy merged in with the step as its counter bucket. A rule on inherited caps keeps inherited caps for
- * every step: per-step spacing is a choice a policy makes, not a way to widen a platform limit.
+ * policy merged in with the step as its counter bucket. A rule without a repeat policy has no implicit
+ * platform cadence; per-step spacing exists only when the rule explicitly owns a repeat policy.
  */
 function projectForStep(
   a: PushAutomation,

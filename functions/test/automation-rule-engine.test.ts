@@ -395,16 +395,16 @@ describe('migration leaves v1 rows alone', () => {
     expect(withDefaults(up)).toEqual(up);
   });
 
-  it('reports the conditions a v1 trigger kind never evaluated, and inherits the legacy caps', async () => {
+  it('reports dead v1 conditions but does not inherit platform-wide cadence caps', async () => {
     const raw = (await store().get<PushAutomation>(
       'push_automations/inactive_1d',
     )) as PushAutomation;
     expect(deadConditions(raw)).toEqual([]); // `inactivity` carries no flat conditions
-    const settings = { maxPerUserPerDay: 2, maxPerUserPerWeek: 10, minGapMs: 4 * 3_600_000 };
-    expect(repeatPolicyOf(raw, settings)).toMatchObject({
-      perDay: 2,
-      perWeek: 10,
-      minIntervalMs: 4 * 3_600_000,
+    expect(repeatPolicyOf(raw)).toMatchObject({
+      perDay: 0,
+      perWeek: 0,
+      perMonth: 0,
+      minIntervalMs: 0,
     });
     const withWhen = withDefaults({
       ...raw,
@@ -419,7 +419,7 @@ describe('migration leaves v1 rows alone', () => {
   });
 });
 
-describe('the rule’s own repeat policy replaces the imposed caps', () => {
+describe('the rule’s own repeat policy governs cadence', () => {
   const minutes = (n: number) => n * 60_000;
   const policy = (over: Partial<RepeatPolicy> = {}): RepeatPolicy => ({
     minIntervalMs: 60_000,
@@ -503,7 +503,7 @@ describe('the rule’s own repeat policy replaces the imposed caps', () => {
     expect(await notesFor(marketer.id)).toHaveLength(3);
   });
 
-  it('without a policy the inherited caps still bind, exactly as they did before', async () => {
+  it('without a policy the legacy global caps do not throttle the rule', async () => {
     const key = await makeRule({
       key: 'pol_legacy',
       trigger: { kind: 'schedule_daily', time: '10:00' },
@@ -516,17 +516,15 @@ describe('the rule’s own repeat policy replaces the imposed caps', () => {
       ctx.advance(minutes(5));
       await sweep();
     }
-    // The 4-hour platform gap: the first send goes, the next three are too close.
-    expect(await notesFor(marketer.id)).toHaveLength(1);
-    // Three more sweeps, each past the 4-hour gap, and all of them inside the same Tehran day: the day
-    // rolls at midnight and a rolled counter would be a fresh allowance, not a bug in the cap.
+    // No rule-owned repeat policy means no implicit platform day/week/min-gap throttle.
+    // The rolling delivery window makes each sweep a distinct idempotency window.
+    expect(await notesFor(marketer.id)).toHaveLength(4);
+
     for (let i = 0; i < 3; i++) {
-      ctx.advance(4 * 60 * 60_000 + minutes(5));
+      ctx.advance(minutes(5));
       await sweep();
     }
-    // …and the second one is the last of the day: `maxPerUserPerDay: 2` still governs a rule with no
-    // policy of its own. Migration parity is this assertion, not a promise in a document.
-    expect(await notesFor(marketer.id)).toHaveLength(2);
+    expect(await notesFor(marketer.id)).toHaveLength(7);
   });
 
   it('`sendOnce`, the kill-switch and the user’s own choice are not caps a policy can raise', async () => {

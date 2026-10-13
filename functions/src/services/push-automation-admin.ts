@@ -879,7 +879,7 @@ export interface AutomationDetail extends AutomationRow {
   stepsSummary: string | null;
   /** False for `steps: [notify]`: that rule still runs the legacy single-send path. */
   usesFlow: boolean;
-  /** Its own cadence policy, or `null` when the legacy global caps still govern it. */
+  /** Its own cadence policy, or `null` when no rule-specific cadence policy is configured. */
   repeatPolicy: PushAutomation['repeatPolicy'];
   /** Where the cadence comes from — the list row and the editor must not imply a rule owns one it does not. */
   policySource: 'rule' | 'inherited';

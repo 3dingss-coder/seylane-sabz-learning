@@ -305,7 +305,7 @@ describe('governor: windows, claims, caps', () => {
     expect(await isClaimed(ctx.deps, 'inactive_1d', 'other-user', w)).toBe(false);
   });
 
-  it('refuses in this order: paused → disabled → inactive user → caps', async () => {
+  it('refuses hard stops but ignores the legacy global day/week/min-gap settings', async () => {
     expect(
       await gateReason({
         settings: { ...DEFAULT_SETTINGS, paused: true, updatedAt: '', updatedBy: null },
@@ -318,15 +318,29 @@ describe('governor: windows, claims, caps', () => {
     );
     const suspended = { ...(await marketerDoc()), status: 'suspended' } as unknown as Doc<User>;
     expect(await gateReason({ user: suspended })).toBe('inactiveUser');
+
+    const globallyExhausted = freshCounter({
+      daySent: 99,
+      weekSent: 999,
+      lastAt: new Date(ctx.deps.clock().getTime() - 1_000).toISOString(),
+    });
     expect(
       await gateReason({
-        automation: a({ category: 'quizzes' }),
-        counter: freshCounter({ daySent: 2 }),
+        automation: a({
+          delivery: { ...a().delivery, cooldownMs: 0, maxPerUserPerDay: null },
+        }),
+        counter: globallyExhausted,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          maxPerUserPerDay: 1,
+          maxPerUserPerWeek: 1,
+          minGapMs: DAY,
+          updatedAt: '',
+          updatedBy: null,
+        },
       }),
-    ).toBe('capDay');
-    expect(
-      await gateReason({ counter: freshCounter({ weekSent: DEFAULT_SETTINGS.maxPerUserPerWeek }) }),
-    ).toBe('capWeek');
+    ).toBe('ok');
+
     expect(
       await gateReason({
         automation: a({ audience: { type: 'role', targetId: 'admin', channel: 'any' } }),
@@ -336,22 +350,46 @@ describe('governor: windows, claims, caps', () => {
     expect(await gateReason({ missingVariables: ['section'] })).toBe('missingVariable');
   });
 
-  it('gap and per-automation cooldown both apply; only urgent skips the gap', async () => {
+  it('keeps rule-local caps and cooldowns without letting other rules consume them', async () => {
     const recent = freshCounter({
+      daySent: 40,
+      weekSent: 80,
       lastAt: new Date(ctx.deps.clock().getTime() - 60_000).toISOString(),
       keys: { inactive_1d: ctx.deps.clock().toISOString() },
     });
     expect(await gateReason({ counter: recent })).toBe('cooldown');
+
+    const ownRuleCounter = freshCounter({
+      daySent: 40,
+      weekSent: 80,
+      perRule: {
+        inactive_1d: {
+          day: '2026-10-03',
+          daySent: 2,
+          week: '2026-W40',
+          weekSent: 2,
+          month: '2026-10',
+          monthSent: 2,
+          total: 2,
+          lastAt: null,
+        },
+      },
+    });
     expect(
       await gateReason({
-        automation: a({ delivery: { ...a().delivery, cooldownMs: 0 } }),
-        counter: recent,
+        automation: a({
+          delivery: { ...a().delivery, cooldownMs: 0, maxPerUserPerDay: 2 },
+        }),
+        counter: ownRuleCounter,
       }),
-    ).toBe('gap');
+    ).toBe('capDay');
+
     expect(
       await gateReason({
-        automation: a({ delivery: { ...a().delivery, cooldownMs: 0, priority: 'urgent' } }),
-        counter: recent,
+        automation: a({
+          delivery: { ...a().delivery, cooldownMs: 0, maxPerUserPerDay: 2 },
+        }),
+        counter: freshCounter({ daySent: 40, weekSent: 80 }),
       }),
     ).toBe('ok');
   });
@@ -566,27 +604,59 @@ describe('engine: one send per window, with reasons', () => {
     expect((await traceUser(ctx.deps, marketer.id)).decisions[0]?.reason).toBe('missingVariable');
   });
 
-  it('the daily cap of the global settings stops the second automation of the same day', async () => {
-    const fx = await buildFixture(ctx);
-    // Overdue → the condition rule matches the same user in the same run.
-    await store().update(`packages/${fx.packageId}`, {
-      deadlineAt: new Date(ctx.deps.clock().getTime() - DAY).toISOString(),
-    });
+  it('the engine still sends when only the legacy global counters are exhausted', async () => {
+    await buildFixture(ctx);
     await device();
-    await inactiveFor(8);
+    await inactiveFor(2);
     await ctx.api(admin.token).put('/v1/admin/push-automations/settings', {
       ...DEFAULT_SETTINGS,
       maxPerUserPerDay: 1,
-      minGapMs: 0,
+      maxPerUserPerWeek: 1,
+      minGapMs: DAY,
     });
-    // `inactive_3d` wins the ladder, `overdue_daily` is a condition rule on the same user.
-    await enable('inactive_3d');
-    await enable('overdue_daily');
+    await writeCounter(
+      ctx.deps,
+      marketer.id,
+      freshCounter({
+        daySent: 12,
+        weekSent: 40,
+        lastAt: new Date(ctx.deps.clock().getTime() - 60_000).toISOString(),
+      }),
+    );
+    await updateAutomation(ctx.deps, { id: 'test', role: 'admin' }, 'inactive_1d', {
+      delivery: {
+        ...(catalogSeed('inactive_1d') as PushAutomation).delivery,
+        cooldownMs: 0,
+        maxPerUserPerDay: null,
+      },
+    });
+    await enable('inactive_1d');
     const r = await runPushAutomations(ctx.deps, { force: true });
-    const total = r.sweeps.reduce((n, x) => n + x.sent, 0);
-    expect(total).toBe(1);
-    expect(r.skippedTotals.capDay).toBeGreaterThanOrEqual(1);
+    expect(r.sweeps[0]?.sent).toBe(1);
+    expect(r.skippedTotals.capDay ?? 0).toBe(0);
+    expect(r.skippedTotals.capWeek ?? 0).toBe(0);
+    expect(r.skippedTotals.gap ?? 0).toBe(0);
     expect(ctx.deps.push.sent).toHaveLength(1);
+  });
+
+  it('records an immediate FCM failure as failed and does not consume the rule counter', async () => {
+    await buildFixture(ctx);
+    await device();
+    await inactiveFor(2);
+    await enable('inactive_1d');
+    ctx.deps.push.send = async () => {
+      throw new Error('simulated FCM outage');
+    };
+
+    const r = await runPushAutomations(ctx.deps, { force: true });
+    expect(r.sweeps[0]?.sent).toBe(0);
+    expect(r.sweeps[0]?.failed).toBe(1);
+    expect(r.skippedTotals.error).toBe(1);
+    const notes = await notifications(marketer.id);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]?.pushStatus).toBe('failed');
+    expect((await readCounter(ctx.deps, marketer.id)).daySent).toBe(0);
+    expect((await traceUser(ctx.deps, marketer.id)).decisions[0]?.reason).toBe('error');
   });
 
   it('a dry-run writes nothing at all', async () => {

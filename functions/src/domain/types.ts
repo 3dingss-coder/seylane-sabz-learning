@@ -815,7 +815,7 @@ export interface PushAutomation {
   schemaVersion?: 1 | 2 | null;
   /** v2: the whole condition tree. Derived from `trigger.conditions` for a v1 row, never both at once. */
   when?: RuleExpr | null;
-  /** v2: cadence of this rule. Absent on a v1 row means "the legacy global caps", exactly as before. */
+  /** Cadence owned by this rule. Absent means no platform-wide day/week/min-gap throttle. */
   repeatPolicy?: RepeatPolicy | null;
   /**
    * v2: the workflow. Absent/empty means "the single message in `message`", which is every v1 rule and
