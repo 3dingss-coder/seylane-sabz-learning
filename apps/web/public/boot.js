@@ -35,13 +35,13 @@
     var step = function () {
       i += 1;
       txt.textContent = FULL.slice(0, i);
-      if (i < FULL.length) setTimeout(step, 85);
+      if (i < FULL.length) setTimeout(step, 40);
       else {
         typed = true;
-        setTimeout(hide, 450);
+        setTimeout(hide, 200);
       }
     };
-    setTimeout(step, 900);
+    setTimeout(step, 250);
   }
   // Never trap the user behind the splash if something goes wrong.
   setTimeout(function () {
