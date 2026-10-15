@@ -1,4 +1,5 @@
 /// <reference types="vitest/config" />
+import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import legacy from '@vitejs/plugin-legacy';
@@ -42,6 +43,20 @@ export default defineConfig(({ mode }) => {
                 injectTo: 'head-prepend',
               },
             ];
+          },
+        },
+      },
+      {
+        // The splash mascot is the Largest Contentful Paint. As a separate file it queued behind the
+        // JS/CSS on slow phones (~1.7 s load delay + duration); inlined (~20 kB) it paints with the HTML.
+        name: 'inline-boot-mascot',
+        transformIndexHtml: {
+          order: 'pre',
+          handler(html) {
+            const b64 = readFileSync(
+              fileURLToPath(new URL('./src/assets/mascot-boot.webp', import.meta.url)),
+            ).toString('base64');
+            return html.replace('__BOOT_MASCOT__', `data:image/webp;base64,${b64}`);
           },
         },
       },
