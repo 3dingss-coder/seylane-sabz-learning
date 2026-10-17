@@ -1,0 +1,37 @@
+name: Format auth v3
+
+on:
+  push:
+    branches:
+      - chatgpt/golden-reference-redesign-v3
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: chatgpt/golden-reference-redesign-v3
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prettier --write apps/web/src/pages/auth/AuthPage.tsx
+      - name: Commit formatter output
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/pages/auth/AuthPage.tsx
+          git commit -m "style(auth): apply prettier"
+          git push origin HEAD:chatgpt/golden-reference-redesign-v3
