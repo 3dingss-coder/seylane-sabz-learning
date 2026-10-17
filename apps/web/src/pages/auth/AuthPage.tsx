@@ -287,7 +287,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
                 loading={busy}
                 className="mt-1 min-h-14 rounded-full text-base shadow-[0_10px_28px_-16px_rgba(4,120,87,.75)]"
               >
-                ورود و ادامه
+                ورود
               </Button>
             </form>
 
