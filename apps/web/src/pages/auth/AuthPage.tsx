@@ -174,7 +174,6 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
     }
   };
 
-  const title = mode === 'login' ? 'ورود' : 'ثبت‌نام';
   const identifierLabel =
     mode === 'login' ? 'شماره موبایل یا کد ملی' : fieldUsesNationalCode ? 'کد ملی' : 'شماره موبایل';
   const identifierPlaceholder =
