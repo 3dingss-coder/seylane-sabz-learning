@@ -184,6 +184,121 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
       : fieldUsesNationalCode
         ? 'کد ملی ۱۰ رقمی'
         : '09xxxxxxxxx';
+  if (mode === 'login') {
+    return (
+      <div className="min-h-dvh bg-[#f7f1e7] px-0 sm:px-4 sm:py-6">
+        <div className="relative mx-auto min-h-dvh w-full max-w-[460px] overflow-hidden bg-[#f7f1e7] shadow-[0_30px_80px_-40px_rgba(15,78,59,.55)] sm:min-h-[820px] sm:rounded-[38px]">
+          <section className="relative min-h-[58vh] overflow-hidden bg-[#064e3b] px-6 pb-36 pt-10 text-white sm:min-h-[500px] sm:rounded-b-[42px]">
+            <div
+              aria-hidden
+              className="absolute -end-24 -top-20 size-72 rounded-full bg-[#0f766e]/35 blur-2xl"
+            />
+            <div
+              aria-hidden
+              className="absolute -start-24 top-20 size-72 rounded-full bg-[#022c22]/65 blur-2xl"
+            />
+            <div
+              aria-hidden
+              className="absolute inset-0 opacity-50"
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 16% 28%, rgba(255,255,255,.08) 0 2px, transparent 3px), radial-gradient(circle at 82% 18%, rgba(245,158,11,.18) 0 2px, transparent 3px)',
+                backgroundSize: '54px 54px, 68px 68px',
+              }}
+            />
+            <div
+              aria-hidden
+              className="absolute -end-12 bottom-16 h-44 w-28 rotate-[28deg] rounded-[80%_0] bg-[#10b981]/16"
+            />
+            <div
+              aria-hidden
+              className="absolute -start-12 bottom-6 h-52 w-32 -rotate-[30deg] rounded-[0_80%] bg-[#58cc02]/12"
+            />
+
+            <div className="relative z-10">
+              <div className="flex items-center justify-between">
+                <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-bold text-white/85">
+                  آکادمی سیلانه
+                </div>
+                <span className="size-2 rounded-full bg-[#f59e0b] shadow-[0_0_0_6px_rgba(245,158,11,.12)]" />
+              </div>
+              <div className="mt-8 max-w-[260px]">
+                <h1 className="text-[28px] font-extrabold leading-[1.55] text-white">
+                  به سیلانه سبز
+                  <br />
+                  خوش اومدی!
+                </h1>
+                <p className="mt-2 text-sm font-medium leading-7 text-white/75">
+                  یادگیری امروز، موفقیت فردا
+                </p>
+              </div>
+            </div>
+
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+              <div className="relative h-[300px] w-[300px] sm:h-[320px] sm:w-[320px]">
+                <div
+                  aria-hidden
+                  className="absolute inset-x-12 bottom-5 h-16 rounded-full bg-black/20 blur-xl"
+                />
+                <Mascot mood="welcome" className="relative mx-auto h-full w-auto max-w-full object-contain drop-shadow-2xl" />
+              </div>
+            </div>
+          </section>
+
+          <section className="relative z-20 -mt-16 rounded-t-[34px] bg-[#fffdfa] px-5 pb-8 pt-7 shadow-[0_-18px_45px_-32px_rgba(15,23,42,.35)] sm:mx-4 sm:rounded-[30px] sm:px-6">
+            <form onSubmit={submit} noValidate className="flex flex-col gap-3" aria-busy={busy}>
+              <Input
+                label="شماره موبایل یا کد ملی"
+                ltr
+                inputMode="tel"
+                autoComplete="username"
+                placeholder="شماره موبایل یا کد ملی خود را وارد کنید"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                error={errors.identifier}
+                hint="برای کاربران استان‌های مشمول، کد ملی ثبت‌شده را وارد کنید."
+                icon={loginIdentifierIsNationalCode ? <Fingerprint className="size-5" /> : <Phone className="size-5" />}
+                disabled={busy}
+                className="min-h-14 rounded-[16px] border-[#dfd7c9] bg-white px-4 shadow-none focus:border-[#059669] focus:ring-[#059669]/15"
+              />
+
+              {formError && (
+                <p
+                  role="alert"
+                  className="rounded-[14px] bg-danger-light px-3 py-2 text-sm text-danger-fg"
+                >
+                  {formError}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                size="lg"
+                block
+                loading={busy}
+                className="mt-1 min-h-14 rounded-full text-base shadow-[0_10px_28px_-16px_rgba(4,120,87,.75)]"
+              >
+                ورود و ادامه
+              </Button>
+            </form>
+
+            <button
+              type="button"
+              className="mt-3 min-h-12 w-full text-sm font-bold text-primary-fg"
+              onClick={() => switchMode('register')}
+            >
+              حساب ندارید؟ ثبت‌نام کنید
+            </button>
+
+            <p className="mt-3 text-center text-[11px] leading-5 text-text-secondary">
+              با ورود به حساب، قوانین استفاده و حریم خصوصی آکادمی را می‌پذیرید.
+            </p>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex min-h-dvh flex-col items-center bg-background px-4 pb-8">
       {/* brand hero behind the top of the form */}
