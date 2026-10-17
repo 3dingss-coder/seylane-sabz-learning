@@ -1,10 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Fingerprint, Phone, UserRound } from 'lucide-react';
-import { BrandBackdrop } from '@/components/brand/BrandBackdrop';
 import { Mascot } from '@/components/brand/Mascot';
 import { ResidencePicker, type Residence } from '@/components/common/ResidencePicker';
-import { Button, Card, Input } from '@/components/ui';
+import { Button, Input } from '@/components/ui';
 import { ApiError } from '@/lib/api';
 import { homePathFor, useAuth } from '@/lib/auth';
 import { canAccess } from '@/lib/roles';
@@ -175,7 +174,6 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
     }
   };
 
-  const title = mode === 'login' ? 'ورود' : 'ثبت‌نام';
   const identifierLabel =
     mode === 'login' ? 'شماره موبایل یا کد ملی' : fieldUsesNationalCode ? 'کد ملی' : 'شماره موبایل';
   const identifierPlaceholder =
@@ -184,124 +182,324 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
       : fieldUsesNationalCode
         ? 'کد ملی ۱۰ رقمی'
         : '09xxxxxxxxx';
-  return (
-    <div className="relative flex min-h-dvh flex-col items-center bg-background px-4 pb-8">
-      {/* brand hero behind the top of the form */}
-      <div className="absolute inset-x-0 top-0 h-72 overflow-hidden rounded-b-[36px] sm:h-80">
-        <BrandBackdrop />
-      </div>
-      <div className="relative mt-10 flex flex-col items-center gap-3 text-center sm:mt-14">
-        <div className="animate-pop flex items-end justify-center gap-1">
-          {/* Friendly mascot presence (handoff auth spec) — supportive, beside the brand mark. */}
-          <Mascot mood={mode === 'login' ? 'welcome' : 'guide'} className="h-auto w-14 sm:w-16" />
-          <span className="rounded-hero bg-white p-3 shadow-lg">
-            <img
-              src="/icons/logo-full.png"
-              alt="هلدینگ سیلانه‌سبز"
-              width={160}
-              height={64}
-              className="h-14 w-auto"
+  if (mode === 'login') {
+    return (
+      <div className="min-h-dvh bg-[#f7f1e7] px-0 sm:px-4 sm:py-6">
+        <div className="relative mx-auto min-h-dvh w-full max-w-[460px] overflow-hidden bg-[#f7f1e7] shadow-[0_30px_80px_-40px_rgba(15,78,59,.55)] sm:min-h-[820px] sm:rounded-[38px]">
+          <section className="relative min-h-[58vh] overflow-hidden bg-[#064e3b] px-6 pb-36 pt-10 text-white sm:min-h-[500px] sm:rounded-b-[42px]">
+            <div
+              aria-hidden
+              className="absolute -end-24 -top-20 size-72 rounded-full bg-[#0f766e]/35 blur-2xl"
             />
-          </span>
-        </div>
-        <h1 className="text-2xl font-extrabold text-white">آکادمی سیلانه</h1>
-        {/* controlled amber accent (handoff: emerald brand + controlled amber) */}
-        <span aria-hidden className="h-1 w-12 rounded-full bg-accent" />
-        <p className="text-sm text-white/85">{title}</p>
-      </div>
-      <Card className="animate-fade-up relative mt-6 w-full max-w-[400px] p-6 shadow-lg">
-        <form onSubmit={submit} noValidate className="flex flex-col gap-3" aria-busy={busy}>
-          {mode === 'register' && (
-            <Input
-              label="نام و نام خانوادگی"
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              error={errors.name}
-              icon={<UserRound className="size-5" />}
-              disabled={busy}
+            <div
+              aria-hidden
+              className="absolute -start-24 top-20 size-72 rounded-full bg-[#022c22]/65 blur-2xl"
             />
-          )}
-          {mode === 'register' && (
-            <ResidencePicker
-              value={residence}
-              onChange={handleResidenceChange}
-              label="انتخاب محل فعالیت شما"
-              provinceError={errors.province}
-              cityError={errors.city}
-              disabled={busy}
+            <div
+              aria-hidden
+              className="absolute inset-0 opacity-50"
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 16% 28%, rgba(255,255,255,.08) 0 2px, transparent 3px), radial-gradient(circle at 82% 18%, rgba(245,158,11,.18) 0 2px, transparent 3px)',
+                backgroundSize: '54px 54px, 68px 68px',
+              }}
             />
-          )}
-          {(mode === 'login' || registrationIdentityVisible) && (
-            <Input
-              label={identifierLabel}
-              ltr
-              inputMode={mode === 'register' && fieldUsesNationalCode ? 'numeric' : 'tel'}
-              autoComplete={mode === 'login' ? 'username' : fieldUsesNationalCode ? 'off' : 'tel'}
-              placeholder={identifierPlaceholder}
-              // Login accepts a phone (11 digits) or a national code (10): while typing, the first ten
-              // digits already look like a national code, so a limit here would cut the phone's last digit.
-              maxLength={mode === 'register' && fieldUsesNationalCode ? 10 : undefined}
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              error={errors.identifier}
-              hint={
-                mode === 'login'
-                  ? 'برای کاربران استان‌های مشمول، کد ملی ثبت‌شده را وارد کنید.'
-                  : fieldUsesNationalCode
-                    ? 'برای ورودهای بعدی از همین کد ملی استفاده می‌شود.'
-                    : undefined
-              }
-              icon={
-                fieldUsesNationalCode ? (
-                  <Fingerprint className="size-5" />
-                ) : (
-                  <Phone className="size-5" />
-                )
-              }
-              disabled={busy}
+            <div
+              aria-hidden
+              className="absolute -end-12 bottom-16 h-44 w-28 rotate-[28deg] rounded-[80%_0] bg-[#10b981]/16"
             />
-          )}
-          {formError && (
-            <p
-              role="alert"
-              className="rounded-input bg-danger-light px-3 py-2 text-sm text-danger-fg"
-            >
-              {formError}
-            </p>
-          )}
-          {info && (
-            <p role="status" className="rounded-input bg-info-light px-3 py-2 text-sm text-text">
-              {info}
-            </p>
-          )}
-          <Button type="submit" size="lg" block loading={busy} className="mt-2">
-            {mode === 'login' ? 'ورود' : 'ثبت‌نام و ورود'}
-          </Button>
-        </form>
-        <div className="mt-4 flex flex-col items-center gap-1 text-sm">
-          {mode === 'login' ? (
+            <div
+              aria-hidden
+              className="absolute -start-12 bottom-6 h-52 w-32 -rotate-[30deg] rounded-[0_80%] bg-[#58cc02]/12"
+            />
+
+            <div className="relative z-10">
+              <div className="flex items-center justify-between">
+                <div className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-bold text-white/85">
+                  آکادمی سیلانه
+                </div>
+                <span className="size-2 rounded-full bg-[#f59e0b] shadow-[0_0_0_6px_rgba(245,158,11,.12)]" />
+              </div>
+              <div className="mt-8 max-w-[260px]">
+                <h1 className="text-[28px] font-extrabold leading-[1.55] text-white">
+                  به سیلانه سبز
+                  <br />
+                  خوش اومدی!
+                </h1>
+                <p className="mt-2 text-sm font-medium leading-7 text-white/75">
+                  یادگیری امروز، موفقیت فردا
+                </p>
+              </div>
+            </div>
+
+            <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
+              <div className="relative h-[300px] w-[300px] sm:h-[320px] sm:w-[320px]">
+                <div
+                  aria-hidden
+                  className="absolute inset-x-12 bottom-5 h-16 rounded-full bg-black/20 blur-xl"
+                />
+                <Mascot
+                  mood="welcome"
+                  className="relative mx-auto h-full w-auto max-w-full object-contain drop-shadow-2xl"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="relative z-20 -mt-16 rounded-t-[34px] bg-[#fffdfa] px-5 pb-8 pt-7 shadow-[0_-18px_45px_-32px_rgba(15,23,42,.35)] sm:mx-4 sm:rounded-[30px] sm:px-6">
+            <form onSubmit={submit} noValidate className="flex flex-col gap-3" aria-busy={busy}>
+              <Input
+                label="شماره موبایل یا کد ملی"
+                ltr
+                inputMode="tel"
+                autoComplete="username"
+                placeholder="شماره موبایل یا کد ملی خود را وارد کنید"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                error={errors.identifier}
+                hint="برای کاربران استان‌های مشمول، کد ملی ثبت‌شده را وارد کنید."
+                icon={
+                  loginIdentifierIsNationalCode ? (
+                    <Fingerprint className="size-5" />
+                  ) : (
+                    <Phone className="size-5" />
+                  )
+                }
+                disabled={busy}
+                className="min-h-14 rounded-[16px] border-[#dfd7c9] bg-white px-4 shadow-none focus:border-[#059669] focus:ring-[#059669]/15"
+              />
+
+              {formError && (
+                <p
+                  role="alert"
+                  className="rounded-[14px] bg-danger-light px-3 py-2 text-sm text-danger-fg"
+                >
+                  {formError}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                size="lg"
+                block
+                loading={busy}
+                className="mt-1 min-h-14 rounded-full text-base shadow-[0_10px_28px_-16px_rgba(4,120,87,.75)]"
+              >
+                ورود
+              </Button>
+            </form>
+
             <button
               type="button"
-              className="min-h-12 font-bold text-primary-fg"
+              className="mt-3 min-h-12 w-full text-sm font-bold text-primary-fg"
               onClick={() => switchMode('register')}
             >
               حساب ندارید؟ ثبت‌نام کنید
             </button>
-          ) : (
+
+            <p className="mt-3 text-center text-[11px] leading-5 text-text-secondary">
+              با ورود به حساب، قوانین استفاده و حریم خصوصی آکادمی را می‌پذیرید.
+            </p>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-dvh bg-[#f7f1e7] px-0 sm:px-4 sm:py-6">
+      <div className="relative mx-auto min-h-dvh w-full max-w-[460px] overflow-hidden bg-[#fffdfa] shadow-[0_30px_80px_-40px_rgba(15,78,59,.45)] sm:min-h-[820px] sm:rounded-[38px]">
+        <header className="relative overflow-hidden bg-[#fffaf2] px-5 pb-5 pt-7">
+          <div
+            aria-hidden
+            className="absolute -end-20 -top-16 size-56 rounded-full bg-[#dff4df] blur-2xl"
+          />
+          <div
+            aria-hidden
+            className="absolute -start-24 top-16 size-52 rounded-full bg-[#ffedc7] blur-2xl"
+          />
+
+          <div className="relative z-10 flex items-center justify-between">
             <button
               type="button"
-              className="min-h-12 font-bold text-primary-fg"
               onClick={() => switchMode('login')}
+              className="grid size-11 place-items-center rounded-full border border-[#e7dfd1] bg-white text-lg font-bold text-[#064e3b] shadow-sm"
+              aria-label="بازگشت به ورود"
             >
-              حساب دارید؟ وارد شوید
+              ‹
             </button>
+            <div className="text-center">
+              <p className="text-xs font-bold text-[#8a847a]">ایجاد حساب</p>
+              <p className="mt-0.5 text-sm font-extrabold text-[#15352b]">اطلاعات اصلی شما</p>
+            </div>
+            <span className="grid size-11 place-items-center rounded-full bg-[#ecfdf5] text-xs font-extrabold text-[#047857]">
+              ۱/۴
+            </span>
+          </div>
+
+          <div className="relative z-10 mt-4 h-1.5 overflow-hidden rounded-full bg-[#e8e2d8]">
+            <div className="h-full w-1/4 rounded-full bg-[#059669]" />
+          </div>
+
+          <div className="relative z-10 mt-5 grid grid-cols-[1fr_128px] items-end gap-2">
+            <div>
+              <h1 className="text-[24px] font-extrabold leading-9 text-[#15352b]">
+                بیا بیشتر
+                <br />
+                باهات آشنا بشیم
+              </h1>
+              <p className="mt-2 text-sm leading-7 text-[#6f746f]">
+                فقط چند اطلاعات کوتاه تا حساب آموزشی‌ات آماده شود.
+              </p>
+            </div>
+            <div className="relative flex h-36 items-end justify-center">
+              <div
+                aria-hidden
+                className="absolute bottom-1 h-10 w-24 rounded-full bg-[#064e3b]/10 blur-lg"
+              />
+              <Mascot mood="success" className="relative h-36 w-auto object-contain" />
+            </div>
+          </div>
+        </header>
+
+        <main className="relative z-10 rounded-t-[30px] bg-[#fffdfa] px-5 pb-8 pt-6 sm:px-6">
+          {info && (
+            <p
+              role="status"
+              className="mb-4 rounded-[16px] border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3 text-sm leading-6 text-[#1e40af]"
+            >
+              {info}
+            </p>
           )}
-        </div>
-      </Card>
-      <Link to="/gallery" className="sr-only">
-        راهنمای طراحی
-      </Link>
+
+          <form onSubmit={submit} noValidate className="flex flex-col gap-4" aria-busy={busy}>
+            <section className="rounded-[22px] border border-[#ebe3d6] bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,.32)]">
+              <div className="mb-3 flex items-center gap-3">
+                <span className="grid size-9 place-items-center rounded-full bg-[#ecfdf5] text-sm font-extrabold text-[#047857]">
+                  ۱
+                </span>
+                <div>
+                  <h2 className="text-sm font-extrabold text-[#15352b]">نام و نام خانوادگی</h2>
+                  <p className="mt-0.5 text-[11px] text-[#8a847a]">
+                    همان نامی که در پروفایل نمایش داده می‌شود
+                  </p>
+                </div>
+              </div>
+              <Input
+                label="نام و نام خانوادگی"
+                autoComplete="name"
+                placeholder="نام و نام خانوادگی خود را وارد کنید"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                error={errors.name}
+                icon={<UserRound className="size-5" />}
+                disabled={busy}
+                className="min-h-14 rounded-[16px] border-[#dfd7c9] bg-[#fffdfa] shadow-none focus:border-[#059669] focus:ring-[#059669]/15"
+              />
+            </section>
+
+            <section className="rounded-[22px] border border-[#ebe3d6] bg-white p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,.32)]">
+              <div className="mb-3 flex items-center gap-3">
+                <span className="grid size-9 place-items-center rounded-full bg-[#fff3d6] text-sm font-extrabold text-[#b45309]">
+                  ۲
+                </span>
+                <div>
+                  <h2 className="text-sm font-extrabold text-[#15352b]">محل فعالیت شما</h2>
+                  <p className="mt-0.5 text-[11px] text-[#8a847a]">
+                    استان و شهر محل فعالیت را انتخاب کنید
+                  </p>
+                </div>
+              </div>
+              <ResidencePicker
+                value={residence}
+                onChange={handleResidenceChange}
+                label="انتخاب محل فعالیت شما"
+                provinceError={errors.province}
+                cityError={errors.city}
+                disabled={busy}
+              />
+            </section>
+
+            {registrationIdentityVisible && (
+              <section className="rounded-[22px] border border-[#d8eadf] bg-[#fbfefc] p-4 shadow-[0_12px_30px_-24px_rgba(15,23,42,.28)]">
+                <div className="mb-3 flex items-center gap-3">
+                  <span className="grid size-9 place-items-center rounded-full bg-[#ecfdf5] text-sm font-extrabold text-[#047857]">
+                    ۳
+                  </span>
+                  <div>
+                    <h2 className="text-sm font-extrabold text-[#15352b]">
+                      {fieldUsesNationalCode ? 'کد ملی' : 'شماره موبایل'}
+                    </h2>
+                    <p className="mt-0.5 text-[11px] text-[#8a847a]">
+                      بر اساس محل فعالیت انتخاب‌شده
+                    </p>
+                  </div>
+                </div>
+                <Input
+                  label={identifierLabel}
+                  ltr
+                  inputMode={fieldUsesNationalCode ? 'numeric' : 'tel'}
+                  autoComplete={fieldUsesNationalCode ? 'off' : 'tel'}
+                  placeholder={identifierPlaceholder}
+                  maxLength={fieldUsesNationalCode ? 10 : undefined}
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  error={errors.identifier}
+                  hint={
+                    fieldUsesNationalCode
+                      ? 'برای ورودهای بعدی از همین کد ملی استفاده می‌شود.'
+                      : undefined
+                  }
+                  icon={
+                    fieldUsesNationalCode ? (
+                      <Fingerprint className="size-5" />
+                    ) : (
+                      <Phone className="size-5" />
+                    )
+                  }
+                  disabled={busy}
+                  className="min-h-14 rounded-[16px] border-[#cfe4d6] bg-white shadow-none focus:border-[#059669] focus:ring-[#059669]/15"
+                />
+              </section>
+            )}
+
+            {formError && (
+              <p
+                role="alert"
+                className="rounded-[16px] bg-danger-light px-4 py-3 text-sm text-danger-fg"
+              >
+                {formError}
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              block
+              loading={busy}
+              className="mt-1 min-h-14 rounded-full text-base shadow-[0_10px_28px_-16px_rgba(4,120,87,.75)]"
+            >
+              ثبت‌نام و ورود
+            </Button>
+          </form>
+
+          <button
+            type="button"
+            className="mt-3 min-h-12 w-full text-sm font-bold text-primary-fg"
+            onClick={() => switchMode('login')}
+          >
+            حساب دارید؟ وارد شوید
+          </button>
+
+          <p className="mt-2 text-center text-[11px] leading-5 text-[#8a847a]">
+            اطلاعات شما فقط برای ساخت حساب و شخصی‌سازی مسیر آموزشی استفاده می‌شود.
+          </p>
+        </main>
+
+        <Link to="/gallery" className="sr-only">
+          راهنمای طراحی
+        </Link>
+      </div>
     </div>
   );
 }
