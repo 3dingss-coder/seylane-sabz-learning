@@ -380,7 +380,9 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
                 </span>
                 <div>
                   <h2 className="text-sm font-extrabold text-[#15352b]">نام و نام خانوادگی</h2>
-                  <p className="mt-0.5 text-[11px] text-[#8a847a]">همان نامی که در پروفایل نمایش داده می‌شود</p>
+                  <p className="mt-0.5 text-[11px] text-[#8a847a]">
+                    همان نامی که در پروفایل نمایش داده می‌شود
+                  </p>
                 </div>
               </div>
               <Input
@@ -403,7 +405,9 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
                 </span>
                 <div>
                   <h2 className="text-sm font-extrabold text-[#15352b]">محل فعالیت شما</h2>
-                  <p className="mt-0.5 text-[11px] text-[#8a847a]">استان و شهر محل فعالیت را انتخاب کنید</p>
+                  <p className="mt-0.5 text-[11px] text-[#8a847a]">
+                    استان و شهر محل فعالیت را انتخاب کنید
+                  </p>
                 </div>
               </div>
               <ResidencePicker
