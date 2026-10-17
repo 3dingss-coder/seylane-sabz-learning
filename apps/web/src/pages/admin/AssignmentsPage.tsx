@@ -156,7 +156,7 @@ function Explainer({
       }
     >
       <span className="flex items-center gap-2 font-bold text-text">
-        <span className="text-primary">{icon}</span>
+        <span className="text-primary-fg">{icon}</span>
         {title}
       </span>
       <span className="text-sm leading-6 text-text-secondary">{children}</span>

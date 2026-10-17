@@ -135,7 +135,7 @@ export function UsersPage() {
                     <div>
                       <Link
                         to={`/admin/users/${primaryOf(g).id}`}
-                        className="font-bold text-primary"
+                        className="font-bold text-primary-fg"
                       >
                         {g.name}
                       </Link>
@@ -307,7 +307,7 @@ function DeleteUsersDialog({ group, onClose }: { group: PersonGroup<Me>; onClose
           const self = u.id === me?.id;
           return (
             <li key={u.id}>
-              <label className="flex min-h-11 items-center gap-2">
+              <label className="flex min-h-12 items-center gap-2">
                 <input
                   type="checkbox"
                   disabled={self}
@@ -522,7 +522,7 @@ function UserDialog({
                     }
                     className={
                       on
-                        ? 'min-h-12 rounded-full border border-primary bg-primary-light px-3 text-sm font-bold text-primary'
+                        ? 'min-h-12 rounded-full border border-primary bg-primary-light px-3 text-sm font-bold text-primary-fg'
                         : 'min-h-12 rounded-full border border-border px-3 text-sm text-text-secondary'
                     }
                   >

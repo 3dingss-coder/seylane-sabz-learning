@@ -21,7 +21,7 @@ export function PageHeader({
           <Link
             to={back}
             aria-label="بازگشت"
-            className="pressable -ms-3 flex size-12 shrink-0 items-center justify-center rounded-card text-text-secondary hover:bg-surface hover:text-primary"
+            className="pressable -ms-3 flex size-12 shrink-0 items-center justify-center rounded-card text-text-secondary hover:bg-surface hover:text-primary-fg"
           >
             <ArrowRight className="size-5" aria-hidden />
           </Link>

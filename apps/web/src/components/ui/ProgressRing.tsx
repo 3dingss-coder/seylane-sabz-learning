@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import { faPercent } from '@/lib/format';
 import { useMountedFlag } from '@/lib/motion';
 
 export interface ProgressRingProps {
@@ -11,12 +12,12 @@ export interface ProgressRingProps {
   className?: string;
   /** Color by meaning (§16.1): primary for progress, success when complete. */
   tone?: 'primary' | 'success' | 'warning' | 'danger';
-  /** Replaces the default «NN%» centre label. */
+  /** Replaces the default «۵۰٪» centre label (Persian digits, `faPercent`). */
   center?: ReactNode;
 }
 
 const TONES = {
-  primary: 'text-primary',
+  primary: 'text-primary-fg',
   success: 'text-success',
   warning: 'text-warning',
   danger: 'text-danger',
@@ -73,7 +74,7 @@ export function ProgressRing({
           )}
         />
       </svg>
-      {center ?? <span className="num-latin absolute text-sm font-bold text-text">{pct}%</span>}
+      {center ?? <span className="absolute text-sm font-bold text-text">{faPercent(pct)}</span>}
     </div>
   );
 }
@@ -103,7 +104,7 @@ export function ProgressBar({
       <div
         className={cn(
           'h-full w-full rounded-full transition-transform duration-700 ease-soft',
-          pct >= 100 ? 'bg-success' : 'bg-primary bg-brand-gradient',
+          pct >= 100 ? 'bg-success' : 'bg-cta bg-brand-gradient',
         )}
         // RTL: the fill is anchored to the right edge, so the unfilled part slides out to the right
         style={{ transform: `translateX(${document.dir === 'ltr' ? -rest : rest}%)` }}

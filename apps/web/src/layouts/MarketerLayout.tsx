@@ -66,7 +66,7 @@ export function MarketerLayout() {
                   cn(
                     'pressable flex min-h-12 items-center gap-1.5 rounded-card px-3 text-sm font-bold transition-colors',
                     isActive || match?.some((p) => pathname.startsWith(p))
-                      ? 'bg-primary-light text-primary'
+                      ? 'bg-primary-light text-primary-fg'
                       : 'text-text-secondary hover:bg-background',
                   )
                 }

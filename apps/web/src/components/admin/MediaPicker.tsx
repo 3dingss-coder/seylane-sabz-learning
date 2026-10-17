@@ -114,7 +114,7 @@ export function MediaPicker({
                       selected ? 'border-primary bg-primary-light' : 'border-border bg-surface'
                     }`}
                   >
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-card bg-primary-light text-primary">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-card bg-primary-light text-primary-fg">
                       <Icon className="size-5" aria-hidden />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -134,7 +134,9 @@ export function MediaPicker({
                           .join(' • ')}
                       </span>
                     </span>
-                    {selected && <span className="text-xs font-bold text-primary">انتخاب‌شده</span>}
+                    {selected && (
+                      <span className="text-xs font-bold text-primary-fg">انتخاب‌شده</span>
+                    )}
                   </button>
                 </li>
               );

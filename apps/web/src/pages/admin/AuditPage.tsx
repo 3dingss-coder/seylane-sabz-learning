@@ -75,7 +75,7 @@ export function AuditPage() {
                   hideOnMobile: true,
                   cell: (a) => (
                     <details>
-                      <summary className="cursor-pointer text-xs text-primary">جزئیات</summary>
+                      <summary className="cursor-pointer text-xs text-primary-fg">جزئیات</summary>
                       <pre
                         dir="ltr"
                         className="max-w-md overflow-x-auto whitespace-pre-wrap text-[11px] text-text-secondary"

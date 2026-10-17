@@ -1,4 +1,5 @@
-import { Bot, PhoneCall } from 'lucide-react';
+import { PhoneCall } from 'lucide-react';
+import { Mascot } from '@/components/brand/Mascot';
 import { MentorChat } from '@/components/learning/MentorChat';
 
 /**
@@ -13,9 +14,8 @@ export function MentorPage() {
   return (
     <div className="flex h-[calc(100dvh-12rem)] flex-col md:h-[calc(100dvh-8rem)]">
       <div className="mb-2 flex items-center gap-2">
-        <span className="flex size-9 items-center justify-center rounded-full bg-primary-light">
-          <Bot className="size-5 text-primary" aria-hidden />
-        </span>
+        {/* mentor state (handoff: mascot may support mentor moments) — small, supportive */}
+        <Mascot mood="welcome" className="h-11 w-auto shrink-0" />
         <div className="min-w-0">
           <h1 className="text-lg font-bold leading-6">منتور</h1>
           <p className="flex items-center gap-1 text-xs text-text-secondary">

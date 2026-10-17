@@ -22,7 +22,7 @@ export function FullPageSpinner() {
           height={124}
           className="h-auto w-24 motion-safe:animate-bounce"
         />
-        <Spinner className="size-5 text-primary" />
+        <Spinner className="size-5 text-primary-fg" />
       </div>
     </div>
   );
@@ -79,7 +79,7 @@ function WrongAccount({
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm rounded-card border border-border bg-surface p-6 text-center shadow-sm">
-        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-card bg-primary-light text-primary">
+        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-card bg-primary-light text-primary-fg">
           <ShieldAlert className="size-8" aria-hidden />
         </div>
         <h1 className="text-lg font-bold text-text">{PANEL_LABEL[panel]}</h1>

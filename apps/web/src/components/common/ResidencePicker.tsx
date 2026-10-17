@@ -197,7 +197,7 @@ function LocationField({
                 onClear?.();
                 close(true);
               }}
-              className="pointer-events-auto grid size-8 place-items-center rounded-full text-muted-fg hover:bg-surface-2 focus:outline-none focus:ring-4 focus:ring-info/15"
+              className="pointer-events-auto grid size-12 place-items-center rounded-full text-muted-fg hover:bg-surface-2 focus:outline-none focus:ring-4 focus:ring-info/15"
             >
               <X aria-hidden className="size-4" />
             </button>
@@ -238,7 +238,7 @@ function LocationField({
                   setActive(0);
                 }}
                 onKeyDown={onKeyDown}
-                className="min-h-11 w-full bg-transparent text-base text-text outline-none placeholder:text-muted-fg"
+                className="min-h-12 w-full bg-transparent text-base text-text outline-none placeholder:text-muted-fg"
               />
               {status === 'loading' && <Spinner className="size-4 text-muted-fg" />}
             </div>
@@ -277,9 +277,9 @@ function LocationField({
                       data-value={option}
                       aria-selected={selected}
                       className={cn(
-                        'flex min-h-11 cursor-pointer items-center justify-between gap-2 px-3.5 text-sm',
+                        'flex min-h-12 cursor-pointer items-center justify-between gap-2 px-3.5 text-sm',
                         index === active && 'bg-primary-light',
-                        selected ? 'font-bold text-primary' : 'text-text',
+                        selected ? 'font-bold text-primary-fg' : 'text-text',
                       )}
                     >
                       <span className="truncate">{option}</span>

@@ -180,7 +180,7 @@ function SectionRow({ s }: { s: SectionView }) {
       <span
         className={cn(
           'flex size-11 shrink-0 items-center justify-center rounded-card',
-          locked ? 'bg-surface-2 text-muted-fg' : 'bg-primary-light text-primary',
+          locked ? 'bg-surface-2 text-muted-fg' : 'bg-primary-light text-primary-fg',
         )}
       >
         <Icon className="size-5" aria-hidden />

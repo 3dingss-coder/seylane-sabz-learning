@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlarmClock, CheckCircle2, ClipboardList, Send, TrendingUp, Users } from 'lucide-react';
 import { Button, EmptyState, KpiCard, ProgressBar, Skeleton, TableSkeleton } from '@/components/ui';
 import { DataTable } from '@/components/admin/DataTable';
+import { Mascot } from '@/components/brand/Mascot';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
@@ -38,13 +39,21 @@ export function ManagerDashboard() {
         {(d) => (
           <>
             <PageHeader
-              title={d.team ? `تیم ${d.team.name}` : 'داشبورد تیم'}
+              title={
+                d.team
+                  ? d.team.name.trim().startsWith('تیم')
+                    ? d.team.name
+                    : `تیم ${d.team.name}`
+                  : 'داشبورد تیم'
+              }
               subtitle="وضعیت آموزش اعضای تیم"
             />
             {!d.team ? (
+              /* rare help state (manager spec: mascot only for rare empty/help states) */
               <EmptyState
                 title="هنوز تیمی به شما سپرده نشده"
                 description="از مدیر سیستم بخواهید شما را مدیر یک تیم کند."
+                illustration={<Mascot mood="guide" className="h-24 w-auto" />}
               />
             ) : (
               <>
@@ -82,7 +91,7 @@ export function ManagerDashboard() {
                     className="flex min-h-12 items-center justify-between rounded-card border border-warning/30 bg-warning-light px-3 text-sm font-bold text-text"
                   >
                     {toPersianDigits(d.pendingRetakes)} درخواست آزمون مجدد منتظر بررسی شماست
-                    <span className="text-primary">بررسی</span>
+                    <span className="text-primary-fg">بررسی</span>
                   </Link>
                 )}
                 <section aria-labelledby="laggards" className="flex flex-col gap-2">
@@ -92,7 +101,7 @@ export function ManagerDashboard() {
                     </h2>
                     <Link
                       to="/manager/reports?status=overdue"
-                      className="flex min-h-12 items-center px-2 text-sm font-bold text-primary"
+                      className="flex min-h-12 items-center px-2 text-sm font-bold text-primary-fg"
                     >
                       گزارش کامل
                     </Link>

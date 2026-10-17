@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Fingerprint, Phone, UserRound } from 'lucide-react';
 import { BrandBackdrop } from '@/components/brand/BrandBackdrop';
+import { Mascot } from '@/components/brand/Mascot';
 import { ResidencePicker, type Residence } from '@/components/common/ResidencePicker';
 import { Button, Card, Input } from '@/components/ui';
 import { ApiError } from '@/lib/api';
@@ -190,16 +191,22 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
         <BrandBackdrop />
       </div>
       <div className="relative mt-10 flex flex-col items-center gap-3 text-center sm:mt-14">
-        <span className="animate-pop rounded-hero bg-white p-3 shadow-lg">
-          <img
-            src="/icons/logo-full.png"
-            alt="هلدینگ سیلانه‌سبز"
-            width={160}
-            height={64}
-            className="h-14 w-auto"
-          />
-        </span>
+        <div className="animate-pop flex items-end justify-center gap-1">
+          {/* Friendly mascot presence (handoff auth spec) — supportive, beside the brand mark. */}
+          <Mascot mood={mode === 'login' ? 'welcome' : 'guide'} className="h-auto w-14 sm:w-16" />
+          <span className="rounded-hero bg-white p-3 shadow-lg">
+            <img
+              src="/icons/logo-full.png"
+              alt="هلدینگ سیلانه‌سبز"
+              width={160}
+              height={64}
+              className="h-14 w-auto"
+            />
+          </span>
+        </div>
         <h1 className="text-2xl font-extrabold text-white">آکادمی سیلانه</h1>
+        {/* controlled amber accent (handoff: emerald brand + controlled amber) */}
+        <span aria-hidden className="h-1 w-12 rounded-full bg-accent" />
         <p className="text-sm text-white/85">{title}</p>
       </div>
       <Card className="animate-fade-up relative mt-6 w-full max-w-[400px] p-6 shadow-lg">
@@ -276,7 +283,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
           {mode === 'login' ? (
             <button
               type="button"
-              className="min-h-12 font-bold text-primary"
+              className="min-h-12 font-bold text-primary-fg"
               onClick={() => switchMode('register')}
             >
               حساب ندارید؟ ثبت‌نام کنید
@@ -284,7 +291,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
           ) : (
             <button
               type="button"
-              className="min-h-12 font-bold text-primary"
+              className="min-h-12 font-bold text-primary-fg"
               onClick={() => switchMode('login')}
             >
               حساب دارید؟ وارد شوید

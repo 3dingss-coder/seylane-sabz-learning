@@ -153,7 +153,7 @@ export function BrandDetailPage() {
       <Card className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary-light">
-            <Bot className="size-5 text-primary" aria-hidden />
+            <Bot className="size-5 text-primary-fg" aria-hidden />
           </span>
           <div className="min-w-0">
             <h2 className="text-sm font-bold">رفتار منتور درباره‌ی این برند</h2>

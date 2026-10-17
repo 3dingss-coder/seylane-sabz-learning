@@ -117,7 +117,7 @@ export function NotificationPrefsCard() {
     return (
       <Card className="flex flex-col gap-2" aria-labelledby="notif-prefs-heading">
         <h2 id="notif-prefs-heading" className="flex items-center gap-2 text-base font-bold">
-          <BellOff className="size-5 text-primary" aria-hidden />
+          <BellOff className="size-5 text-primary-fg" aria-hidden />
           تنظیمات اعلان
         </h2>
         <p role="alert" className="text-sm text-danger-fg">
@@ -138,7 +138,7 @@ export function NotificationPrefsCard() {
     >
       <div>
         <h2 id="notif-prefs-heading" className="flex items-center gap-2 text-base font-bold">
-          <BellOff className="size-5 text-primary" aria-hidden />
+          <BellOff className="size-5 text-primary-fg" aria-hidden />
           تنظیمات اعلان
         </h2>
         <p className="text-xs text-text-secondary">

@@ -56,7 +56,7 @@ export function MentorGuidesPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary-light">
-              <Bot className="size-6 text-primary" aria-hidden />
+              <Bot className="size-6 text-primary-fg" aria-hidden />
             </span>
             <div className="min-w-0">
               <h2 className="font-bold">رفتار پیش‌فرض منتور</h2>

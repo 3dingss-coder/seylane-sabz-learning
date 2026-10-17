@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card, CountUp, EmptyState, Skeleton } from '@/components/ui';
+import { Mascot } from '@/components/brand/Mascot';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
@@ -101,7 +102,9 @@ export function CardsPage() {
                       </span>
                       <p className="text-sm font-bold text-text">{b.title}</p>
                       <p className="text-xs leading-5 text-text-secondary">{b.description}</p>
-                      {b.earnedAt && <p className="text-xs text-primary">{faDate(b.earnedAt)}</p>}
+                      {b.earnedAt && (
+                        <p className="text-xs text-primary-fg">{faDate(b.earnedAt)}</p>
+                      )}
                     </Card>
                   </li>
                 );
@@ -122,6 +125,7 @@ export function CardsPage() {
             <EmptyState
               title="هنوز امتیازی نگرفته‌ای"
               description="با تکمیل به‌موقع آموزش‌ها و قبولی در آزمون امتیاز بگیر."
+              illustration={<Mascot mood="guide" className="h-24 w-auto" />}
             />
           }
         >

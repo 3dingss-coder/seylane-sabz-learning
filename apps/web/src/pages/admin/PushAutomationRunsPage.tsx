@@ -72,7 +72,7 @@ export function PushAutomationRunsPage() {
       cell: (r) => (
         <Link
           to={`/admin/push-campaigns/automations/${r.key}`}
-          className="font-bold text-primary hover:underline"
+          className="font-bold text-primary-fg hover:underline"
         >
           {r.label}
         </Link>
@@ -131,7 +131,7 @@ export function PushAutomationRunsPage() {
         actions={
           <Link
             to="/admin/push-campaigns/automations/trace"
-            className="inline-flex min-h-10 items-center gap-1.5 rounded-input border border-primary/70 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary-light"
+            className="inline-flex min-h-12 items-center gap-1.5 rounded-input border border-primary/70 bg-surface px-3 text-sm font-bold text-primary-fg hover:bg-primary-light"
           >
             <UserSearch className="size-4" aria-hidden />
             ردیابی کاربر
@@ -201,7 +201,7 @@ export function PushAutomationRunsPage() {
         رمز/توکن). برای دیدن اینکه یک قانون «چرا برای فلان کاربر نرفت»، صفحه{' '}
         <Link
           to="/admin/push-campaigns/automations/trace"
-          className="font-bold text-primary hover:underline"
+          className="font-bold text-primary-fg hover:underline"
         >
           ردیابی کاربر
         </Link>{' '}

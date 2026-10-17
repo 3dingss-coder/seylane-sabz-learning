@@ -158,7 +158,7 @@ export function JalaliDateField({
               type="button"
               onClick={() => move(-1)}
               aria-label="ماه قبل"
-              className="flex size-12 items-center justify-center rounded-input text-primary hover:bg-primary-light"
+              className="flex size-12 items-center justify-center rounded-input text-primary-fg hover:bg-primary-light"
             >
               <ChevronRight className="size-5" aria-hidden />
             </button>
@@ -169,7 +169,7 @@ export function JalaliDateField({
               type="button"
               onClick={() => move(1)}
               aria-label="ماه بعد"
-              className="flex size-12 items-center justify-center rounded-input text-primary hover:bg-primary-light"
+              className="flex size-12 items-center justify-center rounded-input text-primary-fg hover:bg-primary-light"
             >
               <ChevronLeft className="size-5" aria-hidden />
             </button>
@@ -197,13 +197,13 @@ export function JalaliDateField({
                   aria-pressed={selected}
                   aria-label={formatJalali(cur)}
                   className={cn(
-                    'flex aspect-square min-h-10 items-center justify-center rounded-input text-sm font-bold transition-colors',
+                    'flex aspect-square min-h-12 items-center justify-center rounded-input text-sm font-bold transition-colors',
                     selected
-                      ? 'bg-primary text-on-primary'
+                      ? 'bg-cta text-on-cta'
                       : disabled
                         ? 'cursor-not-allowed text-muted opacity-40'
                         : isToday
-                          ? 'border border-primary/40 bg-primary-light text-primary'
+                          ? 'border border-primary/40 bg-primary-light text-primary-fg'
                           : 'text-text hover:bg-primary-light',
                   )}
                 >
@@ -228,7 +228,7 @@ export function JalaliDateField({
           <div className="mt-3 flex justify-between gap-2">
             <button
               type="button"
-              className="min-h-12 px-3 text-sm font-bold text-primary"
+              className="min-h-12 px-3 text-sm font-bold text-primary-fg"
               onClick={() => {
                 setView([today[0], today[1]]);
                 onChange(format(today, time || defaultTime, mode));

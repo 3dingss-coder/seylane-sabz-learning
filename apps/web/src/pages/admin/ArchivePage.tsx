@@ -201,7 +201,7 @@ function UserActionDialog({
       <ul className="mt-3 flex flex-col gap-2">
         {group.rows.map((u) => (
           <li key={u.id}>
-            <label className="flex min-h-11 items-center gap-2">
+            <label className="flex min-h-12 items-center gap-2">
               <input
                 type="checkbox"
                 checked={picked.includes(u.id)}

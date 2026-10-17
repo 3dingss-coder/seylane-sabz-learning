@@ -13,7 +13,7 @@ export function PushOptIn() {
   return (
     <Card className="flex flex-col gap-2">
       <h2 className="flex items-center gap-2 text-base font-bold">
-        <Bell className="size-5 text-primary" aria-hidden />
+        <Bell className="size-5 text-primary-fg" aria-hidden />
         اعلان‌های گوشی/مرورگر
       </h2>
       {state === 'granted' && (

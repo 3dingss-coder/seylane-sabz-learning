@@ -5,6 +5,7 @@ import { Bell, CheckCheck, MessageSquareText } from 'lucide-react';
 import { Button, EmptyState, TableSkeleton } from '@/components/ui';
 import { Tabs } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Mascot } from '@/components/brand/Mascot';
 import { QueryState } from '@/components/common/QueryState';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -64,7 +65,12 @@ export function MessagesPage() {
           query={n}
           loading={<TableSkeleton rows={5} />}
           isEmpty={(d) => d.items.length === 0}
-          empty={<EmptyState title="اعلانی نداری" icon={<Bell className="size-8" />} />}
+          empty={
+            <EmptyState
+              title="اعلانی نداری"
+              illustration={<Mascot mood="thinking" className="h-24 w-auto" />}
+            />
+          }
         >
           {(d) => (
             <ul className="stagger flex flex-col gap-2">
@@ -87,7 +93,7 @@ export function MessagesPage() {
                     <Bell
                       className={cn(
                         'mt-0.5 size-5 shrink-0',
-                        it.readAt ? 'text-muted-fg' : 'text-primary',
+                        it.readAt ? 'text-muted-fg' : 'text-primary-fg',
                       )}
                       aria-hidden
                     />
@@ -119,7 +125,7 @@ export function MessagesPage() {
           empty={
             <EmptyState
               title="پیامی از مدیر نداری"
-              icon={<MessageSquareText className="size-8" />}
+              illustration={<Mascot mood="thinking" className="h-24 w-auto" />}
             />
           }
         >

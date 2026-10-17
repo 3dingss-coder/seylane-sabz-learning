@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import { BookOpenCheck, CheckCircle2, PlayCircle, Sparkles } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { EmptyState, PackageCardSkeleton } from '@/components/ui';
 import { Tabs } from '@/components/common/Field';
-import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState, StaleBanner } from '@/components/common/QueryState';
 import { BrandLogo } from '@/components/brand/BrandLogo';
+import { Mascot } from '@/components/brand/Mascot';
 import { PackageCard } from '@/components/learning/PackageCard';
 import { cn } from '@/lib/cn';
 import { clearSubject, rememberSubject } from '@/lib/pageContext';
@@ -59,49 +60,118 @@ export function LearnPage() {
     });
   }, [brand, brands]);
 
+  const total = counts.in_progress + counts.new + counts.completed;
+  const completion = total > 0 ? Math.round((counts.completed / total) * 100) : 0;
+
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader title="آموزش‌ها" />
-      <Tabs
-        label="وضعیت آموزش‌ها"
-        value={tab}
-        onChange={setTab}
-        items={[
-          { value: 'in_progress', label: 'در حال انجام', count: counts.in_progress },
-          { value: 'new', label: 'جدید', count: counts.new },
-          { value: 'completed', label: 'تکمیل‌شده', count: counts.completed },
-        ]}
-      />
-      {brands.length > 1 && (
+    <div className="flex flex-col gap-5 pb-2">
+      <section className="relative overflow-hidden rounded-hero bg-hero px-5 py-6 shadow-lg sm:px-7 sm:py-7">
+        <div aria-hidden className="bg-dots absolute inset-0 text-white/[0.05]" />
         <div
-          className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
-          role="group"
-          aria-label="فیلتر برند"
-        >
-          {brands.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              aria-pressed={brand === b.id}
-              onClick={() => setBrand(brand === b.id ? null : b.id)}
-              className={cn(
-                'pressable flex min-h-12 shrink-0 items-center gap-2 rounded-full border bg-surface px-2 pe-4 text-sm font-bold shadow-xs',
-                brand === b.id
-                  ? 'border-primary bg-primary-light text-primary'
-                  : 'border-border text-text-secondary hover:border-primary/40',
-              )}
-            >
-              <BrandLogo name={b.name} logoUrl={b.logoUrl} size="sm" className="size-9 p-1" />
-              {b.name}
-            </button>
-          ))}
+          aria-hidden
+          className="absolute -end-14 -top-20 size-52 rounded-full bg-primary-300/15 blur-3xl"
+        />
+        <div
+          aria-hidden
+          className="absolute -bottom-20 -start-16 size-48 rounded-full bg-accent/10 blur-3xl"
+        />
+        <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white/90">
+              <Sparkles className="size-4 text-accent" aria-hidden />
+              مسیر یادگیری من
+            </div>
+            <h1 className="text-2xl font-extrabold text-white sm:text-3xl">آموزش‌ها</h1>
+            <p className="mt-2 max-w-xl text-sm leading-7 text-white/75">
+              آموزش‌های فعال، دوره‌های جدید و پیشرفتت را یک‌جا دنبال کن.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:min-w-[360px]">
+            <div className="rounded-card border border-white/10 bg-white/10 p-3">
+              <PlayCircle className="mb-2 size-5 text-primary-200" aria-hidden />
+              <strong className="block text-xl text-white">
+                {counts.in_progress.toLocaleString('fa-IR')}
+              </strong>
+              <span className="text-xs text-white/65">در حال انجام</span>
+            </div>
+            <div className="rounded-card border border-white/10 bg-white/10 p-3">
+              <BookOpenCheck className="mb-2 size-5 text-accent" aria-hidden />
+              <strong className="block text-xl text-white">
+                {counts.new.toLocaleString('fa-IR')}
+              </strong>
+              <span className="text-xs text-white/65">جدید</span>
+            </div>
+            <div className="rounded-card border border-white/10 bg-white/10 p-3">
+              <CheckCircle2 className="mb-2 size-5 text-primary-200" aria-hidden />
+              <strong className="block text-xl text-white">
+                {completion.toLocaleString('fa-IR')}٪
+              </strong>
+              <span className="text-xs text-white/65">تکمیل کل</span>
+            </div>
+          </div>
         </div>
-      )}
+      </section>
+
+      <section className="rounded-hero border border-border bg-surface p-3 shadow-sm sm:p-4">
+        <Tabs
+          label="وضعیت آموزش‌ها"
+          value={tab}
+          onChange={setTab}
+          items={[
+            { value: 'in_progress', label: 'در حال انجام', count: counts.in_progress },
+            { value: 'new', label: 'جدید', count: counts.new },
+            { value: 'completed', label: 'تکمیل‌شده', count: counts.completed },
+          ]}
+        />
+
+        {brands.length > 1 && (
+          <div className="mt-4 border-t border-border pt-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-bold text-text">برندها</p>
+              {brand && (
+                <button
+                  type="button"
+                  onClick={() => setBrand(null)}
+                  className="min-h-12 rounded-full px-3 text-xs font-bold text-primary-fg hover:bg-primary-light"
+                >
+                  نمایش همه
+                </button>
+              )}
+            </div>
+            <div
+              className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+              role="group"
+              aria-label="فیلتر برند"
+            >
+              {brands.map((b) => (
+                <button
+                  key={b.id}
+                  type="button"
+                  aria-pressed={brand === b.id}
+                  onClick={() => setBrand(brand === b.id ? null : b.id)}
+                  className={cn(
+                    'pressable flex min-h-14 shrink-0 items-center gap-2 rounded-full border px-2 pe-4 text-sm font-bold transition-colors',
+                    brand === b.id
+                      ? 'border-primary bg-primary-light text-primary-fg shadow-sm'
+                      : 'border-border bg-background text-text-secondary hover:border-primary/40 hover:bg-primary-light/40',
+                  )}
+                >
+                  <span className="grid size-10 place-items-center rounded-full bg-white shadow-xs">
+                    <BrandLogo name={b.name} logoUrl={b.logoUrl} size="sm" className="size-8 p-1" />
+                  </span>
+                  {b.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
       <StaleBanner show={q.isError && q.data !== undefined} onRetry={() => void q.refetch()} />
       <QueryState
         query={q}
         loading={
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <PackageCardSkeleton />
             <PackageCardSkeleton />
             <PackageCardSkeleton />
@@ -111,16 +181,33 @@ export function LearnPage() {
         {(list) => {
           const items = list.filter((p) => p.status === tab && (!brand || p.brand?.id === brand));
           return items.length === 0 ? (
-            <EmptyState title={EMPTY[tab]} />
+            <EmptyState
+              title={EMPTY[tab]}
+              description="وقتی آموزش مرتبطی برایت فعال شود، همین‌جا نمایش داده می‌شود."
+              illustration={<Mascot mood="thinking" className="h-28 w-auto" />}
+            />
           ) : (
-            <div
-              key={`${tab}-${brand}`}
-              className="stagger grid gap-3 md:grid-cols-2 lg:grid-cols-3"
-            >
-              {items.map((p) => (
-                <PackageCard key={p.id} p={p} />
-              ))}
-            </div>
+            <section>
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-extrabold text-text">
+                    {tab === 'in_progress'
+                      ? 'ادامه مسیر'
+                      : tab === 'new'
+                        ? 'آموزش‌های جدید'
+                        : 'تکمیل‌شده‌ها'}
+                  </h2>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {items.length.toLocaleString('fa-IR')} آموزش
+                  </p>
+                </div>
+              </div>
+              <div key={`${tab}-${brand}`} className="stagger grid gap-4 md:grid-cols-2">
+                {items.map((p) => (
+                  <PackageCard key={p.id} p={p} />
+                ))}
+              </div>
+            </section>
           );
         }}
       </QueryState>

@@ -25,14 +25,14 @@ export function PanelLayout({ title, items }: { title: string; items: PanelNavIt
         <div className="flex h-16 items-center justify-between gap-3 px-4">
           <div className="flex items-center gap-3">
             <AppLogo />
-            <span className="hidden rounded-full bg-primary-light px-2.5 py-1 text-xs font-bold text-primary sm:inline">
+            <span className="hidden rounded-full bg-primary-light px-2.5 py-1 text-xs font-bold text-primary-fg sm:inline">
               {title}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span
               aria-hidden
-              className="hidden size-9 items-center justify-center rounded-full bg-primary-light text-sm font-extrabold text-primary sm:flex"
+              className="hidden size-9 items-center justify-center rounded-full bg-primary-light text-sm font-extrabold text-primary-fg sm:flex"
             >
               {user?.name.trim().charAt(0)}
             </span>
@@ -62,8 +62,8 @@ export function PanelLayout({ title, items }: { title: string; items: PanelNavIt
               end={to.split('/').length <= 2}
               className={({ isActive }) =>
                 cn(
-                  'pressable flex min-h-11 shrink-0 items-center gap-1.5 rounded-input px-3 text-sm font-bold transition-colors',
-                  isActive ? 'bg-primary text-on-primary' : 'text-text-secondary',
+                  'pressable flex min-h-12 shrink-0 items-center gap-1.5 rounded-input px-3 text-sm font-bold transition-colors',
+                  isActive ? 'bg-cta text-on-cta' : 'text-text-secondary',
                 )
               }
             >

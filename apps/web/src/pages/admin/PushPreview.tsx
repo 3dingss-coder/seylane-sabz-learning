@@ -112,9 +112,9 @@ export function ChannelSwitch({
           aria-pressed={value === c}
           onClick={() => onChange(c)}
           className={cn(
-            'pressable inline-flex min-h-9 items-center gap-1.5 rounded-input px-3 text-xs font-bold',
+            'pressable inline-flex min-h-12 items-center gap-1.5 rounded-input px-3 text-xs font-bold',
             value === c
-              ? 'bg-surface text-primary shadow-xs'
+              ? 'bg-surface text-primary-fg shadow-xs'
               : 'text-text-secondary hover:bg-surface',
           )}
         >

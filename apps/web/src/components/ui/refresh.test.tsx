@@ -85,8 +85,9 @@ describe('design refresh — navigation', () => {
         <BottomNav />
       </MemoryRouter>,
     );
-    expect(screen.getByRole('link', { name: /آموزش‌ها/ }).className).toContain('text-primary');
-    expect(screen.getByRole('link', { name: /خانه/ }).className).not.toContain('text-primary');
+    // Handoff v2 Stage 1: green text uses the AA-safe text token (primary-fg #047857, 5.48:1)
+    expect(screen.getByRole('link', { name: /آموزش‌ها/ }).className).toContain('text-primary-fg');
+    expect(screen.getByRole('link', { name: /خانه/ }).className).not.toContain('text-primary-fg');
   });
 
   it('isItemActive: exact for top-level entries, prefix for deeper ones, aliases for details', () => {

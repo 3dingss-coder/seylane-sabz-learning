@@ -297,7 +297,7 @@ function FileView({
           {poster ? (
             <ProductImage src={poster} alt={title} className="size-32 bg-surface" />
           ) : (
-            <Headphones className="size-16 text-primary" aria-hidden />
+            <Headphones className="size-16 text-primary-fg" aria-hidden />
           )}
           {/* eslint-disable-next-line jsx-a11y/media-has-caption -- caption files are V1 (spec §11); description is shown beside the player */}
           <audio
@@ -334,7 +334,7 @@ function FileView({
             onClick={() => setSpeed(r)}
             className={cn(
               'min-h-12 min-w-12 rounded-card px-2 text-sm font-bold',
-              rate === r ? 'bg-primary-light text-primary' : 'text-text-secondary',
+              rate === r ? 'bg-primary-light text-primary-fg' : 'text-text-secondary',
             )}
           >
             {toPersianDigits(String(r))}x
@@ -448,7 +448,7 @@ function YouTubeView({
           </Button>
           <button
             type="button"
-            className="min-h-12 px-3 font-bold text-primary disabled:text-muted-fg"
+            className="min-h-12 px-3 font-bold text-primary-fg disabled:text-muted-fg"
             disabled={reportedYt}
             onClick={() => {
               setReportedYt(true);

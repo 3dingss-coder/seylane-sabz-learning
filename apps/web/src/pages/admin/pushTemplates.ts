@@ -29,7 +29,7 @@ export type TemplateAccent =
  * tones in PushCampaignsPage). Full class strings so Tailwind's scanner keeps them.
  */
 export const ACCENT_CLASSES: Record<TemplateAccent, { chip: string; text: string }> = {
-  primary: { chip: 'border-primary/30 bg-primary-light text-primary', text: 'text-primary' },
+  primary: { chip: 'border-primary/30 bg-primary-light text-primary-fg', text: 'text-primary-fg' },
   info: { chip: 'border-info/30 bg-info-light text-info-fg', text: 'text-info-fg' },
   accent: { chip: 'border-accent/30 bg-accent-light text-accent-fg', text: 'text-accent-fg' },
   violet: { chip: 'border-violet/30 bg-violet-light text-violet-fg', text: 'text-violet-fg' },

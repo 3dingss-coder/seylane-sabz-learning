@@ -308,7 +308,7 @@ export function VoiceCallSheet({
         <div
           className={cn(
             'flex size-24 items-center justify-center rounded-full transition-colors',
-            state === 'recording' ? 'bg-primary text-white' : 'bg-primary-light text-primary',
+            state === 'recording' ? 'bg-cta text-on-cta' : 'bg-primary-light text-primary-fg',
           )}
           aria-hidden
         >
@@ -349,7 +349,7 @@ export function VoiceCallSheet({
               </p>
             ) : null}
             {last?.nextAction?.label ? (
-              <p className="text-xs text-primary">پیشنهاد بعدی: {last.nextAction.label}</p>
+              <p className="text-xs text-primary-fg">پیشنهاد بعدی: {last.nextAction.label}</p>
             ) : null}
           </div>
         )}
@@ -362,7 +362,7 @@ export function VoiceCallSheet({
             aria-label={state === 'recording' ? 'پایان ضبط و ارسال' : 'شروع ضبط'}
             className={cn(
               'flex size-16 items-center justify-center rounded-full text-white shadow-sm disabled:opacity-40',
-              state === 'recording' ? 'bg-danger' : 'bg-primary',
+              state === 'recording' ? 'bg-danger' : 'bg-cta',
             )}
           >
             {state === 'recording' ? <MicOff className="size-7" /> : <Mic className="size-7" />}

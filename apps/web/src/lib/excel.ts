@@ -3,7 +3,7 @@
  * branded header styling, borders, alternating row colors and number formatting.
  * Uses exceljs (dynamic import, so it only loads when the user clicks Excel export
  * — marketers never pay the cost). Design mirrors the app's visual language:
- * green primary (#177A50), soft background (#F8FAFC), white cards, muted borders (#E2E8F0).
+ * CTA green (#047857, white header text 5.48:1), soft background (#F8FAFC), white cards, muted borders (#E2E8F0).
  */
 import type ExcelJS from 'exceljs';
 
@@ -35,9 +35,9 @@ export interface ExcelOptions {
 }
 
 const BRAND = {
-  primary: '177A50',
-  primaryDark: '0F5C3C',
-  primaryLight: 'E8F5EE',
+  primary: '047857',
+  primaryDark: '064E3B',
+  primaryLight: 'ECFDF5',
   headerText: 'FFFFFF',
   border: 'D1D5DB',
   altRow: 'F8FAFC',

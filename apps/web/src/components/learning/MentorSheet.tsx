@@ -15,7 +15,7 @@ export function MentorLauncher({ packageId }: { packageId: string }) {
           setOpen(true);
           track('mentor_chat_opened', { context: 'package' });
         }}
-        className="pressable glass fixed bottom-28 start-4 z-30 flex min-h-12 items-center gap-2 rounded-full border border-primary/30 px-4 text-sm font-bold text-primary shadow-lg hover:-translate-y-0.5 md:bottom-6"
+        className="pressable glass fixed bottom-28 start-4 z-30 flex min-h-12 items-center gap-2 rounded-full border border-primary/30 px-4 text-sm font-bold text-primary-fg shadow-lg hover:-translate-y-0.5 md:bottom-6"
       >
         <span className="relative flex">
           <span

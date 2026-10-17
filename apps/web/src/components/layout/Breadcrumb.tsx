@@ -17,7 +17,7 @@ export function Breadcrumb({ title, items }: { title: string; items: SidebarItem
         <li>
           <Link
             to={root?.to ?? '/'}
-            className="inline-flex min-h-8 items-center rounded-input px-1.5 hover:bg-surface hover:text-primary"
+            className="inline-flex min-h-12 items-center rounded-input px-1.5 hover:bg-surface hover:text-primary-fg"
           >
             {title}
           </Link>
@@ -28,7 +28,7 @@ export function Breadcrumb({ title, items }: { title: string; items: SidebarItem
         <li>
           <Link
             to={current.to}
-            className="inline-flex min-h-8 items-center rounded-input px-1.5 hover:bg-surface hover:text-primary"
+            className="inline-flex min-h-12 items-center rounded-input px-1.5 hover:bg-surface hover:text-primary-fg"
           >
             {current.label}
           </Link>

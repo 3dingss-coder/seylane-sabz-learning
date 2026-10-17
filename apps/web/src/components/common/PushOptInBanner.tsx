@@ -42,7 +42,7 @@ export function PushOptInBanner() {
       style={{ paddingTop: 'max(env(safe-area-inset-top), 0.5rem)' }}
     >
       <div className="flex w-full max-w-xl items-center gap-3 rounded-card border border-border bg-surface p-3 shadow-lg">
-        <Bell className="size-6 shrink-0 text-primary" aria-hidden />
+        <Bell className="size-6 shrink-0 text-primary-fg" aria-hidden />
         <p className="min-w-0 flex-1 text-sm font-medium text-text">
           {install
             ? 'برای دریافت اعلان در آیفون: دکمه‌ی اشتراک‌گذاری (Share) را بزن، «Add to Home Screen» را انتخاب کن و برنامه را از آیکونش باز کن.'

@@ -216,7 +216,7 @@ function UploadPanel() {
           over ? 'border-primary bg-primary-light' : 'border-border'
         }`}
       >
-        <UploadCloud className="size-10 text-primary" aria-hidden />
+        <UploadCloud className="size-10 text-primary-fg" aria-hidden />
         <p className="text-sm text-text">فایل‌های ویدئویی یا صوتی را اینجا رها کنید</p>
         <p className="text-xs text-text-secondary">
           حجم فایل مهم نیست؛ سیستم خودش آن را برای پخش روان آماده می‌کند. تا پایان کار این صفحه را
@@ -351,7 +351,7 @@ function JobList({ jobs }: { jobs: Job[] }) {
               </div>
             )}
             {j.stage === 'done' && (
-              <p className="flex items-center gap-1 text-xs font-medium text-primary">
+              <p className="flex items-center gap-1 text-xs font-medium text-primary-fg">
                 <CheckCircle2 className="size-4" aria-hidden /> به کتابخانه اضافه شد
               </p>
             )}
@@ -378,7 +378,7 @@ function MediaCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) 
       className="flex w-full flex-col gap-2 rounded-card border border-border bg-surface p-4 text-start shadow-sm transition-colors hover:border-primary focus-visible:outline-2"
     >
       <div className="flex items-start gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-card bg-primary-light text-primary">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-card bg-primary-light text-primary-fg">
           <Icon className="size-5" aria-hidden />
         </span>
         <div className="min-w-0">
@@ -393,7 +393,7 @@ function MediaCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) 
       </div>
       <div className="flex flex-wrap gap-1.5 text-xs">
         {item.brandName ? (
-          <span className="rounded-full bg-primary-light px-2 py-0.5 text-primary">
+          <span className="rounded-full bg-primary-light px-2 py-0.5 text-primary-fg">
             {item.brandName}
             {item.productName ? ` › ${item.productName}` : ''}
           </span>
@@ -502,7 +502,7 @@ function AddToPackage({
         </p>
         <Link
           to={`/admin/packages/${added.packageId}`}
-          className="mt-2 inline-block font-bold text-primary underline"
+          className="mt-2 inline-block font-bold text-primary-fg underline"
         >
           رفتن به آموزش
         </Link>

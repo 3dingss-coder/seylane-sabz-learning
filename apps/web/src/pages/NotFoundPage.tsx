@@ -20,7 +20,7 @@ export function NotFoundPage() {
       </p>
       <Link
         to="/"
-        className="pressable mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-card bg-primary bg-brand-gradient px-6 font-bold text-on-primary hover:bg-primary-hover"
+        className="pressable mt-2 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-card bg-cta bg-brand-gradient px-6 font-bold text-on-cta hover:bg-cta-hover"
       >
         <Home className="size-5" aria-hidden />
         بازگشت به صفحه اصلی

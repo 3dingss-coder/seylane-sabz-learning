@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bot,
   FileText,
   ImagePlus,
   Link2,
@@ -14,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button, Skeleton, useToast } from '@/components/ui';
+import { Mascot } from '@/components/brand/Mascot';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { errMsg } from '@/lib/errors';
@@ -293,9 +293,8 @@ export function MentorChat({
         {history.isPending && <Skeleton className="h-16 w-3/4" />}
         {!history.isPending && msgs.length === 0 && !pending && (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
-            <span className="animate-float flex size-16 items-center justify-center rounded-full bg-hero shadow-md">
-              <Bot className="size-8 text-white" aria-hidden />
-            </span>
+            {/* mentor state: the provided mascot greets, secondary to the suggestions */}
+            <Mascot mood="welcome" className="animate-float h-20 w-auto" />
             <p className="text-sm text-text-secondary">
               سؤالت درباره محصولات و آموزش‌ها را بپرس. فقط از محتوای تأییدشده جواب می‌دهم.
             </p>
@@ -325,7 +324,7 @@ export function MentorChat({
               className={cn(
                 'max-w-[85%] whitespace-pre-line rounded-[18px] px-3.5 py-2 text-sm leading-7 shadow-xs',
                 m.role === 'user'
-                  ? 'rounded-se-md bg-primary bg-brand-gradient text-on-primary'
+                  ? 'rounded-se-md bg-cta bg-brand-gradient text-on-cta'
                   : 'rounded-ee-md border border-border bg-surface text-text',
               )}
             >
@@ -348,7 +347,7 @@ export function MentorChat({
                   onClick={() => fb.mutate({ messageId: m.id, feedback: 'up' })}
                   className={cn(
                     'flex size-12 items-center justify-center',
-                    m.feedback === 'up' ? 'text-primary' : 'text-muted-fg',
+                    m.feedback === 'up' ? 'text-primary-fg' : 'text-muted-fg',
                   )}
                 >
                   <ThumbsUp className="size-4" />
@@ -372,7 +371,7 @@ export function MentorChat({
         {pending && (
           <>
             <div className="animate-fade-up flex justify-start">
-              <div className="max-w-[85%] rounded-[18px] rounded-se-md bg-primary px-3.5 py-2 text-sm text-on-primary">
+              <div className="max-w-[85%] rounded-[18px] rounded-se-md bg-cta px-3.5 py-2 text-sm text-on-cta">
                 {pending}
               </div>
             </div>
@@ -410,7 +409,7 @@ export function MentorChat({
               <button
                 type="button"
                 aria-label="حذف پیوست"
-                className="flex size-8 items-center justify-center text-muted-fg"
+                className="flex size-12 items-center justify-center rounded-full text-muted-fg hover:bg-surface-2"
                 onClick={() => setAttachments((old) => old.filter((_, idx) => idx !== i))}
               >
                 <X className="size-3.5" />

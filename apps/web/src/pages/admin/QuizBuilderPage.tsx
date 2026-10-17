@@ -139,7 +139,7 @@ function Builder({ d }: { d: AdminQuiz }) {
                           className={cn(
                             'flex items-center gap-2 rounded-input px-2 py-1 text-sm',
                             o.key === x.answerKey
-                              ? 'bg-primary-light font-bold text-primary'
+                              ? 'bg-primary-light font-bold text-primary-fg'
                               : 'text-text-secondary',
                           )}
                         >
@@ -344,7 +344,7 @@ function QuestionDialog({
                 maxLength={200}
                 onChange={(e) => setOptions((o) => o.map((x, j) => (j === i ? e.target.value : x)))}
                 aria-label={`متن گزینه ${LABEL[k]}`}
-                className="min-h-11 flex-1 rounded-input border border-border bg-surface px-2 text-base focus:border-info focus:outline-none"
+                className="min-h-12 flex-1 rounded-input border border-border bg-surface px-2 text-base focus:border-info focus:outline-none"
               />
             </div>
           ))}

@@ -1018,7 +1018,7 @@ function Wizard({
                         : { ...d, body: d.body + v.token },
                     )
                   }
-                  className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-bold text-text-secondary hover:border-primary/40 hover:text-primary disabled:opacity-40"
+                  className="rounded-full border border-border bg-background px-2 py-0.5 text-[11px] font-bold text-text-secondary hover:border-primary/40 hover:text-primary-fg disabled:opacity-40"
                 >
                   {v.token}
                 </button>
@@ -1258,7 +1258,7 @@ function Bool({
   hint?: string;
 }) {
   return (
-    <label className="flex min-h-11 items-start gap-2 text-sm" title={hint}>
+    <label className="flex min-h-12 items-start gap-2 text-sm" title={hint}>
       <input
         type="checkbox"
         className="mt-1 size-5 accent-primary"
@@ -1684,7 +1684,7 @@ function RunsCard({
         اجراهای این قانون
         <Link
           to={`/admin/push-campaigns/automations/runs?key=${encodeURIComponent(ruleKey)}`}
-          className="ms-auto text-[11px] font-bold text-primary hover:underline"
+          className="ms-auto text-[11px] font-bold text-primary-fg hover:underline"
         >
           تاریخچه کامل
         </Link>

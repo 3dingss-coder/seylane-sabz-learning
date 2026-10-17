@@ -216,7 +216,7 @@ function QuizFlow({
             center={
               <span className="absolute flex flex-col items-center leading-tight">
                 {result.passed ? (
-                  <PartyPopper className="animate-pop size-7 text-primary" aria-hidden />
+                  <PartyPopper className="animate-pop size-7 text-primary-fg" aria-hidden />
                 ) : (
                   <XCircle className="animate-shake size-7 text-danger" aria-hidden />
                 )}
@@ -452,16 +452,14 @@ function QuizFlow({
                 <span
                   className={cn(
                     'flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-[transform,background-color] duration-200 ease-spring',
-                    checked
-                      ? 'scale-110 bg-primary text-on-primary'
-                      : 'bg-surface-2 text-text-secondary',
+                    checked ? 'scale-110 bg-cta text-on-cta' : 'bg-surface-2 text-text-secondary',
                   )}
                 >
                   {OPTION_LABEL[o.key] ?? o.key}
                 </span>
                 <span className="flex-1 text-text">{o.text}</span>
                 {checked && (
-                  <CheckCircle2 className="animate-pop size-5 text-primary" aria-hidden />
+                  <CheckCircle2 className="animate-pop size-5 text-primary-fg" aria-hidden />
                 )}
               </label>
             );

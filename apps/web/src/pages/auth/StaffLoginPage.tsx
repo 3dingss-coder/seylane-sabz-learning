@@ -38,16 +38,21 @@ export function StaffLoginPage({ panel }: { panel: 'admin' | 'manager' }) {
         <BrandBackdrop />
       </div>
       <div className="relative mt-10 flex flex-col items-center gap-3 text-center sm:mt-14">
-        <span className="animate-pop rounded-hero bg-white p-3 shadow-lg">
-          <img
-            src="/icons/logo-full.png"
-            alt="هلدینگ سیلانه‌سبز"
-            width={160}
-            height={64}
-            className="h-14 w-auto"
-          />
-        </span>
+        <div className="animate-pop flex items-end justify-center gap-1">
+          {/* Staff sign-in stays formal: brand mark only, no mascot (mascot guide: Admin/Manager rare). */}
+          <span className="rounded-hero bg-white p-3 shadow-lg">
+            <img
+              src="/icons/logo-full.png"
+              alt="هلدینگ سیلانه‌سبز"
+              width={160}
+              height={64}
+              className="h-14 w-auto"
+            />
+          </span>
+        </div>
         <h1 className="text-2xl font-extrabold text-white">آکادمی سیلانه</h1>
+        {/* controlled amber accent (handoff: emerald brand + controlled amber) */}
+        <span aria-hidden className="h-1 w-12 rounded-full bg-accent" />
         <p className="text-sm text-white/85">{TITLE[panel]}</p>
       </div>
       <Card className="animate-fade-up relative mt-6 w-full max-w-[400px] p-6 shadow-lg">

@@ -2,29 +2,35 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlarmClock, BookOpenCheck, Route } from 'lucide-react';
 import { BrandBackdrop } from '@/components/brand/BrandBackdrop';
+import { Mascot, type MascotMood } from '@/components/brand/Mascot';
 import { Button, Card } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import type { Me } from '@/lib/types';
 
-const SLIDES = [
-  {
-    icon: BookOpenCheck,
-    title: 'چه چیزی یاد بگیرم؟',
-    body: 'آموزش‌های کوتاه صوتی و ویدیویی درباره محصولات سیلانه‌سبز برایت فعال می‌شود.',
-  },
-  {
-    icon: Route,
-    title: 'چطور پیش بروم؟',
-    body: 'در صفحه خانه همیشه «کار بعدی» را می‌بینی. قسمت را کامل ببین یا گوش کن، بعد آزمون کوتاه بده.',
-  },
-  {
-    icon: AlarmClock,
-    title: 'اگر عقب بمانم چه؟',
-    body: 'هر آموزش مهلت دارد. قبل از تمام شدن مهلت یادآوری می‌گیری و مدیرت هم در جریان است.',
-  },
-];
+/** Real slide copy is unchanged (handoff: keep the three-slide content); mood = mascot state. */
+const SLIDES: Array<{ icon: typeof BookOpenCheck; title: string; body: string; mood: MascotMood }> =
+  [
+    {
+      icon: BookOpenCheck,
+      title: 'چه چیزی یاد بگیرم؟',
+      body: 'آموزش‌های کوتاه صوتی و ویدیویی درباره محصولات سیلانه‌سبز برایت فعال می‌شود.',
+      mood: 'welcome',
+    },
+    {
+      icon: Route,
+      title: 'چطور پیش بروم؟',
+      body: 'در صفحه خانه همیشه «کار بعدی» را می‌بینی. قسمت را کامل ببین یا گوش کن، بعد آزمون کوتاه بده.',
+      mood: 'guide',
+    },
+    {
+      icon: AlarmClock,
+      title: 'اگر عقب بمانم چه؟',
+      body: 'هر آموزش مهلت دارد. قبل از تمام شدن مهلت یادآوری می‌گیری و مدیرت هم در جریان است.',
+      mood: 'thinking',
+    },
+  ];
 
 /** M2 — Onboarding (first login only). */
 export function OnboardingPage() {
@@ -57,13 +63,15 @@ export function OnboardingPage() {
       <Card className="animate-fade-up relative w-full max-w-[400px] overflow-hidden p-6 text-center shadow-lg">
         {/* the slide content is keyed so every step glides in */}
         <div key={i} className="animate-slide-in-end">
-          <div className="relative mx-auto mb-5 flex size-24 items-center justify-center">
+          {/* Handoff mascot state per slide (welcome → guide → thinking), supportive to the copy. */}
+          <div className="relative mx-auto mb-5 flex w-fit items-end justify-center">
             <span
               aria-hidden
-              className="animate-pulse-dot absolute inset-2 rounded-full bg-primary"
+              className="animate-pulse-dot absolute bottom-1 size-20 rounded-full bg-primary-light"
             />
-            <span className="relative flex size-20 items-center justify-center rounded-full bg-hero text-white shadow-md">
-              <Icon className="size-10" aria-hidden />
+            <Mascot mood={slide.mood} className="relative h-28 w-auto" />
+            <span className="absolute -top-1 -start-2 flex size-10 items-center justify-center rounded-full bg-hero text-white shadow-md">
+              <Icon className="size-5" aria-hidden />
             </span>
           </div>
           <h1 className="text-xl font-extrabold text-text" aria-live="polite">
