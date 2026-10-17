@@ -158,7 +158,10 @@ export function OnboardingPage() {
             </div>
 
             <div className="relative z-10 rounded-[24px] border border-white/80 bg-white/90 p-4 shadow-[0_14px_36px_-28px_rgba(15,23,42,.4)] backdrop-blur-sm">
-              <h1 className="text-[24px] font-extrabold leading-9 text-[#15352b]" aria-live="polite">
+              <h1
+                className="text-[24px] font-extrabold leading-9 text-[#15352b]"
+                aria-live="polite"
+              >
                 {slide.title}
               </h1>
               <p className="mt-2 text-sm leading-7 text-[#68716c]">{slide.body}</p>
