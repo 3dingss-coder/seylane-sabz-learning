@@ -240,7 +240,10 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
                   aria-hidden
                   className="absolute inset-x-12 bottom-5 h-16 rounded-full bg-black/20 blur-xl"
                 />
-                <Mascot mood="welcome" className="relative mx-auto h-full w-auto max-w-full object-contain drop-shadow-2xl" />
+                <Mascot
+                  mood="welcome"
+                  className="relative mx-auto h-full w-auto max-w-full object-contain drop-shadow-2xl"
+                />
               </div>
             </div>
           </section>
@@ -257,7 +260,13 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
                 onChange={(e) => setIdentifier(e.target.value)}
                 error={errors.identifier}
                 hint="برای کاربران استان‌های مشمول، کد ملی ثبت‌شده را وارد کنید."
-                icon={loginIdentifierIsNationalCode ? <Fingerprint className="size-5" /> : <Phone className="size-5" />}
+                icon={
+                  loginIdentifierIsNationalCode ? (
+                    <Fingerprint className="size-5" />
+                  ) : (
+                    <Phone className="size-5" />
+                  )
+                }
                 disabled={busy}
                 className="min-h-14 rounded-[16px] border-[#dfd7c9] bg-white px-4 shadow-none focus:border-[#059669] focus:ring-[#059669]/15"
               />
