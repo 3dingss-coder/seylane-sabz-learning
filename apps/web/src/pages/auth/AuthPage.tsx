@@ -317,7 +317,7 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
       <div className="relative mt-10 flex flex-col items-center gap-3 text-center sm:mt-14">
         <div className="animate-pop flex items-end justify-center gap-1">
           {/* Friendly mascot presence (handoff auth spec) — supportive, beside the brand mark. */}
-          <Mascot mood={mode === 'login' ? 'welcome' : 'guide'} className="h-auto w-14 sm:w-16" />
+          <Mascot mood="guide" className="h-auto w-14 sm:w-16" />
           <span className="rounded-hero bg-white p-3 shadow-lg">
             <img
               src="/icons/logo-full.png"
@@ -356,25 +356,23 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
               disabled={busy}
             />
           )}
-          {(mode === 'login' || registrationIdentityVisible) && (
+          {registrationIdentityVisible && (
             <Input
               label={identifierLabel}
               ltr
-              inputMode={mode === 'register' && fieldUsesNationalCode ? 'numeric' : 'tel'}
-              autoComplete={mode === 'login' ? 'username' : fieldUsesNationalCode ? 'off' : 'tel'}
+              inputMode={fieldUsesNationalCode ? 'numeric' : 'tel'}
+              autoComplete={fieldUsesNationalCode ? 'off' : 'tel'}
               placeholder={identifierPlaceholder}
               // Login accepts a phone (11 digits) or a national code (10): while typing, the first ten
               // digits already look like a national code, so a limit here would cut the phone's last digit.
-              maxLength={mode === 'register' && fieldUsesNationalCode ? 10 : undefined}
+              maxLength={fieldUsesNationalCode ? 10 : undefined}
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               error={errors.identifier}
               hint={
-                mode === 'login'
-                  ? 'برای کاربران استان‌های مشمول، کد ملی ثبت‌شده را وارد کنید.'
-                  : fieldUsesNationalCode
-                    ? 'برای ورودهای بعدی از همین کد ملی استفاده می‌شود.'
-                    : undefined
+                fieldUsesNationalCode
+                  ? 'برای ورودهای بعدی از همین کد ملی استفاده می‌شود.'
+                  : undefined
               }
               icon={
                 fieldUsesNationalCode ? (
@@ -400,27 +398,17 @@ export function AuthPage({ initial = 'login' }: { initial?: Mode }) {
             </p>
           )}
           <Button type="submit" size="lg" block loading={busy} className="mt-2">
-            {mode === 'login' ? 'ورود' : 'ثبت‌نام و ورود'}
+            ثبت‌نام و ورود
           </Button>
         </form>
         <div className="mt-4 flex flex-col items-center gap-1 text-sm">
-          {mode === 'login' ? (
-            <button
-              type="button"
-              className="min-h-12 font-bold text-primary-fg"
-              onClick={() => switchMode('register')}
-            >
-              حساب ندارید؟ ثبت‌نام کنید
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="min-h-12 font-bold text-primary-fg"
-              onClick={() => switchMode('login')}
-            >
-              حساب دارید؟ وارد شوید
-            </button>
-          )}
+          <button
+            type="button"
+            className="min-h-12 font-bold text-primary-fg"
+            onClick={() => switchMode('login')}
+          >
+            حساب دارید؟ وارد شوید
+          </button>
         </div>
       </Card>
       <Link to="/gallery" className="sr-only">
