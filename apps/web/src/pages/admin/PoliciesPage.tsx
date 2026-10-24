@@ -21,7 +21,6 @@ export function PoliciesPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        variant="admin"
         title="سیاست‌ها"
         subtitle="تغییرات فقط روی تلاش‌ها و رویدادهای جدید اعمال می‌شود"
       />

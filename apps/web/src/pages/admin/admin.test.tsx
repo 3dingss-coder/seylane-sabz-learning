@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { session } from '@/lib/session';
-import type { AdminPackageDetail, AdminSection, Me, RetakeItem, Timeline } from '@/lib/types';
+import type { AdminPackageDetail, AdminSection, Me } from '@/lib/types';
 import { marketer } from '@/test/fixtures';
 import { mockApi } from '@/test/mockApi';
 import { renderApp } from '@/test/renderApp';
@@ -117,7 +117,6 @@ describe('admin: everything understandable at a glance', () => {
       }),
     });
     renderApp('/admin');
-    fireEvent.click(await screen.findByRole('tab', { name: 'آموزش‌ها' }, { timeout: 5000 }));
     const guide = await screen.findByTestId('publish-guide', {}, { timeout: 5000 });
     for (const t of ['آموزش بساز', 'آزمون بگذار', 'منتشر کن', 'به بازاریاب‌ها برسان'])
       expect(within(guide).getByRole('heading', { name: t })).toBeInTheDocument();
@@ -125,34 +124,6 @@ describe('admin: everything understandable at a glance', () => {
     fireEvent.click(screen.getByRole('button', { name: 'انتشار آموزش جدید' }));
     expect(await screen.findByRole('dialog', { name: 'بسته آموزشی جدید' })).toBeInTheDocument();
   });
-
-  it('media library summarizes real visible audio/video and unassigned-file counts', async () => {
-    mockApi({
-      ...asAdmin(),
-      'GET /v1/admin/media/library': () => ({
-        data: [
-          libItem(),
-          libItem({
-            id: 'lib-audio',
-            kind: 'audio',
-            title: 'پادکست مراقبت',
-            brandId: null,
-            brandName: null,
-          }),
-        ],
-      }),
-    });
-    renderApp('/admin/media');
-    const summary = await screen.findByRole('region', { name: 'خلاصهٔ کتابخانه رسانه' });
-    await screen.findByText('آموزش کامل فیلر شات دارت', {}, { timeout: 10000 });
-    await waitFor(() => {
-      expect(within(summary).getByText('۲')).toBeInTheDocument();
-      expect(within(summary).getAllByText('۱').length).toBeGreaterThanOrEqual(3);
-    });
-    expect(within(summary).getByText('ویدئوها')).toBeInTheDocument();
-    expect(within(summary).getByText('فایل‌های صوتی')).toBeInTheDocument();
-    expect(within(summary).getByText('بدون تخصیص مستقیم')).toBeInTheDocument();
-  }, 20000);
 
   it('package editor names the next step (quiz) and links straight to it', async () => {
     mockApi({
@@ -447,69 +418,5 @@ describe('admin: everything understandable at a glance', () => {
       'true',
     );
     expect(await screen.findByRole('button', { name: 'ساخت اولین مسیر' })).toBeInTheDocument();
-  });
-
-  it('admin can inspect and review a retake request with an optional note', async () => {
-    const request: RetakeItem = {
-      id: 'r1',
-      userId: 'u1',
-      userName: 'سارا احمدی',
-      userProvince: 'تهران',
-      userCity: 'تهران',
-      quizId: 'q1',
-      sectionTitle: 'معرفی',
-      packageTitle: 'آموزش آتل',
-      status: 'pending',
-      escalated: true,
-      scores: [48],
-      createdAt: '2026-10-10T10:00:00.000Z',
-    };
-    const { calls } = mockApi({
-      ...asAdmin(),
-      'GET /v1/admin/retake-requests?status=pending': () => ({ data: [request] }),
-      'GET /v1/admin/retake-requests?status=approved': () => ({ data: [] }),
-      'GET /v1/admin/retake-requests?status=rejected': () => ({ data: [] }),
-      'POST /v1/admin/retake-requests/r1/approve': () => ({
-        data: { id: 'r1', status: 'approved' },
-      }),
-    });
-    renderApp('/admin/retake-requests');
-    expect(
-      await screen.findByRole('heading', { name: 'درخواست‌های آزمون مجدد' }),
-    ).toBeInTheDocument();
-    const memberLinks = await screen.findAllByRole('link', { name: 'سارا احمدی' });
-    expect(memberLinks[0]).toHaveAttribute('href', '/admin/users/u1');
-    expect(screen.getByText(/به مدیر سیستم ارجاع شده است/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'تأیید و اعطای فرصت' }));
-    const dialog = await screen.findByRole('dialog', { name: 'تأیید درخواست آزمون مجدد' });
-    fireEvent.change(within(dialog).getByLabelText('یادداشت برای ثبت در سوابق (اختیاری)'), {
-      target: { value: 'برای ارزیابی دوباره تأیید شد' },
-    });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'تأیید و اعطای فرصت' }));
-    await waitFor(() =>
-      expect(
-        calls.find((call) => call.key === 'POST /v1/admin/retake-requests/r1/approve')?.body,
-      ).toEqual({
-        note: 'برای ارزیابی دوباره تأیید شد',
-      }),
-    );
-  });
-
-  it('admin user detail shows real account, learning metrics and the learning tab', async () => {
-    const user: Me = {
-      ...marketer,
-      id: 'u1',
-      name: 'سارا احمدی',
-      city: 'تهران',
-      province: 'تهران',
-    };
-    const timeline = { user, packages: [], messages: [] } as Timeline;
-    mockApi({ ...asAdmin(), 'GET /v1/admin/users/u1': () => ({ data: timeline }) });
-    renderApp('/admin/users/u1');
-    expect(await screen.findByRole('heading', { name: 'سارا احمدی' })).toBeInTheDocument();
-    expect(screen.getByText(/آموزش‌های تخصیص‌یافته/)).toBeInTheDocument();
-    expect(screen.getAllByText('تهران، تهران').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('tab', { name: /پیشرفت آموزشی/ }));
-    expect(await screen.findByText('آموزشی به این عضو داده نشده')).toBeInTheDocument();
   });
 });

@@ -70,16 +70,13 @@ describe('a11y (axe, jsdom)', () => {
   it('login page', async () => {
     mockApi({});
     const { container } = renderApp('/login');
-    await screen.findByRole('button', { name: 'ورود و ادامه' });
+    await screen.findByRole('button', { name: 'ورود' });
     expect(await violations(container)).toEqual([]);
   });
 
   it('sign-up page, including the open province list', async () => {
     mockApi({});
     const { container } = renderApp('/register');
-    fireEvent.change(await screen.findByLabelText('نام'), { target: { value: 'نگار' } });
-    fireEvent.change(screen.getByLabelText('نام خانوادگی'), { target: { value: 'محمدی' } });
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     fireEvent.click(await screen.findByLabelText('انتخاب محل فعالیت شما'));
     await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     expect(await violations(container)).toEqual([]);
@@ -88,22 +85,18 @@ describe('a11y (axe, jsdom)', () => {
   it('sign-up page with the city list open', async () => {
     mockApi({});
     const { container } = renderApp('/register');
-    fireEvent.change(await screen.findByLabelText('نام'), { target: { value: 'نگار' } });
-    fireEvent.change(screen.getByLabelText('نام خانوادگی'), { target: { value: 'محمدی' } });
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     fireEvent.click(await screen.findByLabelText('انتخاب محل فعالیت شما'));
     const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
       target: { value: 'یزد' },
     });
     fireEvent.click(within(provinces).getByRole('option', { name: 'یزد' }));
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     fireEvent.click(screen.getByLabelText('شهر'));
     await screen.findByRole('listbox', { name: 'شهرهای استان یزد' });
     expect(await violations(container)).toEqual([]);
   });
 
-  it('marketer home («ادامه یادگیری»)', async () => {
+  it('marketer home («کار بعدی»)', async () => {
     mockApi(signedIn());
     const { container } = renderApp('/');
     await screen.findByTestId('next-item');
@@ -114,8 +107,8 @@ describe('a11y (axe, jsdom)', () => {
     mockApi(signedIn());
     const { container } = renderApp('/profile');
     await screen.findByRole('button', { name: /خروج/ });
-    fireEvent.click(screen.getByRole('button', { name: /تنظیمات اعلان‌ها/ }));
-    // A protected switch must still announce its state and reason on the dedicated settings surface.
+    // The preference card is the newest part of this screen: a locked switch must still announce its
+    // state and its reason, so wait for it before axe looks at the tree.
     await screen.findByRole('switch', { name: 'اعلان‌های تکالیف و مهلت‌ها' });
     expect(await violations(container)).toEqual([]);
   });
@@ -123,7 +116,6 @@ describe('a11y (axe, jsdom)', () => {
   it('profile, with a category switch clicked', async () => {
     mockApi(signedIn());
     const { container } = renderApp('/profile');
-    fireEvent.click(await screen.findByRole('button', { name: /تنظیمات اعلان‌ها/ }));
     const quizzes = await screen.findByRole('switch', { name: 'اعلان‌های آزمون‌ها' });
     fireEvent.click(quizzes);
     await screen.findByRole('switch', { name: 'اعلان‌های آزمون‌ها', checked: false });

@@ -52,9 +52,6 @@ export interface PushCampaign {
   version: number;
   createdAt: string;
   updatedAt: string;
-  /** Present on the server read model; optional for older cached/admin fixtures. */
-  createdBy?: string;
-  updatedBy?: string;
   startedAt: string | null;
   finishedAt: string | null;
   summary: CampaignSummary;

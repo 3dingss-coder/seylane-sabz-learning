@@ -1,82 +1,91 @@
-// Generic bottom navigation keeps the original Lucide icons; marketer pages opt into the 3D set.
-import { Link, useLocation } from 'react-router-dom';
-import { Award, Home, SquarePlay, UserRound, type LucideIcon } from 'lucide-react';
-import { MarketerIcon, type MarketerIconName } from '@/components/brand/MarketerIcon';
+// Adapted from helper kit: «اپ بازاریاب/کامپوننت‌ها/common/BottomNav.tsx»
+// — 5 sales tabs → the 4 spec tabs (§16.5): خانه | آموزش‌ها | پیام‌ها | کارت‌ها;
+//   router NavLink instead of AppContext; 48px targets; tokens instead of emerald.
+// Design refresh: floating frosted bar, active marker glides between tabs (transform only).
+import { NavLink, useLocation } from 'react-router-dom';
+import { BookOpen, Home, Mail, Trophy, type LucideIcon } from 'lucide-react';
 import { CountBadge } from '@/components/ui/CountBadge';
 import { cn } from '@/lib/cn';
 
-type BottomNavBase = {
+export interface BottomNavItem {
   to: string;
   label: string;
+  icon: LucideIcon;
   badge?: number;
   /** Extra path prefixes that belong to this tab (e.g. /packages → آموزش‌ها). */
   match?: string[];
-};
+}
 
-export type BottomNavItem = BottomNavBase &
-  ({ icon: LucideIcon; image?: never } | { image: MarketerIconName; icon?: never });
-
-const DEFAULT_NAV: BottomNavItem[] = [
+const MARKETER_NAV: BottomNavItem[] = [
   { to: '/', label: 'خانه', icon: Home },
-  {
-    to: '/learn',
-    label: 'آموزش‌ها',
-    icon: SquarePlay,
-    match: ['/packages', '/sections', '/quiz'],
-  },
-  { to: '/cards', label: 'مدال', icon: Award },
-  { to: '/profile', label: 'پروفایل', icon: UserRound },
+  { to: '/learn', label: 'آموزش‌ها', icon: BookOpen, match: ['/packages', '/sections', '/quiz'] },
+  { to: '/messages', label: 'پیام‌ها', icon: Mail },
+  { to: '/cards', label: 'کارت‌ها', icon: Trophy },
 ];
 
 const inPath = (pathname: string, prefix: string) =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);
 
-export function BottomNav({ items = DEFAULT_NAV }: { items?: BottomNavItem[] }) {
+export function BottomNav({ items = MARKETER_NAV }: { items?: BottomNavItem[] }) {
   const { pathname } = useLocation();
   const activeIdx = items.findIndex((it) =>
     it.to === '/'
       ? pathname === '/'
       : [it.to, ...(it.match ?? [])].some((p) => inPath(pathname, p)),
   );
-
   return (
     <nav
       aria-label="ناوبری اصلی"
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden"
     >
-      <div className="pointer-events-auto mx-auto max-w-md rounded-hero border border-marketer-border bg-marketer-surface shadow-md">
-        <ul className="flex items-stretch justify-around px-1.5">
-          {items.map((item, i) => {
-            const Icon = 'icon' in item ? item.icon : undefined;
-            return (
-              <li key={`${item.to}-${item.label}`} className="flex-1">
-                <Link
-                  to={item.to}
-                  aria-current={i === activeIdx ? 'page' : undefined}
+      <div className="glass pointer-events-auto relative mx-auto max-w-md rounded-[22px] border border-border/70 shadow-lg">
+        {/* sliding marker */}
+        <span
+          aria-hidden
+          className={cn(
+            'absolute top-0 flex h-1 transition-[transform,opacity] duration-300 ease-soft',
+            activeIdx < 0 && 'opacity-0',
+          )}
+          style={{
+            width: `${100 / items.length}%`,
+            insetInlineStart: 0,
+            transform: `translateX(${Math.max(activeIdx, 0) * (document.dir === 'ltr' ? 100 : -100)}%)`,
+          }}
+        >
+          <span className="mx-auto h-1 w-8 rounded-full bg-primary" />
+        </span>
+        <ul className="flex items-stretch justify-around px-1">
+          {items.map(({ to, label, icon: Icon, badge, match }, i) => (
+            <li key={to} className="flex-1">
+              <NavLink
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  cn(
+                    'pressable relative flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-card text-xs',
+                    isActive || i === activeIdx || (match ?? []).some((p) => inPath(pathname, p))
+                      ? 'font-bold text-primary'
+                      : 'font-medium text-text-secondary hover:text-text',
+                  )
+                }
+              >
+                <span
                   className={cn(
-                    'pressable relative flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-card text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-marketer-brand',
-                    i === activeIdx
-                      ? 'bg-marketer-brand-soft font-bold text-marketer-brand'
-                      : 'font-medium text-marketer-muted hover:bg-marketer-surface-muted hover:text-marketer-ink',
+                    'relative transition-transform duration-300 ease-spring',
+                    i === activeIdx && '-translate-y-0.5 scale-110',
                   )}
                 >
-                  <span className="relative">
-                    {item.image ? (
-                      <MarketerIcon name={item.image} className="size-7" />
-                    ) : (
-                      Icon && <Icon className="size-6" aria-hidden />
-                    )}
-                    <CountBadge
-                      count={item.badge ?? 0}
-                      srLabel=" پیام خوانده‌نشده"
-                      className="-end-2 -top-1.5"
-                    />
-                  </span>
-                  <span>{item.label}</span>
-                </Link>
-              </li>
-            );
-          })}
+                  <Icon className="size-6" aria-hidden />
+                  <CountBadge
+                    count={badge ?? 0}
+                    srLabel=" پیام خوانده‌نشده"
+                    className="-end-2 -top-1.5"
+                  />
+                </span>
+                <span>{label}</span>
+              </NavLink>
+            </li>
+          ))}
         </ul>
       </div>
     </nav>

@@ -71,10 +71,10 @@ export function PublishGuide({
             className="flex flex-col gap-2 rounded-card border border-border bg-background p-3"
           >
             <div className="flex items-center gap-2">
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-cta text-sm font-bold text-on-cta">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-on-primary">
                 {toPersianDigits(i + 1)}
               </span>
-              <s.icon className="size-5 text-primary-fg" aria-hidden />
+              <s.icon className="size-5 text-primary" aria-hidden />
               <h3 className="font-bold text-text">{s.title}</h3>
             </div>
             <p className="flex-1 text-sm leading-6 text-text-secondary">{s.body}</p>
@@ -90,7 +90,7 @@ function GuideLink({ to, children }: { to: string; children: ReactNode }) {
   return (
     <Link
       to={to}
-      className="flex min-h-12 items-center justify-center rounded-input border border-border bg-surface px-3 text-sm font-bold text-primary-fg hover:border-primary/40"
+      className="flex min-h-12 items-center justify-center rounded-input border border-border bg-surface px-3 text-sm font-bold text-primary hover:border-primary/40"
     >
       {children}
     </Link>

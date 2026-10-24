@@ -598,7 +598,7 @@ function TreeEditor({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-xs font-bold text-primary-fg hover:underline"
+          className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
           disabled={!canAddMore && root.children.length > 0}
           onClick={() => onChange(addChild(root, path, newLeaf()))}
         >
@@ -607,7 +607,7 @@ function TreeEditor({
         </button>
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-xs font-bold text-primary-fg hover:underline"
+          className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline"
           onClick={() => onChange(nestGroup(root, path))}
         >
           <Plus className="size-3.5" aria-hidden />
@@ -640,7 +640,7 @@ function MoveRow({
   onMove: (delta: -1 | 1) => void;
 }) {
   const cls =
-    'inline-flex items-center gap-1 text-[11px] font-bold text-primary-fg hover:underline disabled:text-muted-fg/60 disabled:no-underline';
+    'inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline disabled:text-muted-fg/60 disabled:no-underline';
   return (
     <div className="flex flex-wrap items-center gap-3">
       <span className="text-[11px] text-muted-fg">
@@ -898,7 +898,7 @@ function StepsEditor({
           <button
             key={t}
             type="button"
-            className="inline-flex items-center gap-1 text-xs font-bold text-primary-fg hover:underline disabled:text-muted-fg"
+            className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline disabled:text-muted-fg"
             disabled={steps.length >= max}
             onClick={() => add(t)}
           >

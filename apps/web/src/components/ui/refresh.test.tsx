@@ -79,23 +79,15 @@ describe('design refresh — ui', () => {
 });
 
 describe('design refresh — navigation', () => {
-  it.each(['/learn/all', '/packages/p1', '/sections/s1', '/quiz/s1'])(
-    'BottomNav keeps «آموزش‌ها» active on course route %s',
-    (path) => {
-      render(
-        <MemoryRouter initialEntries={[path]}>
-          <BottomNav />
-        </MemoryRouter>,
-      );
-      expect(screen.getByRole('link', { name: 'آموزش‌ها' }).className).toContain(
-        'text-marketer-brand',
-      );
-      expect(screen.getByRole('link', { name: 'خانه' }).className).not.toContain(
-        'text-marketer-brand',
-      );
-      expect(screen.queryByRole('link', { name: 'آزمون‌ها' })).toBeNull();
-    },
-  );
+  it('BottomNav keeps «آموزش‌ها» active on package/section/quiz pages', () => {
+    render(
+      <MemoryRouter initialEntries={['/packages/p1']}>
+        <BottomNav />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: /آموزش‌ها/ }).className).toContain('text-primary');
+    expect(screen.getByRole('link', { name: /خانه/ }).className).not.toContain('text-primary');
+  });
 
   it('isItemActive: exact for top-level entries, prefix for deeper ones, aliases for details', () => {
     const dash = { to: '/admin', label: 'د', icon: Users };

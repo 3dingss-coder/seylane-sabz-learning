@@ -65,14 +65,13 @@ export function PushAutomationTracePage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        variant="admin"
         title="ردیابی اعلان یک کاربر"
         subtitle="چه انتخابی کرده، چقدر از سقفش را مصرف کرده و موتور در ساعات اخیر چه چیزهایی را رد کرد"
         back="/admin/push-campaigns/automations"
         actions={
           <Link
             to="/admin/push-campaigns/automations/runs"
-            className="inline-flex min-h-12 items-center gap-1.5 rounded-input border border-primary/70 bg-surface px-3 text-sm font-bold text-primary-fg hover:bg-primary-light"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-input border border-primary/70 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary-light"
           >
             <History className="size-4" aria-hidden />
             تاریخچه اجراها
@@ -144,7 +143,7 @@ export function PushAutomationTracePage() {
                     <li key={s.key} className="flex items-center justify-between gap-2">
                       <Link
                         to={`/admin/push-campaigns/automations/${s.key}`}
-                        className="font-bold text-primary-fg hover:underline"
+                        className="font-bold text-primary hover:underline"
                       >
                         {nameOf(s.key)}
                       </Link>
@@ -207,7 +206,7 @@ export function PushAutomationTracePage() {
                 >
                   <Link
                     to={`/admin/push-campaigns/automations/${x.key}`}
-                    className="font-bold text-primary-fg hover:underline"
+                    className="font-bold text-primary hover:underline"
                   >
                     {nameOf(x.key)}
                   </Link>

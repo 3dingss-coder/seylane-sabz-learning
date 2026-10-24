@@ -2,9 +2,8 @@ import type { HTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  /** brand: subtle brand-tinted surface · hero: deep-green gradient with white text ·
-   *  energy: #58CC02 marketer reward surface with dark text (Stage 2, additive). */
-  tone?: 'default' | 'brand' | 'hero' | 'energy';
+  /** brand: subtle brand-tinted surface · hero: deep-green gradient with white text. */
+  tone?: 'default' | 'brand' | 'hero';
   padded?: boolean;
   /** Hover lift + press feedback (use on cards that are clickable as a whole). */
   interactive?: boolean;
@@ -26,7 +25,6 @@ export function Card({
           : 'rounded-card shadow-sm',
         tone === 'brand' && 'border-primary/20 bg-soft-brand bg-primary-light',
         tone === 'hero' && 'bg-hero border-transparent',
-        tone === 'energy' && 'border-transparent bg-brand-energy text-on-energy shadow-sm',
         tone === 'default' && 'border-border bg-surface',
         padded && 'p-4',
         interactive && 'pressable hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md',

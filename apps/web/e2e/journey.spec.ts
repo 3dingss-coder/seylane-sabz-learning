@@ -44,7 +44,7 @@ async function login(page: Page, identifier: string) {
   }
   await page.goto('/login');
   await page.getByLabel(/شماره موبایل/).fill(identifier);
-  await page.getByRole('button', { name: 'ورود و ادامه' }).click();
+  await page.getByRole('button', { name: 'ورود' }).click();
   // Wait until the session is established before navigating (avoids racing the login call).
   await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
 }
@@ -161,13 +161,7 @@ test('fresh marketer can open later sections without finishing earlier ones', as
 }) => {
   await login(page, FRESH_MARKETER);
   await page.goto('/learn');
-  await expect(page.getByRole('heading', { name: 'مسیر یادگیری من' })).toBeVisible({
-    timeout: 15_000,
-  });
-  await expect(page.getByRole('link', { name: 'بازگشت به خانه' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'ناوبری اصلی' })).toHaveCount(0);
-  await page.getByTestId('all-courses-link').click();
-  await expect(page).toHaveURL(/\/learn\/all$/);
+  await page.getByRole('tab', { name: /جدید/ }).click();
   await expect(page.getByTestId('package-card').first()).toBeVisible();
   // Multi-part package (فورمی): no sequential lock, part 2 is open from the start.
   await page.goto('/packages/seed-pkg-formi');
@@ -194,35 +188,15 @@ test('fresh marketer can open later sections without finishing earlier ones', as
   expect([200, 201]).toContain(r.status());
 });
 
-test('manager access: non-Manager phone numbers open the complete application form', async ({
-  page,
-}) => {
-  await page.goto('/manager');
-  const phone = page.getByLabel('شماره موبایل');
-  await phone.fill('09129999888');
-  await page.getByRole('button', { name: 'بررسی شماره موبایل' }).click();
-  await expect(page.getByLabel('نام و نام خانوادگی')).toBeVisible();
-  await expect(page.getByLabel('کد ملی')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'بازبینی اطلاعات' })).toBeVisible();
-  await expect(page.getByText(/موردی که دنبالش هستید پیدا نشد|OTP|پیامک/)).toHaveCount(0);
-
-  await page.getByRole('button', { name: 'تغییر شماره' }).click();
-  await page.getByLabel('شماره موبایل').fill('09120000005');
-  await page.getByRole('button', { name: 'بررسی شماره موبایل' }).click();
-  await expect(page.getByLabel('نام و نام خانوادگی')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'بازبینی اطلاعات' })).toBeVisible();
-});
-
 test('manager: team dashboard, completion report and CSV export', async ({ page }) => {
   await login(page, MANAGER);
   await expect(page).toHaveURL(/\/manager$/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('تیم');
   await page.goto('/manager/reports');
-  await expect(page.getByRole('heading', { level: 1, name: 'خلاصه مدیریتی' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'خروجی CSV' })).toBeVisible();
+  await expect(page.getByText(/ردیف/)).toBeVisible();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'خروجی CSV' }).click();
-  expect((await download).suggestedFilename()).toMatch(/^manager-learning-report-.*\.csv$/);
+  expect((await download).suggestedFilename()).toMatch(/^completion-report-.*\.csv$/);
 });
 
 test('admin: brands with real logos, unassigned tab, package editor', async ({ page }) => {

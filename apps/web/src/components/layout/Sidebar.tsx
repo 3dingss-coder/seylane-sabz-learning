@@ -33,7 +33,7 @@ export function Sidebar({ items, title }: { items: SidebarItem[]; title: string 
             <li
               aria-hidden
               className={cn(
-                'pointer-events-none absolute inset-x-0 top-0 rounded-card bg-cta bg-brand-gradient shadow-brand transition-[transform,opacity] duration-300 ease-soft',
+                'pointer-events-none absolute inset-x-0 top-0 rounded-card bg-primary bg-brand-gradient shadow-brand transition-[transform,opacity] duration-300 ease-soft',
                 activeIdx < 0 && 'opacity-0',
               )}
               style={{
@@ -52,8 +52,8 @@ export function Sidebar({ items, title }: { items: SidebarItem[]; title: string 
                     className={cn(
                       'flex min-h-12 items-center justify-between rounded-card px-3 text-sm transition-colors duration-200',
                       active
-                        ? 'font-bold text-on-cta'
-                        : 'font-medium text-text-secondary hover:bg-background hover:text-primary-fg',
+                        ? 'font-bold text-on-primary'
+                        : 'font-medium text-text-secondary hover:bg-background hover:text-primary',
                     )}
                   >
                     <span className="flex items-center gap-2.5">

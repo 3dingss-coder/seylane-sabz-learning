@@ -6,25 +6,10 @@
 
 @theme {
   /* §16.2 Color System */
-  /* Handoff v2 (user decision 2026-10-16, audit §8.1): brand identity primary is #059669.
-     White normal-size text on #059669 is 3.77:1 (fails WCAG AA), so text-bearing solid
-     fills must use the separate CTA token #047857 (white on it: 5.48:1) and green text on
-     light surfaces must use --color-primary-fg (#047857: 5.48:1 on white, 5.21:1 on
-     primary-light). --color-primary itself is for identity fills, icons, borders and
-     progress (non-text ≥ 3:1), never for white normal-size text. Supersedes decision D40. */
-  --color-primary: #059669;
-  --color-primary-hover: #047857;
-  --color-primary-light: #ecfdf5;
-  --color-primary-fg: #047857;
-  /* Solid call-to-action fill (white text via --color-on-cta) */
-  --color-cta: #047857;
-  --color-cta-hover: #065f46;
-  --color-on-cta: #ffffff;
-  /* Deep brand surface (heroes) — white text on it: 9.72:1 */
-  --color-brand-deep: #064e3b;
-  /* Marketer energy accent — dark text/icons only (#111827 on it: 8.49:1; never white text) */
-  --color-brand-energy: #58cc02;
-  --color-on-energy: #111827;
+  /* D40: #1B8A5A → #177A50 so white-on-primary meets WCAG AA (4.35 → 5.34:1). */
+  --color-primary: #177a50;
+  --color-primary-hover: #146c45;
+  --color-primary-light: #e7f5ee;
   --color-info: #2563eb;
   --color-success: #16a34a;
   --color-warning: #d97706;
@@ -48,23 +33,20 @@
   --color-danger-fg: #b91c1c;
   --color-info-fg: #1d4ed8;
 
-  /* ---- Handoff v2: brand scale re-derived on the emerald ramp (600 = identity #059669,
-     700 = CTA #047857, 900 = deep #064E3B, everything derives from it) ---- */
-  --color-primary-50: #ecfdf5;
-  --color-primary-100: #d1fae5;
-  --color-primary-200: #a7f3d0;
-  --color-primary-300: #6ee7b7;
-  --color-primary-400: #34d399;
-  --color-primary-500: #10b981;
-  --color-primary-600: #059669;
-  --color-primary-700: #047857;
-  --color-primary-800: #065f46;
-  --color-primary-900: #064e3b;
-  --color-primary-950: #022c22;
-  /* Warm accent (rewards, streaks, medals) — amber, the complement of the brand green.
-     #F59E0B takes dark text only (#111827 on it: 8.26:1); accent-fg is the text tone on light tints. */
+  /* ---- Design refresh: brand scale (600 = brand #177a50, everything derives from it) ---- */
+  --color-primary-50: #f0faf5;
+  --color-primary-100: #dcf2e6;
+  --color-primary-200: #b9e4cf;
+  --color-primary-300: #8ccfb0;
+  --color-primary-400: #4fb088;
+  --color-primary-500: #27946a;
+  --color-primary-600: #177a50;
+  --color-primary-700: #146c45;
+  --color-primary-800: #115638;
+  --color-primary-900: #0e4630;
+  --color-primary-950: #07291c;
+  /* Warm accent (rewards, streaks, medals) — amber, the complement of the brand green */
   --color-accent: #f59e0b;
-  --color-on-accent: #111827;
   --color-accent-light: #fef3c7;
   --color-accent-fg: #92400e;
   /* Purple — «معرفی محصول» in the push-template categories (the push templates design has no
@@ -72,19 +54,6 @@
   --color-violet: #7c3aed;
   --color-violet-light: #ede9fe;
   --color-violet-fg: #6d28d9;
-
-  /* Marketer's warm, product-facing surfaces. Kept role-scoped so the formal
-     Admin/Manager consoles continue using the neutral system surfaces above. */
-  --color-marketer-canvas: #fcf8f0;
-  --color-marketer-path-canvas: #fefbf1;
-  --color-marketer-surface: #fffdf8;
-  --color-marketer-surface-soft: #fffcf6;
-  --color-marketer-surface-muted: #f7f3ea;
-  --color-marketer-border: #eae2d7;
-  --color-marketer-ink: #17352a;
-  --color-marketer-muted: #596a65;
-  --color-marketer-brand: #0b6f59;
-  --color-marketer-brand-soft: #eaf4ef;
   /* text/icon colour ON solid fills (flips in dark mode so contrast stays ≥ 4.5:1) */
   --color-on-primary: #ffffff;
   --color-on-danger: #ffffff;
@@ -303,70 +272,51 @@
   --breakpoint-xl: 1280px;
 }
 
-/* ---- Dark mode: same token names, re-mapped. Opt-in only via <html data-theme='dark'>. ----
-   Visual-QA note (2026-10): nothing in the app sets `data-theme` and there is no
-   `prefers-color-scheme` wiring, so the app renders the light theme only; this block
-   is dormant until a toggle (or the attribute) is introduced.
+/* ---- Dark mode: same token names, re-mapped. Opt-in by the OS (prefers-color-scheme). ----
    Contrast checked: text/surface 14:1, text-secondary/surface 7.6:1, primary(text)/surface 7.9:1,
    on-primary/primary 8.3:1, each *-fg on its *-light ≥ 7:1. */
-:root[data-theme='dark'] {
-  color-scheme: dark;
-  --color-primary: #34d399;
-  --color-primary-hover: #6ee7b7;
-  --color-primary-light: #12291f;
-  --color-primary-fg: #6ee7b7;
-  /* CTA in dark mode: bright fill with deep-green text (on-cta/cta ≈ 8:1) */
-  --color-cta: #34d399;
-  --color-cta-hover: #6ee7b7;
-  --color-on-cta: #04241a;
-  --color-brand-deep: #064e3b;
-  --color-brand-energy: #58cc02;
-  --color-on-energy: #111827;
-  --color-on-primary: #04241a;
-  --color-on-danger: #2a0606;
-  --color-info: #60a5fa;
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
-  --color-text: #e8f1ec;
-  --color-text-secondary: #a9bcb2;
-  --color-muted: #6f8479;
-  --color-muted-fg: #94a89e;
-  --color-border: #263730;
-  --color-background: #0a130f;
-  --color-surface: #111c17;
-  --color-surface-2: #182721;
-  --color-success-light: #0f2a1a;
-  --color-warning-light: #33250a;
-  --color-danger-light: #3a1616;
-  --color-info-light: #12254a;
-  --color-success-fg: #86efac;
-  --color-warning-fg: #fcd34d;
-  --color-danger-fg: #fca5a5;
-  --color-info-fg: #93c5fd;
-  --color-accent: #fbbf24;
-  --color-accent-light: #33250a;
-  --color-accent-fg: #fcd34d;
-  --color-violet: #a78bfa;
-  --color-violet-light: #241a3d;
-  --color-violet-fg: #c4b5fd;
-  --color-marketer-canvas: #0a130f;
-  --color-marketer-path-canvas: #0a130f;
-  --color-marketer-surface: #111c17;
-  --color-marketer-surface-soft: #182721;
-  --color-marketer-surface-muted: #1b2b24;
-  --color-marketer-border: #263730;
-  --color-marketer-ink: #e8f1ec;
-  --color-marketer-muted: #a9bcb2;
-  --color-marketer-brand: #6ee7b7;
-  --color-marketer-brand-soft: #12291f;
-  --color-scrim: rgb(2 8 5 / 0.62);
-  --shadow-xs: 0 1px 1px rgb(0 0 0 / 0.3);
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
-  --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.5);
-  --shadow-lg: 0 16px 36px -8px rgb(0 0 0 / 0.65);
-  --shadow-brand: 0 8px 20px -6px rgb(52 211 153 / 0.35);
-  --shadow-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.08);
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-primary: #3ecf8e;
+    --color-primary-hover: #66dba6;
+    --color-primary-light: #12291f;
+    --color-on-primary: #04241a;
+    --color-on-danger: #2a0606;
+    --color-info: #60a5fa;
+    --color-success: #4ade80;
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+    --color-text: #e8f1ec;
+    --color-text-secondary: #a9bcb2;
+    --color-muted: #6f8479;
+    --color-muted-fg: #94a89e;
+    --color-border: #263730;
+    --color-background: #0a130f;
+    --color-surface: #111c17;
+    --color-surface-2: #182721;
+    --color-success-light: #0f2a1a;
+    --color-warning-light: #33250a;
+    --color-danger-light: #3a1616;
+    --color-info-light: #12254a;
+    --color-success-fg: #86efac;
+    --color-warning-fg: #fcd34d;
+    --color-danger-fg: #fca5a5;
+    --color-info-fg: #93c5fd;
+    --color-accent: #fbbf24;
+    --color-accent-light: #33250a;
+    --color-accent-fg: #fcd34d;
+    --color-violet: #a78bfa;
+    --color-violet-light: #241a3d;
+    --color-violet-fg: #c4b5fd;
+    --color-scrim: rgb(2 8 5 / 0.62);
+    --shadow-xs: 0 1px 1px rgb(0 0 0 / 0.3);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35);
+    --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 16px 36px -8px rgb(0 0 0 / 0.65);
+    --shadow-brand: 0 8px 20px -6px rgb(62 207 142 / 0.35);
+    --shadow-inset-top: inset 0 1px 0 rgb(255 255 255 / 0.08);
+  }
 }
 
 @layer base {
@@ -375,7 +325,7 @@
     line-height: 1.8;
     color: var(--color-text);
     background-color: var(--color-background);
-    color-scheme: light;
+    color-scheme: light dark;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
@@ -466,16 +416,20 @@
   }
   /* brand hero: deep green gradient + faint light bloom (text on it is white ≥ 7:1) */
   .bg-hero {
-    background-color: var(--color-brand-deep);
+    background-color: var(--color-primary-800);
     background-image:
-      radial-gradient(120% 90% at 100% 0%, rgb(52 211 153 / 0.45) 0%, transparent 55%),
+      radial-gradient(120% 90% at 100% 0%, rgb(79 176 136 / 0.45) 0%, transparent 55%),
       radial-gradient(90% 80% at 0% 100%, rgb(245 158 11 / 0.08) 0%, transparent 60%),
-      linear-gradient(135deg, var(--color-primary-700), var(--color-brand-deep));
+      linear-gradient(135deg, var(--color-primary-700), var(--color-primary-900));
     color: #fff;
   }
-  /* CTA button fill: subtle vertical gradient on the CTA token (white text ≥ 5.48:1) */
+  /* primary button fill: subtle vertical gradient, same brand hue */
   .bg-brand-gradient {
-    background-image: linear-gradient(180deg, var(--color-cta) 0%, var(--color-cta-hover) 100%);
+    background-image: linear-gradient(
+      180deg,
+      var(--color-primary) 0%,
+      var(--color-primary-hover) 100%
+    );
   }
   /* minimal dot texture for heroes / empty states */
   .bg-dots {

@@ -1,10 +1,8 @@
 import { act, render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { BottomNav, type BottomNavItem } from '@/components/layout/BottomNav';
+import { BottomNav } from '@/components/layout/BottomNav';
 import { BrandLogo } from '@/components/brand/BrandLogo';
-import { MarketerIcon, type MarketerIconName } from '@/components/brand/MarketerIcon';
-import { MentorLauncher } from '@/components/learning/MentorSheet';
 import {
   Button,
   Card,
@@ -36,12 +34,6 @@ describe('Button', () => {
   it('meets 48px minimum touch height class', () => {
     render(<Button>ورود</Button>);
     expect(screen.getByRole('button').className).toContain('min-h-12');
-  });
-  it('centers icon-only buttons without an empty label flex item', () => {
-    render(<Button aria-label="آیکون" icon={<span data-testid="icon-only" />} />);
-    const button = screen.getByRole('button', { name: 'آیکون' });
-    expect(button.children).toHaveLength(1);
-    expect(button.firstElementChild).toBe(screen.getByTestId('icon-only'));
   });
 });
 
@@ -158,91 +150,15 @@ describe('Toast', () => {
 });
 
 describe('BottomNav', () => {
-  it('keeps legacy Lucide tabs for generic callers such as the gallery', () => {
-    const { container } = render(
+  it('renders the 4 spec tabs', () => {
+    render(
       <MemoryRouter>
         <BottomNav />
       </MemoryRouter>,
     );
-    for (const label of ['خانه', 'آموزش‌ها', 'مدال', 'پروفایل']) {
-      expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
+    for (const label of ['خانه', 'آموزش‌ها', 'پیام‌ها', 'کارت‌ها']) {
+      expect(screen.getByRole('link', { name: new RegExp(label) })).toBeInTheDocument();
     }
-    expect(screen.queryByRole('link', { name: 'پیام‌ها' })).toBeNull();
-    expect(container.querySelectorAll('img[src^="/brand/m/icons/"]')).toHaveLength(0);
-    expect(container.querySelectorAll('svg[aria-hidden="true"]')).toHaveLength(4);
-  });
-
-  it('uses the 3D icon set only when marketer navigation items are passed explicitly', () => {
-    const items = [
-      { to: '/', label: 'خانه', image: 'home' },
-      { to: '/learn', label: 'آموزش‌ها', image: 'learning' },
-      { to: '/messages', label: 'پیام‌ها', image: 'messages' },
-      { to: '/cards', label: 'کارت‌ها', image: 'cards' },
-    ] satisfies BottomNavItem[];
-    const { container } = render(
-      <MemoryRouter>
-        <BottomNav items={items} />
-      </MemoryRouter>,
-    );
-
-    for (const name of ['home', 'learning', 'messages', 'cards']) {
-      const icon = container.querySelector(`img[src="/brand/m/icons/${name}-3d.png"]`);
-      expect(icon).toHaveAttribute('alt', '');
-      expect(icon).toHaveAttribute('aria-hidden', 'true');
-    }
-  });
-});
-
-describe('MarketerIcon', () => {
-  it.each([
-    'home',
-    'learning',
-    'messages',
-    'cards',
-    'mentor',
-    'notification',
-    'quiz',
-    'audio',
-    'video',
-    'deadline',
-    'badge-sprout',
-    'badge-clock',
-    'badge-brain',
-    'badge-medal',
-    'badge-star',
-    'welcome',
-    'assignment',
-    'announcement',
-    'manager-note',
-    'weekly-summary',
-    'quiz-passed',
-    'quiz-retry',
-    'quiz-review',
-    'retake-pending',
-    'quiz-unavailable',
-    'profile',
-    'profile-settings',
-    'profile-security',
-    'profile-location',
-    'profile-camera',
-    'profile-logout',
-    'mentor-plus',
-    'mentor-mic',
-    'mentor-send',
-  ] as MarketerIconName[])('maps %s to its decorative image asset', (name) => {
-    const { container } = render(<MarketerIcon name={name} className="size-8" />);
-    const icon = container.querySelector('img');
-    expect(icon).toHaveAttribute('src', `/brand/m/icons/${name}-3d.png`);
-    expect(icon).toHaveAttribute('alt', '');
-    expect(icon).toHaveAttribute('aria-hidden', 'true');
-  });
-});
-
-describe('MentorLauncher', () => {
-  it('keeps its accessible action label with the 3D marketer mentor icon', () => {
-    const { container } = render(<MentorLauncher packageId="p1" />);
-    expect(screen.getByRole('button', { name: 'از منتور بپرس' })).toBeInTheDocument();
-    expect(container.querySelector('img[src="/brand/m/icons/mentor-3d.png"]')).not.toBeNull();
   });
 });
 

@@ -218,7 +218,7 @@ export function PushAutomationsPanel() {
             <div className="ms-auto flex flex-wrap items-center gap-2">
               <Link
                 to="/admin/push-campaigns/automations/new"
-                className="inline-flex min-h-12 items-center gap-1.5 rounded-input border border-primary/70 bg-surface px-3 text-sm font-bold text-primary-fg hover:bg-primary-light"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-input border border-primary/70 bg-surface px-3 text-sm font-bold text-primary hover:bg-primary-light"
               >
                 <Plus className="size-4" aria-hidden />
                 اتوماسیون دست‌ساز
@@ -258,14 +258,14 @@ export function PushAutomationsPanel() {
                   it do» and «why not for this person», so they live next to the switches. */}
               <Link
                 to="/admin/push-campaigns/automations/runs"
-                className="inline-flex min-h-12 items-center gap-1.5 rounded-input border border-border bg-surface px-3 text-sm font-bold text-text-secondary hover:bg-surface-2 hover:text-primary-fg"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-input border border-border bg-surface px-3 text-sm font-bold text-text-secondary hover:bg-surface-2 hover:text-primary"
               >
                 <History className="size-4" aria-hidden />
                 تاریخچه اجراها
               </Link>
               <Link
                 to="/admin/push-campaigns/automations/trace"
-                className="inline-flex min-h-12 items-center gap-1.5 rounded-input border border-border bg-surface px-3 text-sm font-bold text-text-secondary hover:bg-surface-2 hover:text-primary-fg"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-input border border-border bg-surface px-3 text-sm font-bold text-text-secondary hover:bg-surface-2 hover:text-primary"
               >
                 <UserSearch className="size-4" aria-hidden />
                 ردیابی کاربر
@@ -528,7 +528,7 @@ function AutomationTable({
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 to={`/admin/push-campaigns/automations/${r.key}`}
-                className="truncate text-sm font-extrabold text-text hover:text-primary-fg hover:underline"
+                className="truncate text-sm font-extrabold text-text hover:text-primary hover:underline"
               >
                 {r.name}
               </Link>

@@ -1,47 +1,28 @@
 import { Route, Routes } from 'react-router-dom';
-import {
-  BarChart3,
-  BellRing,
-  ClipboardList,
-  LayoutDashboard,
-  UserRound,
-  UsersRound,
-} from 'lucide-react';
+import { BarChart3, ClipboardList, LayoutDashboard, UserRound } from 'lucide-react';
 import { PageHeader } from '@/components/common/PageHeader';
 import { RetakeList } from '@/components/reports/RetakeList';
 import { PanelLayout } from '@/layouts/PanelLayout';
 import { NotFoundPage } from '@/pages/NotFoundPage';
-import { ManagerProfilePage } from './ManagerProfilePage';
-import { ManagerProfileCompletionPage } from './ManagerProfileCompletionPage';
-import { ManagerCampaignRoute, ManagerCampaignsPage } from './ManagerCampaigns';
+import { ProfilePage } from '@/pages/m/ProfilePage';
 import { ManagerDashboard } from './ManagerDashboard';
 import { ManagerMember } from './ManagerMember';
-import { ManagerMembersPage } from './ManagerMembersPage';
 import { ManagerReports } from './ManagerReports';
 
 const NAV = [
-  { to: '/manager', label: 'داشبورد', icon: LayoutDashboard },
-  { to: '/manager/members', label: 'تیم من', icon: UsersRound, match: ['/manager/members/'] },
-  { to: '/manager/reports', label: 'گزارش مدیریتی', icon: BarChart3 },
-  { to: '/manager/campaigns', label: 'کمپین‌های تیم', icon: BellRing },
+  { to: '/manager', label: 'داشبورد', icon: LayoutDashboard, match: ['/manager/members'] },
+  { to: '/manager/reports', label: 'گزارش تکمیل', icon: BarChart3 },
   { to: '/manager/retakes', label: 'آزمون مجدد', icon: ClipboardList },
   { to: '/manager/profile', label: 'پروفایل', icon: UserRound },
 ];
 
-const MOBILE_NAV = NAV.filter((item) => item.to !== '/manager/profile');
-
 export default function ManagerRoutes() {
   return (
     <Routes>
-      <Route path="complete-profile" element={<ManagerProfileCompletionPage />} />
-      <Route element={<PanelLayout title="مدیریت تیم" items={NAV} mobileItems={MOBILE_NAV} />}>
+      <Route element={<PanelLayout title="پنل مدیر" items={NAV} />}>
         <Route index element={<ManagerDashboard />} />
-        <Route path="members" element={<ManagerMembersPage />} />
-        <Route path="members/:id" element={<ManagerMember />} />
         <Route path="reports" element={<ManagerReports />} />
-        <Route path="campaigns" element={<ManagerCampaignsPage />} />
-        <Route path="campaigns/:id" element={<ManagerCampaignRoute />} />
-        <Route path="campaigns/:id/edit" element={<ManagerCampaignRoute />} />
+        <Route path="members/:id" element={<ManagerMember />} />
         <Route
           path="retakes"
           element={
@@ -55,7 +36,7 @@ export default function ManagerRoutes() {
             </>
           }
         />
-        <Route path="profile" element={<ManagerProfilePage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

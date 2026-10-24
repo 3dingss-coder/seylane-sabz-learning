@@ -199,7 +199,7 @@ export function GalleryPage() {
                 <ProgressRing value={100} label="بسته تکمیل‌شده" />
               </Card>
               <Card tone="brand" className="space-y-2">
-                <p className="font-bold text-primary-fg">آفرین! 🎉</p>
+                <p className="font-bold text-primary">آفرین! 🎉</p>
                 <p className="text-sm text-text-secondary">کارت با پس‌زمینه برند برای موفقیت‌ها.</p>
               </Card>
             </div>

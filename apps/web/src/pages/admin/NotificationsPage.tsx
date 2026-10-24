@@ -2,7 +2,7 @@ import { userOptionLabel } from '@/lib/digits';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Pencil, Search, Send } from 'lucide-react';
+import { Bell, Pencil, Send } from 'lucide-react';
 import { Button, Card, EmptyState, Input, Modal, TableSkeleton, useToast } from '@/components/ui';
 import { Select, Tabs, Textarea } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
@@ -43,7 +43,7 @@ export function NotificationsPage() {
   const inbox = useNotifications();
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader variant="admin" title="اعلان‌ها" />
+      <PageHeader title="اعلان‌ها" />
       <Tabs
         label="بخش"
         value={tab}
@@ -67,10 +67,6 @@ function Inbox() {
   const q = useNotifications();
   const qc = useQueryClient();
   const nav = useNavigate();
-  const [readFilter, setReadFilter] = useState<'all' | 'unread' | 'read'>('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [dateRange, setDateRange] = useState<'all' | 'today' | '7' | '30'>('all');
-  const [search, setSearch] = useState('');
   const readOne = useMutation({
     mutationFn: (id: string) => api.post(`/me/notifications/${id}/read`),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['me', 'notifications'] }),
@@ -99,131 +95,40 @@ function Inbox() {
         isEmpty={(d) => d.items.length === 0}
         empty={<EmptyState title="اعلانی نداری" icon={<Bell className="size-8" />} />}
       >
-        {(d) => {
-          const types = [...new Set(d.items.map((item) => item.type))].sort();
-          const needle = search.trim().toLocaleLowerCase();
-          const now = Date.now();
-          const since =
-            dateRange === 'today'
-              ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
-              : dateRange === '7' || dateRange === '30'
-                ? now - Number(dateRange) * 24 * 60 * 60 * 1000
-                : null;
-          const matchingContent = d.items.filter((item) => {
-            const matchesType = typeFilter === 'all' || item.type === typeFilter;
-            const matchesSearch =
-              !needle || `${item.title} ${item.body}`.toLocaleLowerCase().includes(needle);
-            const createdAt = Date.parse(item.createdAt);
-            const matchesDate =
-              since === null || (Number.isFinite(createdAt) && createdAt >= since);
-            return matchesType && matchesSearch && matchesDate;
-          });
-          const unreadCount = matchingContent.filter((item) => !item.readAt).length;
-          const readCount = matchingContent.length - unreadCount;
-          const visible = matchingContent.filter((item) =>
-            readFilter === 'all' ? true : readFilter === 'unread' ? !item.readAt : !!item.readAt,
-          );
-          return (
-            <div className="flex flex-col gap-3">
-              <Card className="flex flex-col gap-3 p-3">
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_minmax(170px,0.65fr)_minmax(170px,0.65fr)]">
-                  <Input
-                    label="جستجو در اعلان‌ها"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    icon={<Search className="size-4" aria-hidden />}
-                    placeholder="عنوان یا متن اعلان…"
-                  />
-                  <Select
-                    label="نوع اعلان"
-                    value={typeFilter}
-                    onChange={(event) => setTypeFilter(event.target.value)}
-                  >
-                    <option value="all">همهٔ انواع</option>
-                    {types.map((type) => (
-                      <option key={type} value={type}>
-                        {KEY_LABEL[type] ?? 'سایر اعلان‌ها'}
-                      </option>
-                    ))}
-                  </Select>
-                  <Select
-                    label="بازهٔ زمانی"
-                    value={dateRange}
-                    onChange={(event) => setDateRange(event.target.value as typeof dateRange)}
-                  >
-                    <option value="all">همهٔ زمان‌ها</option>
-                    <option value="today">امروز</option>
-                    <option value="7">۷ روز گذشته</option>
-                    <option value="30">۳۰ روز گذشته</option>
-                  </Select>
-                </div>
-                <Tabs
-                  label="وضعیت خواندن"
-                  value={readFilter}
-                  onChange={setReadFilter}
-                  items={[
-                    { value: 'all', label: 'همه', count: matchingContent.length },
-                    { value: 'unread', label: 'خوانده‌نشده', count: unreadCount },
-                    { value: 'read', label: 'خوانده‌شده', count: readCount },
-                  ]}
-                />
-                <p className="text-xs text-text-secondary" aria-live="polite">
-                  {toPersianDigits(visible.length)} اعلان در این نما
-                </p>
-              </Card>
-              {visible.length === 0 ? (
-                <EmptyState
-                  title="اعلانی با این فیلتر پیدا نشد"
-                  description="عبارت جستجو یا فیلترهای انتخاب‌شده را تغییر دهید."
-                  icon={<Bell className="size-8" aria-hidden />}
-                />
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {visible.map((it) => (
-                    <li key={it.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!it.readAt) readOne.mutate(it.id);
-                          if (it.actionRef) nav(it.actionRef);
-                        }}
-                        className={cn(
-                          'flex min-h-12 w-full items-start gap-3 rounded-card border p-3 text-start',
-                          it.readAt
-                            ? 'border-border bg-surface'
-                            : 'border-primary/30 bg-primary-light',
-                        )}
-                      >
-                        <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl bg-white text-primary-fg">
-                          <Bell className="size-5" aria-hidden />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-bold text-text">{it.title}</p>
-                            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-                              {KEY_LABEL[it.type] ?? 'سایر اعلان‌ها'}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-sm leading-6 text-text-secondary">{it.body}</p>
-                          <p className="mt-1 text-xs text-muted-fg">
-                            {faRelative(it.createdAt)}
-                            {it.actionRef ? ' • با کلیک باز می‌شود' : ''}
-                          </p>
-                        </div>
-                        {!it.readAt && (
-                          <span
-                            className="mt-2 size-2 shrink-0 rounded-full bg-primary"
-                            aria-label="خوانده نشده"
-                          />
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        }}
+        {(d) => (
+          <ul className="flex flex-col gap-2">
+            {d.items.map((it) => (
+              <li key={it.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!it.readAt) readOne.mutate(it.id);
+                    if (it.actionRef) nav(it.actionRef);
+                  }}
+                  className={cn(
+                    'flex min-h-12 w-full items-start gap-3 rounded-card border p-3 text-start',
+                    it.readAt ? 'border-border bg-surface' : 'border-primary/30 bg-primary-light',
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-text">{it.title}</p>
+                    <p className="text-sm leading-6 text-text-secondary">{it.body}</p>
+                    <p className="mt-1 text-xs text-muted-fg">
+                      {faRelative(it.createdAt)}
+                      {it.actionRef ? ' • با کلیک باز می‌شود' : ''}
+                    </p>
+                  </div>
+                  {!it.readAt && (
+                    <span
+                      className="mt-2 size-2 shrink-0 rounded-full bg-primary"
+                      aria-label="خوانده نشده"
+                    />
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </QueryState>
     </div>
   );
@@ -245,7 +150,7 @@ function Templates() {
               <li key={t.key}>
                 <Card className="flex h-full flex-col gap-1">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-bold text-primary-fg">
+                    <p className="text-xs font-bold text-primary">
                       {KEY_LABEL[t.key] ?? t.key}
                       {t.customized && <span className="ms-2 text-warning-fg">(سفارشی)</span>}
                     </p>
@@ -328,7 +233,7 @@ function TemplateDialog({ t, onClose }: { t: NotificationTemplate; onClose: () =
                 key={v}
                 type="button"
                 onClick={() => setBody((b) => `${b}{${v}}`)}
-                className="ms-1 inline-flex min-h-12 items-center rounded-full bg-background px-3 font-mono"
+                className="ms-1 inline-flex min-h-8 items-center rounded-full bg-background px-2 font-mono"
                 dir="ltr"
               >
                 {`{${v}}`}

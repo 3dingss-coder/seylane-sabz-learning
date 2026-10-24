@@ -215,46 +215,6 @@ describe('teams ↔ managers stay consistent', () => {
     expect(res.body.data.warnings.join(' ')).toContain('بدون مدیر ماند');
   });
 
-  it('allows multiple Managers on one team and exposes the assignment to all of them', async () => {
-    const managerOne = await ctx.user('manager', { teamId: 't1' });
-    const managerTwo = await ctx.user('manager', { teamId: 't1' });
-    const marketer = await ctx.user('marketer', { teamId: 't1' });
-    const assigned = await ctx.api(admin.token).patch('/v1/admin/teams/t1', {
-      managerIds: [managerOne.id, managerTwo.id],
-    });
-    expect(assigned.status).toBe(200);
-    expect(assigned.body.data.managerIds).toEqual([managerOne.id, managerTwo.id]);
-
-    const listed = (await ctx.api(admin.token).get('/v1/admin/teams')).body.data as Array<{
-      id: string;
-      managerIds: string[];
-      activeManagerCount: number;
-    }>;
-    expect(listed.find((team) => team.id === 't1')).toMatchObject({
-      managerIds: [managerOne.id, managerTwo.id],
-      activeManagerCount: 2,
-    });
-    for (const manager of [managerOne, managerTwo]) {
-      const members = await ctx.api(manager.token).get('/v1/manager/members');
-      expect(members.body.data.members.map((member: { id: string }) => member.id)).toContain(
-        marketer.id,
-      );
-    }
-  });
-
-  it('requires team province and city together and returns both when saved', async () => {
-    const incomplete = await ctx.api(admin.token).patch('/v1/admin/teams/t2', {
-      province: 'تهران',
-    });
-    expect(incomplete.status).toBe(400);
-    const saved = await ctx.api(admin.token).patch('/v1/admin/teams/t2', {
-      province: 'تهران',
-      city: 'تهران',
-    });
-    expect(saved.status).toBe(200);
-    expect(saved.body.data).toMatchObject({ province: 'تهران', city: 'تهران' });
-  });
-
   it('demoting a manager removes them from the team list', async () => {
     const mgr = await ctx.user('manager', { teamId: 't1' });
     await ctx.api(admin.token).patch('/v1/admin/teams/t1', { managerId: mgr.id });

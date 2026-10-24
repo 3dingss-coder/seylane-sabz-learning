@@ -42,7 +42,7 @@ export function StaleBanner({ show, onRetry }: { show: boolean; onRetry: () => v
       <button
         type="button"
         onClick={onRetry}
-        className="min-h-12 shrink-0 px-2 font-bold text-primary-fg"
+        className="min-h-12 shrink-0 px-2 font-bold text-primary"
       >
         تلاش مجدد
       </button>

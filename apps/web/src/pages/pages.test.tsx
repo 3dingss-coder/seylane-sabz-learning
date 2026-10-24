@@ -67,12 +67,11 @@ describe('routing', () => {
   it('redirects anonymous users from the marketer home to login', async () => {
     localStorage.clear();
     renderAt('/');
-    expect(await screen.findByRole('button', { name: 'ورود و ادامه' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();
     expect(screen.getByLabelText('شماره موبایل یا کد ملی')).toBeInTheDocument();
   });
 
   it('protects the admin panel', async () => {
-    // staff sign-in keeps its own «ورود» CTA, separate from marketer sign-in
     localStorage.clear();
     renderAt('/admin');
     expect(await screen.findByRole('button', { name: 'ورود' })).toBeInTheDocument();

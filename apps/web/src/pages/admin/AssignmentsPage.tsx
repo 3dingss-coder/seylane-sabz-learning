@@ -4,26 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDown,
   ArrowUp,
-  BookOpen,
   Info,
   Pencil,
   Plus,
   Route as RouteIcon,
-  Share2,
   Trash2,
-  Users,
   X,
 } from 'lucide-react';
-import {
-  Button,
-  Card,
-  EmptyState,
-  Input,
-  KpiCard,
-  Modal,
-  TableSkeleton,
-  useToast,
-} from '@/components/ui';
+import { Button, Card, EmptyState, Input, Modal, TableSkeleton, useToast } from '@/components/ui';
 import { Select, Tabs, Textarea } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
@@ -104,60 +92,12 @@ function TargetPicker({
 /** A4/18.4 — مسیرها و مخاطبان: «چه کسی، کدام آموزش، به چه ترتیب، تا کی». */
 export function AssignmentsPage() {
   const [tab, setTab] = useState<'assignments' | 'paths'>('paths');
-  const users = useUsers();
-  const summaryAssignments = useQuery({
-    queryKey: ['admin', 'assignments'],
-    queryFn: ({ signal }) => api.get<AdminAssignment[]>('/admin/assignments', signal),
-  });
-  const summaryPaths = useQuery({
-    queryKey: ['admin', 'paths'],
-    queryFn: ({ signal }) => api.get<AdminPath[]>('/admin/paths', signal),
-  });
-  const activeMarketers = users.data?.filter(
-    (user) => user.role === 'marketer' && user.status === 'active',
-  );
-  const activePaths = summaryPaths.data?.filter((path) => !path.archived);
-  const activeAssignments = summaryAssignments.data?.filter((assignment) => !assignment.revokedAt);
-  const pathSteps = activePaths?.reduce((count, path) => count + path.items.length, 0);
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        variant="admin"
         title="مسیرها و مخاطبان"
         subtitle="چه کسانی کدام آموزش‌ها را، به چه ترتیبی و تا چه روزی ببینند"
       />
-      <section
-        aria-label="خلاصهٔ مخاطبان و مسیرها"
-        className="stagger grid grid-cols-2 gap-3 xl:grid-cols-4"
-      >
-        <KpiCard
-          title="بازاریاب‌های فعال"
-          value={activeMarketers ? toPersianDigits(activeMarketers.length) : '—'}
-          subtitle="حساب‌های مجاز برای دریافت آموزش"
-          icon={Users}
-        />
-        <KpiCard
-          title="مسیرهای فعال"
-          value={activePaths ? toPersianDigits(activePaths.length) : '—'}
-          subtitle="مسیرهای منتشرشده برای مخاطبان"
-          icon={RouteIcon}
-          tone="info"
-        />
-        <KpiCard
-          title="انتساب‌های جاری"
-          value={activeAssignments ? toPersianDigits(activeAssignments.length) : '—'}
-          subtitle="شامل انتساب‌های ساخته‌شده از مسیر"
-          icon={Share2}
-          tone="warning"
-        />
-        <KpiCard
-          title="گام‌های آموزشی"
-          value={pathSteps !== undefined ? toPersianDigits(pathSteps) : '—'}
-          subtitle="در مسیرهای فعال"
-          icon={BookOpen}
-          tone="primary"
-        />
-      </section>
       <div className="grid gap-3 md:grid-cols-2">
         <Explainer
           icon={<RouteIcon className="size-5" aria-hidden />}
@@ -216,7 +156,7 @@ function Explainer({
       }
     >
       <span className="flex items-center gap-2 font-bold text-text">
-        <span className="text-primary-fg">{icon}</span>
+        <span className="text-primary">{icon}</span>
         {title}
       </span>
       <span className="text-sm leading-6 text-text-secondary">{children}</span>

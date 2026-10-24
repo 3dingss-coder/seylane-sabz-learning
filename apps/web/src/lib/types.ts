@@ -4,12 +4,6 @@ export type Role = 'marketer' | 'manager' | 'admin' | 'superadmin';
 export interface Me {
   id: string;
   name: string;
-  /** Optional URL for the user's uploaded profile photo. */
-  avatarUrl?: string | null;
-  /** Optional workplace label selected in profile. */
-  workplace?: string | null;
-  /** Identity kind is exposed without revealing the stored national-code digest. */
-  hasNationalCode?: boolean;
   phone: string | null;
   email: string | null;
   /** Residence («محل سکونت») captured at sign-up; null on accounts created before it existed. */
@@ -21,9 +15,6 @@ export interface Me {
   status: 'active' | 'inactive' | 'blacklisted';
   pointsBalance: number;
   onboardedAt: string | null;
-  /** True only for an Admin-provisioned Manager who has not finished first-login setup. */
-  managerProfileRequired?: boolean;
-  managerProfileCompletedAt?: string | null;
   lastActiveAt: string | null;
   createdAt: string;
 }
@@ -33,36 +24,6 @@ export interface AuthResult {
   idToken: string;
   refreshToken: string;
   expiresIn: number;
-}
-
-export type ManagerAccessAuthResult =
-  | ({ state: 'active' } & AuthResult)
-  | { state: 'pending' | 'review_requested' | 'inactive'; message: string }
-  | { state: 'rejected'; message: string; reviewNote: string | null; appealCount: number };
-
-export interface ManagerProfileView {
-  team: { id: string; name: string } | null;
-  managementArea: { province: string | null; city: string | null };
-  createdAt: string;
-}
-
-export interface ManagerAccessRequestView {
-  id: string;
-  userId: string;
-  existingAccount: boolean;
-  fullName: string;
-  phone: string;
-  nationalCode: string | null;
-  managementProvince: string;
-  managementCity: string;
-  avatarUrl: string;
-  status: 'pending' | 'review_requested' | 'approved' | 'rejected';
-  reviewNote: string | null;
-  reviewedAt: string | null;
-  phoneReviewedExternally: boolean;
-  appeals: Array<{ message: string; submittedAt: string }>;
-  createdAt: string;
-  updatedAt: string;
 }
 
 export type SectionState = 'locked' | 'open' | 'in_progress' | 'quiz' | 'completed';
@@ -510,35 +471,6 @@ export interface ManagerDashboard {
   laggards: Laggard[];
   pendingRetakes: number;
 }
-export interface ManagerMemberPackage {
-  id: string;
-  title: string;
-  brandName: string | null;
-  productName: string | null;
-  status: PackageUserStatus;
-  percent: number;
-  overdue: boolean;
-  deadlineAt: string | null;
-  completedAt: string | null;
-}
-export interface ManagerMemberRow {
-  id: string;
-  name: string;
-  avatarUrl: string | null;
-  phone: string | null;
-  province: string | null;
-  city: string | null;
-  status: 'active' | 'inactive';
-  createdAt: string;
-  lastActiveAt: string | null;
-  stats: { assigned: number; completed: number; averageProgress: number; lagging: number };
-  packages: ManagerMemberPackage[];
-}
-export interface ManagerMembersResponse {
-  team: { id: string; name: string } | null;
-  totals: { members: number; active: number; inactive: number; lagging: number };
-  members: ManagerMemberRow[];
-}
 export interface CompletionRow {
   userId: string;
   userName: string;
@@ -669,9 +601,6 @@ export interface RetakeItem {
   escalated: boolean;
   scores: number[];
   createdAt: string;
-  /** Present on requests that have already been reviewed; optional for older cached responses. */
-  reviewedAt?: string | null;
-  reviewNote?: string | null;
 }
 
 // ─── Admin ──────────────────────────────────────────────────────────────────
@@ -683,8 +612,6 @@ export interface AdminBrand {
   logoIsFallback: boolean;
   sortOrder: number;
   archived: boolean;
-  createdAt?: string;
-  updatedAt?: string;
 }
 export interface AdminProduct {
   id: string;
@@ -828,14 +755,8 @@ export interface AdminQuiz {
 export interface AdminTeam {
   id: string;
   name: string;
-  /** Compatibility primary-manager fields; managerIds/managers support multiple Managers. */
   managerId: string | null;
   managerName: string | null;
-  managerIds?: string[];
-  managers?: Array<{ id: string; name: string; status: 'active' | 'inactive' }>;
-  activeManagerCount?: number;
-  province?: string | null;
-  city?: string | null;
   memberCount: number;
 }
 export interface AdminPath {
@@ -877,64 +798,10 @@ export interface AdminKpis {
   completions: number;
   nudgeReengagementRate: number;
 }
-export interface AdminDashboardUserSummary {
-  id: string;
-  name: string;
-  role: Role;
-  status: 'active' | 'inactive' | 'blacklisted';
-  createdAt: string;
-  province: string | null;
-  city: string | null;
-}
-export interface AdminDashboardPackageSummary {
-  id: string;
-  title: string;
-  status: 'draft' | 'published' | 'archived';
-  createdAt: string;
-  updatedAt: string;
-  brandId: string | null;
-}
-export interface AdminDashboardActivity {
-  id: string;
-  source: 'app' | 'admin';
-  name: string;
-  at: string;
-  actorId: string | null;
-  actorName: string;
-  entity: string | null;
-  entityId: string | null;
-}
-export interface AdminDashboardInsights {
-  users: {
-    total: number;
-    active: number;
-    byRole: Record<Role, number>;
-    recent: AdminDashboardUserSummary[];
-  };
-  activityTrend: Array<{
-    date: string;
-    activeUsers: number;
-    signups: number;
-    completions: number;
-    quizAttempts: number;
-  }>;
-  recentPackages: AdminDashboardPackageSummary[];
-  recentActivity: AdminDashboardActivity[];
-  campaigns: {
-    total: number;
-    draft: number;
-    scheduled: number;
-    inProgress: number;
-    sent: number;
-    failed: number;
-    cancelled: number;
-  };
-}
 export interface AdminDashboard {
   kpis: AdminKpis;
   content: { published: number; drafts: number; unassigned: number; archived: number };
   pendingRetakes: number;
-  insights?: AdminDashboardInsights;
 }
 export interface NotificationTemplate {
   key: string;

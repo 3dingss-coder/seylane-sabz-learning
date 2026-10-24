@@ -190,7 +190,6 @@ function Editor({ d }: { d: AdminPackageDetail }) {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        variant="admin"
         title={p.title}
         back={p.brandId ? `/admin/content/brands/${p.brandId}` : '/admin/content?tab=unassigned'}
         subtitle={
@@ -316,7 +315,7 @@ function Editor({ d }: { d: AdminPackageDetail }) {
                   <li key={s.id}>
                     <Card className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <div className="flex flex-1 items-center gap-3">
-                        <span className="flex size-10 shrink-0 items-center justify-center rounded-card bg-primary-light text-primary-fg">
+                        <span className="flex size-10 shrink-0 items-center justify-center rounded-card bg-primary-light text-primary">
                           <Icon className="size-5" aria-hidden />
                         </span>
                         <div className="min-w-0">
@@ -360,7 +359,7 @@ function Editor({ d }: { d: AdminPackageDetail }) {
                         />
                         <Link
                           to={`/admin/quizzes/${s.quizId}`}
-                          className="flex min-h-12 items-center gap-1 rounded-input px-3 text-sm font-bold text-primary-fg hover:bg-primary-light"
+                          className="flex min-h-12 items-center gap-1 rounded-input px-3 text-sm font-bold text-primary hover:bg-primary-light"
                         >
                           <FileQuestion className="size-4" aria-hidden /> آزمون
                         </Link>
@@ -389,7 +388,7 @@ function Editor({ d }: { d: AdminPackageDetail }) {
           )}
           {archived.length > 0 && (
             <details className="rounded-card border border-border bg-surface p-3 text-sm">
-              <summary className="min-h-12 cursor-pointer py-3 font-bold text-text-secondary">
+              <summary className="min-h-8 cursor-pointer font-bold text-text-secondary">
                 قسمت‌های بایگانی‌شده ({toPersianDigits(archived.length)})
               </summary>
               <ul className="mt-2 flex flex-col gap-1">
@@ -520,7 +519,7 @@ function PackageSteps({ steps }: { steps: Step[] }) {
               className={cn(
                 'flex items-center gap-1.5 rounded-full px-3 py-1 text-sm',
                 s.done
-                  ? 'bg-primary-light font-bold text-primary-fg'
+                  ? 'bg-primary-light font-bold text-primary'
                   : s === next
                     ? 'border-2 border-primary font-bold text-text'
                     : 'border border-border text-text-secondary',
@@ -548,7 +547,7 @@ function PackageSteps({ steps }: { steps: Step[] }) {
             (next.action.to ? (
               <Link
                 to={next.action.to}
-                className="flex min-h-12 shrink-0 items-center justify-center rounded-input bg-cta px-4 text-sm font-bold text-on-cta hover:bg-cta-hover"
+                className="flex min-h-12 shrink-0 items-center justify-center rounded-input bg-primary px-4 text-sm font-bold text-on-primary hover:bg-primary-hover"
               >
                 {next.action.text}
               </Link>
@@ -559,7 +558,7 @@ function PackageSteps({ steps }: { steps: Step[] }) {
             ))}
         </div>
       ) : (
-        <p className="rounded-input bg-primary-light p-3 text-sm font-bold text-primary-fg">
+        <p className="rounded-input bg-primary-light p-3 text-sm font-bold text-primary">
           این آموزش کامل است: منتشر شده و بازاریاب‌ها آن را می‌بینند.
         </p>
       )}
@@ -596,7 +595,7 @@ function AudienceCard({
   return (
     <Card className="flex flex-col gap-2 text-sm" data-testid="audience-card">
       <h2 className="flex items-center gap-2 font-bold">
-        <Users className="size-4 text-primary-fg" aria-hidden /> چه کسانی این آموزش را می‌بینند؟
+        <Users className="size-4 text-primary" aria-hidden /> چه کسانی این آموزش را می‌بینند؟
       </h2>
       {audience.length === 0 ? (
         published ? (
@@ -639,7 +638,7 @@ function AudienceCard({
       )}
       <Link
         to="/admin/assignments"
-        className="flex min-h-12 items-center justify-center gap-1 text-sm font-bold text-primary-fg"
+        className="flex min-h-12 items-center justify-center gap-1 text-sm font-bold text-primary"
       >
         <Eye className="size-4" aria-hidden /> همه مسیرها و مخاطبان
       </Link>

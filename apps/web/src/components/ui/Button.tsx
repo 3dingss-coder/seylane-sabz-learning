@@ -2,8 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { Spinner } from './Spinner';
 
-export type ButtonVariant =
-  'primary' | 'secondary' | 'ghost' | 'danger' | 'light' | 'energy' | 'accent';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'light';
 export type ButtonSize = 'md' | 'lg';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -19,20 +18,14 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // Design refresh: soft brand gradient + top highlight, lift on hover, scale(0.98) on press.
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-cta bg-brand-gradient text-on-cta [box-shadow:var(--shadow-sm),var(--shadow-inset-top)] hover:bg-cta-hover hover:[box-shadow:var(--shadow-brand),var(--shadow-inset-top)] active:bg-cta-hover',
+    'bg-primary bg-brand-gradient text-on-primary [box-shadow:var(--shadow-sm),var(--shadow-inset-top)] hover:bg-primary-hover hover:[box-shadow:var(--shadow-brand),var(--shadow-inset-top)] active:bg-primary-hover',
   secondary:
-    'bg-surface text-primary-fg border border-primary/70 hover:bg-primary-light active:bg-primary-light',
+    'bg-surface text-primary border border-primary/70 hover:bg-primary-light active:bg-primary-light',
   /** white button for dark brand surfaces (hero cards) — same look in light and dark mode */
   light: 'bg-white text-primary-800 shadow-md hover:bg-primary-50 active:bg-primary-100',
   ghost: 'bg-transparent text-text-secondary hover:bg-border/60 active:bg-border',
   danger:
     'bg-danger text-on-danger shadow-sm hover:brightness-[0.92] active:brightness-90 hover:shadow-md',
-  /** Marketer reward/progress energy (Stage 2, additive): #58CC02 with dark text only (8.49:1). */
-  energy:
-    'bg-brand-energy text-on-energy shadow-sm hover:brightness-[0.95] active:brightness-90 hover:shadow-md',
-  /** Amber rewards accent (Stage 2, additive): #F59E0B with dark text only (8.26:1). */
-  accent:
-    'bg-accent text-on-accent shadow-sm hover:brightness-[0.95] active:brightness-90 hover:shadow-md',
 };
 
 const SIZES: Record<ButtonSize, string> = {
@@ -69,7 +62,7 @@ export function Button({
       {...rest}
     >
       {loading ? <Spinner className="size-4" /> : icon}
-      {children === null || children === undefined ? null : <span>{children}</span>}
+      <span>{children}</span>
     </button>
   );
 }

@@ -34,7 +34,7 @@ describe('ResidencePicker (محل سکونت)', () => {
     expect(screen.getByLabelText('انتخاب محل سکونت')).toBeInTheDocument();
     expect(screen.queryByLabelText('شهر')).toBeNull();
     await selectProvince('خراسان رضوی');
-    expect(screen.getByLabelText('شهر')).toHaveTextContent('شهر خود را انتخاب کنید');
+    expect(screen.getByLabelText('شهر')).toHaveTextContent('لطفا شهر خود را انتخاب کنید');
   });
 
   it('lists every province of Iran in a scrollable, searchable panel', async () => {
@@ -91,7 +91,7 @@ describe('ResidencePicker (محل سکونت)', () => {
     expect(screen.getByLabelText('شهر')).toHaveTextContent('تهران');
     await selectProvince('یزد');
     expect(screen.getByLabelText('انتخاب محل سکونت')).toHaveTextContent('یزد');
-    expect(screen.getByLabelText('شهر')).toHaveTextContent('شهر خود را انتخاب کنید');
+    expect(screen.getByLabelText('شهر')).toHaveTextContent('لطفا شهر خود را انتخاب کنید');
   });
 
   it('supports keyboard selection (arrows + Enter) and Escape to close', async () => {
@@ -115,7 +115,7 @@ describe('ResidencePicker (محل سکونت)', () => {
       key: 'Escape',
     });
     await waitFor(() => expect(screen.queryByRole('combobox')).toBeNull());
-    expect(screen.getByLabelText('شهر')).toHaveTextContent('شهر خود را انتخاب کنید');
+    expect(screen.getByLabelText('شهر')).toHaveTextContent('لطفا شهر خود را انتخاب کنید');
   });
 
   it('closes the list when tapping outside', async () => {

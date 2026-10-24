@@ -5,30 +5,24 @@ import { Button, Spinner } from '@/components/ui';
 import { homePathFor, useAuth } from '@/lib/auth';
 import { PANEL_LABEL, panelOf } from '@/lib/roles';
 import type { Role } from '@/lib/types';
-import { ManagerAccessPage } from '@/pages/auth/ManagerAccessPage';
 import { StaffLoginPage } from '@/pages/auth/StaffLoginPage';
 
 export function FullPageSpinner() {
   return (
     <div
-      className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-[#FCF8F0] px-6"
+      className="flex min-h-dvh items-center justify-center"
       role="status"
       aria-label="در حال بارگذاری"
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-24 start-1/2 size-80 -translate-x-1/2 rounded-full bg-[#E6F3EA] blur-3xl"
-      />
-      <div className="relative z-10 flex min-w-48 flex-col items-center rounded-[28px] border border-[#E9E1D5] bg-[#FFFDF8] px-8 py-7 shadow-[0_18px_44px_-34px_rgba(22,66,53,0.42)]">
+      <div className="flex flex-col items-center gap-3">
         <img
           src="/brand/mascot.webp"
           alt=""
           width={96}
           height={124}
-          className="h-auto w-24 motion-safe:animate-float"
+          className="h-auto w-24 motion-safe:animate-bounce"
         />
-        <Spinner className="mt-3 size-5 text-primary-fg" />
-        <p className="mt-2 text-sm font-bold text-text-secondary">در حال آماده‌سازی...</p>
+        <Spinner className="size-5 text-primary" />
       </div>
     </div>
   );
@@ -42,8 +36,7 @@ export function RequireAuth({ roles, children }: { roles: Role[]; children: Reac
   if (status === 'anonymous' || !user) {
     // /admin and /manager show their own username + password sign-in at the same URL.
     const panel = panelOf(loc.pathname);
-    if (panel === 'manager') return <ManagerAccessPage />;
-    if (panel === 'admin') return <StaffLoginPage panel={panel} />;
+    if (panel === 'admin' || panel === 'manager') return <StaffLoginPage panel={panel} />;
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   }
   if (!roles.includes(user.role)) {
@@ -53,18 +46,6 @@ export function RequireAuth({ roles, children }: { roles: Role[]; children: Reac
       return <WrongAccount panel={panel} role={user.role} from={loc.pathname} />;
     return <Navigate to={homePathFor(user.role)} replace />;
   }
-  if (
-    user.role === 'manager' &&
-    user.managerProfileRequired &&
-    loc.pathname !== '/manager/complete-profile'
-  )
-    return <Navigate to="/manager/complete-profile" replace />;
-  if (
-    user.role === 'manager' &&
-    !user.managerProfileRequired &&
-    loc.pathname === '/manager/complete-profile'
-  )
-    return <Navigate to="/manager" replace />;
   if (user.role === 'marketer' && !user.onboardedAt && loc.pathname !== '/onboarding')
     return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
@@ -98,7 +79,7 @@ function WrongAccount({
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm rounded-card border border-border bg-surface p-6 text-center shadow-sm">
-        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-card bg-primary-light text-primary-fg">
+        <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-card bg-primary-light text-primary">
           <ShieldAlert className="size-8" aria-hidden />
         </div>
         <h1 className="text-lg font-bold text-text">{PANEL_LABEL[panel]}</h1>

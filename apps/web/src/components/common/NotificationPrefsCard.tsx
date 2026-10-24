@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { BellOff, Lock } from 'lucide-react';
-import { MarketerIcon } from '@/components/brand/MarketerIcon';
 import { Button, Card } from '@/components/ui';
 import { api } from '@/lib/api';
 import { errMsg } from '@/lib/errors';
@@ -36,7 +35,7 @@ type PrefsView = {
   optInOptions: Array<{ key: string; name: string; description: string }>;
 };
 
-export function NotificationPrefsCard({ marketerIcons = false }: { marketerIcons?: boolean }) {
+export function NotificationPrefsCard() {
   const [view, setView] = useState<PrefsView | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -114,17 +113,11 @@ export function NotificationPrefsCard({ marketerIcons = false }: { marketerIcons
     );
   }
 
-  const headingIcon = marketerIcons ? (
-    <MarketerIcon name="notification" className="size-6" />
-  ) : (
-    <BellOff className="size-5 text-primary-fg" aria-hidden />
-  );
-
   if (state === 'error') {
     return (
       <Card className="flex flex-col gap-2" aria-labelledby="notif-prefs-heading">
         <h2 id="notif-prefs-heading" className="flex items-center gap-2 text-base font-bold">
-          {headingIcon}
+          <BellOff className="size-5 text-primary" aria-hidden />
           تنظیمات اعلان
         </h2>
         <p role="alert" className="text-sm text-danger-fg">
@@ -145,7 +138,7 @@ export function NotificationPrefsCard({ marketerIcons = false }: { marketerIcons
     >
       <div>
         <h2 id="notif-prefs-heading" className="flex items-center gap-2 text-base font-bold">
-          {headingIcon}
+          <BellOff className="size-5 text-primary" aria-hidden />
           تنظیمات اعلان
         </h2>
         <p className="text-xs text-text-secondary">

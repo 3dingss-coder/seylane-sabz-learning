@@ -15,7 +15,7 @@ export interface KpiCardProps {
 }
 
 const TONES = {
-  primary: 'bg-primary-light text-primary-fg',
+  primary: 'bg-primary-light text-primary',
   warning: 'bg-warning-light text-warning-fg',
   danger: 'bg-danger-light text-danger-fg',
   info: 'bg-info-light text-info-fg',

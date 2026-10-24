@@ -24,7 +24,7 @@ const loggedIn = () => {
 };
 
 describe('M1 login → M3 home', () => {
-  it('logs in with phone, stores refresh token and shows «ادامه یادگیری»', async () => {
+  it('logs in with phone, stores refresh token and shows «کار بعدی»', async () => {
     const { calls } = mockApi({
       'POST /v1/auth/phone-login': () => ({
         data: { user: marketer, idToken: 't1', refreshToken: 'r1', expiresIn: 3600 },
@@ -37,7 +37,7 @@ describe('M1 login → M3 home', () => {
     fireEvent.change(await screen.findByLabelText('شماره موبایل یا کد ملی'), {
       target: { value: '۰۹۱۲۰۰۰۰۰۰۴' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'ورود و ادامه' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
     expect(await screen.findByTestId('next-item')).toHaveTextContent('معرفی کلی محصول فورمی');
     expect(screen.getByRole('button', { name: /ادامه/ })).toBeInTheDocument();
     // Persian digits are normalised before sending
@@ -66,32 +66,26 @@ describe('M1 login → M3 home', () => {
     fireEvent.change(await screen.findByLabelText('شماره موبایل یا کد ملی'), {
       target: { value: '09120000004' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'ورود و ادامه' }));
-
-    // Wizard step 1: name fields; the identifier is only asked for on the last step.
-    expect(await screen.findByLabelText('نام')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
+    expect(await screen.findByRole('button', { name: 'ثبت‌نام و ورود' })).toBeInTheDocument();
     expect(screen.queryByLabelText('شماره موبایل')).toBeNull();
-    fireEvent.change(screen.getByLabelText('نام'), { target: { value: 'نگار' } });
-    fireEvent.change(screen.getByLabelText('نام خانوادگی'), { target: { value: 'محمدی' } });
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
+    expect(screen.getByLabelText('نام و نام خانوادگی')).toBeInTheDocument();
+    expect(screen.getByLabelText('انتخاب محل فعالیت شما')).toBeInTheDocument();
 
     // The identifier appears after city selection and is kept when it matches the selected province.
-    fireEvent.click(await screen.findByLabelText('انتخاب محل فعالیت شما'));
+    fireEvent.click(screen.getByLabelText('انتخاب محل فعالیت شما'));
     const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
       target: { value: 'خراسان رضوی' },
     });
     fireEvent.click(within(provinces).getByRole('option', { name: 'خراسان رضوی' }));
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     fireEvent.click(screen.getByLabelText('شهر'));
     const cities = await screen.findByRole('listbox', { name: 'شهرهای استان خراسان رضوی' });
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی شهر' }), {
       target: { value: 'مشهد' },
     });
     fireEvent.click(within(cities).getByRole('option', { name: 'مشهد' }));
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     expect(screen.getByLabelText('شماره موبایل')).toHaveValue('09120000004');
-    expect(screen.getByRole('button', { name: 'ثبت‌نام و ورود' })).toBeInTheDocument();
   });
 
   it('signs up with name, phone and محل فعالیت (province → city) in one step', async () => {
@@ -104,21 +98,20 @@ describe('M1 login → M3 home', () => {
       'GET /v1/me/mentor/nudges': () => ({ data: [] }),
     });
     renderApp('/register');
-    fireEvent.change(await screen.findByLabelText('نام'), { target: { value: 'نگار' } });
-    fireEvent.change(screen.getByLabelText('نام خانوادگی'), { target: { value: 'محمدی' } });
+    fireEvent.change(await screen.findByLabelText('نام و نام خانوادگی'), {
+      target: { value: 'نگار محمدی' },
+    });
 
     // Residence comes before the identity field: province first, then its city.
     expect(screen.queryByLabelText('شماره موبایل')).toBeNull();
     expect(screen.queryByLabelText('شهر')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
-    fireEvent.click(await screen.findByLabelText('انتخاب محل فعالیت شما'));
+    fireEvent.click(screen.getByLabelText('انتخاب محل فعالیت شما'));
     const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     await waitFor(() => expect(within(provinces).getAllByRole('option')).toHaveLength(31));
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
       target: { value: 'خراسان رضوی' },
     });
     fireEvent.click(within(provinces).getByRole('option', { name: 'خراسان رضوی' }));
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     expect(screen.getByLabelText('شهر')).toBeInTheDocument();
 
     // City: only خراسان رضوی cities are offered.
@@ -128,7 +121,6 @@ describe('M1 login → M3 home', () => {
       target: { value: 'سبزوار' },
     });
     fireEvent.click(within(cities).getByRole('option', { name: 'سبزوار' }));
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     fireEvent.change(screen.getByLabelText('شماره موبایل'), {
       target: { value: '۰۹۱۲۰۰۰۰۱۱۱' },
     });
@@ -158,28 +150,26 @@ describe('M1 login → M3 home', () => {
       'GET /v1/me/mentor/nudges': () => ({ data: [] }),
     });
     renderApp('/register');
-    fireEvent.change(await screen.findByLabelText('نام'), { target: { value: 'نگار' } });
-    fireEvent.change(screen.getByLabelText('نام خانوادگی'), { target: { value: 'محمدی' } });
+    fireEvent.change(await screen.findByLabelText('نام و نام خانوادگی'), {
+      target: { value: 'نگار محمدی' },
+    });
     expect(screen.queryByLabelText('کد ملی')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
-    fireEvent.click(await screen.findByLabelText('انتخاب محل فعالیت شما'));
+    fireEvent.click(screen.getByLabelText('انتخاب محل فعالیت شما'));
     const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
       target: { value: 'یزد' },
     });
     fireEvent.click(within(provinces).getByRole('option', { name: 'یزد' }));
     expect(screen.queryByLabelText('کد ملی')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     fireEvent.click(screen.getByLabelText('شهر'));
     const cities = await screen.findByRole('listbox', { name: 'شهرهای استان یزد' });
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی شهر' }), {
       target: { value: 'یزد' },
     });
     fireEvent.click(within(cities).getByRole('option', { name: 'یزد' }));
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
 
-    const codeField = await screen.findByLabelText('کد ملی');
+    const codeField = screen.getByLabelText('کد ملی');
     fireEvent.change(codeField, { target: { value: '۱۲۳۴۵۶۷۸۹۱' } });
     fireEvent.click(screen.getByRole('button', { name: 'ثبت‌نام و ورود' }));
     expect(await screen.findByTestId('next-item')).toBeInTheDocument();
@@ -219,7 +209,7 @@ describe('M1 login → M3 home', () => {
     fireEvent.change(await screen.findByLabelText('شماره موبایل یا کد ملی'), {
       target: { value: '۱۲۳۴۵۶۷۸۹۱' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'ورود و ادامه' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
     expect(await screen.findByTestId('next-item')).toBeInTheDocument();
     expect(calls.find((call) => call.key === 'POST /v1/auth/national-code-login')?.body).toEqual({
       nationalCode: '1234567891',
@@ -241,38 +231,32 @@ describe('M1 login → M3 home', () => {
     fireEvent.change(await screen.findByLabelText('شماره موبایل یا کد ملی'), {
       target: { value: '۱۲۳۴۵۶۷۸۹۱' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'ورود و ادامه' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ورود' }));
+    expect(await screen.findByRole('button', { name: 'ثبت‌نام و ورود' })).toBeInTheDocument();
     expect(await screen.findByText(/این کد ملی هنوز ثبت‌نام نشده است/)).toBeInTheDocument();
 
-    fireEvent.change(await screen.findByLabelText('نام'), { target: { value: 'نگار' } });
-    fireEvent.change(screen.getByLabelText('نام خانوادگی'), { target: { value: 'محمدی' } });
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
-    fireEvent.click(await screen.findByLabelText('انتخاب محل فعالیت شما'));
+    fireEvent.click(screen.getByLabelText('انتخاب محل فعالیت شما'));
     const provinces = await screen.findByRole('listbox', { name: 'استان‌های ایران' });
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی استان' }), {
       target: { value: 'یزد' },
     });
     fireEvent.click(within(provinces).getByRole('option', { name: 'یزد' }));
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
     fireEvent.click(screen.getByLabelText('شهر'));
     const cities = await screen.findByRole('listbox', { name: 'شهرهای استان یزد' });
     fireEvent.change(screen.getByRole('combobox', { name: 'جستجوی شهر' }), {
       target: { value: 'یزد' },
     });
     fireEvent.click(within(cities).getByRole('option', { name: 'یزد' }));
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
-    expect(await screen.findByLabelText('کد ملی')).toHaveValue('۱۲۳۴۵۶۷۸۹۱');
-    expect(screen.getByRole('button', { name: 'ثبت‌نام و ورود' })).toBeInTheDocument();
+    expect(screen.getByLabelText('کد ملی')).toHaveValue('۱۲۳۴۵۶۷۸۹۱');
   });
 
   it('will not sign up without a residence', async () => {
     const { calls } = mockApi({});
     renderApp('/register');
-    fireEvent.change(await screen.findByLabelText('نام'), { target: { value: 'نگار' } });
-    fireEvent.change(screen.getByLabelText('نام خانوادگی'), { target: { value: 'محمدی' } });
-    fireEvent.click(screen.getByRole('button', { name: 'ادامه' }));
-    // The activity-location step keeps the wizard in place and explains what is missing.
-    fireEvent.click(await screen.findByRole('button', { name: 'ادامه' }));
+    fireEvent.change(await screen.findByLabelText('نام و نام خانوادگی'), {
+      target: { value: 'نگار محمدی' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'ثبت‌نام و ورود' }));
     expect(await screen.findByText('استان محل فعالیت خود را انتخاب کنید.')).toBeInTheDocument();
     expect(calls.some((c) => c.key === 'POST /v1/auth/phone-register')).toBe(false);
   });
@@ -405,7 +389,7 @@ describe('M7/M8 quiz', () => {
         };
       },
     });
-    const { container } = renderApp('/quiz/seed-pkg-formi-s1');
+    renderApp('/quiz/seed-pkg-formi-s1');
     fireEvent.click(await screen.findByTestId('quiz-start'));
     expect(await screen.findByText('این قسمت درباره کدام محصول است؟')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /بعدی/ })).toBeDisabled();
@@ -415,8 +399,6 @@ describe('M7/M8 quiz', () => {
     fireEvent.click(screen.getByTestId('quiz-submit'));
     fireEvent.click(await screen.findByTestId('quiz-confirm'));
     expect(await screen.findByTestId('quiz-result')).toHaveTextContent('قبول شدی');
-    expect(container.querySelector('img[src="/brand/m/icons/quiz-passed-3d.png"]')).not.toBeNull();
-    expect(container.querySelector('img[src="/brand/m/icons/quiz-review-3d.png"]')).not.toBeNull();
     expect(screen.getByText('+۲۰ امتیاز')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'بازگشت به بسته' })).toBeInTheDocument();
     // Wait for the invalidation refetch, then make sure the result is still shown.
@@ -428,42 +410,6 @@ describe('M7/M8 quiz', () => {
     expect(screen.getByTestId('quiz-result')).toBeInTheDocument();
     const submit = calls.find((c) => c.key === 'POST /v1/me/attempts/at1/submit');
     expect(submit?.body).toEqual({ answers: { q1: 'a', q2: 'a' } });
-  });
-
-  it('shows the dedicated image while a manager retake request is pending', async () => {
-    mockApi({
-      ...loggedIn(),
-      'GET /v1/me/sections/seed-pkg-formi-s1': () => ({ data: sectionDetail }),
-      'GET /v1/me/quizzes/seed-pkg-formi-s1-quiz': () => ({
-        data: {
-          ...quiz,
-          attemptInfo: {
-            ...quiz.attemptInfo,
-            pendingRetake: { id: 'retake-1', status: 'pending' },
-          },
-        },
-      }),
-    });
-    const { container } = renderApp('/quiz/seed-pkg-formi-s1');
-    expect(await screen.findByText('در انتظار تأیید مدیر')).toBeInTheDocument();
-    expect(
-      container.querySelector('img[src="/brand/m/icons/retake-pending-3d.png"]'),
-    ).not.toBeNull();
-  });
-
-  it('shows a neutral quiz illustration when the section has no configured questions', async () => {
-    mockApi({
-      ...loggedIn(),
-      'GET /v1/me/sections/seed-pkg-formi-s1': () => ({ data: sectionDetail }),
-      'GET /v1/me/quizzes/seed-pkg-formi-s1-quiz': () => ({
-        data: { ...quiz, quiz: { ...quiz.quiz, questionCount: 0 }, questions: [] },
-      }),
-    });
-    const { container } = renderApp('/quiz/seed-pkg-formi-s1');
-    expect(await screen.findByText('آزمونی برای این قسمت تعریف نشده است')).toBeInTheDocument();
-    expect(
-      container.querySelector('img[src="/brand/m/icons/quiz-unavailable-3d.png"]'),
-    ).not.toBeNull();
   });
 
   it('opens the quiz even before the media is completed', async () => {
@@ -484,7 +430,7 @@ describe('M7/M8 quiz', () => {
 });
 
 describe('F9 home error state — last-known state from local cache', () => {
-  it('cold start without network keeps the session and shows the cached «ادامه یادگیری»', async () => {
+  it('cold start without network keeps the session and shows the cached «کار بعدی»', async () => {
     mockApi({ ...loggedIn(), 'GET /v1/me/home': () => ({ data: home }) });
     const first = renderApp('/');
     expect(await screen.findByTestId('next-item')).toHaveTextContent('معرفی کلی محصول فورمی');

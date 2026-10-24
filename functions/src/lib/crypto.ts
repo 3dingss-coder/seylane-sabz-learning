@@ -157,11 +157,6 @@ export function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-export function base64UrlToBytes(b64url: string): Uint8Array {
-  const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
-  return base64ToBytes(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
-}
-
 export function bytesToBase64Url(bytes: Uint8Array): string {
   return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -178,48 +173,6 @@ export function base64UrlToString(b64url: string): string {
 
 export function hmacSha256Base64Url(secret: string, message: string): string {
   return bytesToBase64Url(hmacSha256Bytes(secret, message));
-}
-
-/**
- * Encrypt small sensitive values at rest with AES-GCM. The key is domain-separated from the app's
- * signing key; the nonce is random per value. Stored ciphertexts carry a version prefix so the
- * format can evolve without guessing. This is used for the Manager application national code,
- * which Admin must be able to review but should not be stored as plaintext.
- */
-export async function encryptPrivateText(value: string, secret: string): Promise<string> {
-  const keyBytes = await globalThis.crypto.subtle.digest(
-    'SHA-256',
-    encoder.encode(`seylane:private-data:v1:${secret}`),
-  );
-  const key = await globalThis.crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, [
-    'encrypt',
-  ]);
-  const iv = randomBytes(12);
-  const encrypted = await globalThis.crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    encoder.encode(value),
-  );
-  return `v1.${bytesToBase64Url(iv)}.${bytesToBase64Url(new Uint8Array(encrypted))}`;
-}
-
-export async function decryptPrivateText(ciphertext: string, secret: string): Promise<string> {
-  const [version, encodedIv, encodedData, extra] = ciphertext.split('.');
-  if (version !== 'v1' || !encodedIv || !encodedData || extra !== undefined)
-    throw new Error('Unsupported private-data ciphertext');
-  const keyBytes = await globalThis.crypto.subtle.digest(
-    'SHA-256',
-    encoder.encode(`seylane:private-data:v1:${secret}`),
-  );
-  const key = await globalThis.crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, [
-    'decrypt',
-  ]);
-  const plain = await globalThis.crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64UrlToBytes(encodedIv) },
-    key,
-    base64UrlToBytes(encodedData),
-  );
-  return decoder.decode(plain);
 }
 
 export function randomBytes(length: number): Uint8Array {

@@ -84,7 +84,6 @@ export function PushCampaignEditorPage() {
               <>
                 {/* A campaign that already started is read-only: no form, no template picker. */}
                 <PageHeader
-                  variant="admin"
                   title={d.campaign.name}
                   back="/admin/push-campaigns"
                   subtitle={<CampaignStatusBadge status={d.campaign.status} />}
@@ -358,7 +357,6 @@ function Editor({
   return (
     <>
       <PageHeader
-        variant="admin"
         title={campaign ? campaign.name : 'کمپین جدید اعلان'}
         back="/admin/push-campaigns"
         subtitle={campaign ? <CampaignStatusBadge status={campaign.status} /> : undefined}

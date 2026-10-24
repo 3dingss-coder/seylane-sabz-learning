@@ -319,7 +319,6 @@ export function CompletionReport({
           rows={accounts}
           rowKey={(a) => a.id}
           onRowClick={(a) => nav(memberLink(a.id))}
-          rowActionLabel={(a) => `نمایش گزارش تکمیل ${a.first.userName}`}
           columns={[
             {
               key: 'u',

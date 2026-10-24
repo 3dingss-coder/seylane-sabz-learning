@@ -83,7 +83,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   t.action?.onClick();
                   dismiss(t.id);
                 }}
-                className="min-h-12 rounded-input px-3 text-sm font-bold text-primary-fg hover:bg-primary-light pressable"
+                className="min-h-12 rounded-input px-3 text-sm font-bold text-primary hover:bg-primary-light pressable"
               >
                 {t.action.label}
               </button>

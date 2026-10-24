@@ -4,11 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AudioLines,
   CheckCircle2,
-  CircleDashed,
   Film,
   Library,
   RotateCcw,
-  Search,
   Trash2,
   UploadCloud,
   X,
@@ -22,7 +20,6 @@ import {
   Card,
   EmptyState,
   Input,
-  KpiCard,
   Modal,
   ProgressBar,
   Skeleton,
@@ -99,175 +96,84 @@ export function MediaLibraryPage() {
     refetchInterval: active ? 15_000 : false,
   });
   const brands = useBrands();
-  const visibleItems = list.data ?? [];
-  const activeUploads = jobs.filter((job) =>
-    ['queued', 'preparing', 'uploading', 'finalizing'].includes(job.stage),
-  ).length;
-  const videoCount = visibleItems.filter((item) => item.kind === 'video').length;
-  const audioCount = visibleItems.filter((item) => item.kind === 'audio').length;
-  const unassignedCount = visibleItems.filter((item) => !item.brandId && !item.productId).length;
 
   return (
     <div>
       <PageHeader
-        variant="admin"
         title="کتابخانه رسانه"
         subtitle="ویدئو و صوت را یک‌بار بارگذاری کنید، به برند و محصول اختصاص دهید و در آموزش‌ها استفاده کنید."
       />
-      <section
-        aria-label="خلاصهٔ کتابخانه رسانه"
-        className="stagger mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-5"
-      >
-        <KpiCard
-          title="فایل‌های این نما"
-          value={list.data ? toPersianDigits(visibleItems.length) : '—'}
-          subtitle="مطابق فیلترهای جاری"
-          icon={Library}
-        />
-        <KpiCard
-          title="ویدئوها"
-          value={list.data ? toPersianDigits(videoCount) : '—'}
-          icon={Film}
-          tone="info"
-        />
-        <KpiCard
-          title="فایل‌های صوتی"
-          value={list.data ? toPersianDigits(audioCount) : '—'}
-          icon={AudioLines}
-          tone="primary"
-        />
-        <KpiCard
-          title="بدون تخصیص مستقیم"
-          value={list.data ? toPersianDigits(unassignedCount) : '—'}
-          subtitle="برند و محصول تعیین نشده"
-          icon={CircleDashed}
-          tone="warning"
-        />
-        <KpiCard
-          title="بارگذاری فعال"
-          value={toPersianDigits(activeUploads)}
-          subtitle="در صف یا در حال آماده‌سازی"
-          icon={UploadCloud}
-          tone={activeUploads ? 'info' : 'primary'}
-        />
-      </section>
       <UploadPanel />
       <JobList jobs={jobs} />
 
-      <div
-        role="region"
-        aria-label="مرور کتابخانه رسانه"
-        className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]"
-        dir="rtl"
-      >
-        <section className="order-2 min-w-0 lg:order-1" aria-labelledby="media-results-heading">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <p className="text-xs font-bold text-primary-fg">فایل‌های آمادهٔ استفاده</p>
-              <h2 id="media-results-heading" className="mt-1 font-bold">
-                محتوای کتابخانه
-              </h2>
-              <p className="mt-1 text-xs text-text-secondary">
-                {list.data
-                  ? `${toPersianDigits(visibleItems.length)} فایل در نتایج فیلترشده`
-                  : 'در حال دریافت فایل‌ها…'}
-              </p>
-            </div>
-            {onlyUnassigned && (
-              <span className="rounded-full bg-warning-light px-3 py-1 text-xs font-bold text-warning-fg">
-                فقط موارد تخصیص‌نیافته
-              </span>
-            )}
-          </div>
-          <QueryState
-            query={list}
-            loading={<Skeleton className="h-40 w-full" />}
-            isEmpty={(d) => d.length === 0}
-            empty={
-              <EmptyState
-                icon={<Library className="size-10" aria-hidden />}
-                title="فایلی با این مشخصات پیدا نشد"
-                description="فیلترها را تغییر دهید یا فایل ویدئویی یا صوتی تازه‌ای بارگذاری کنید."
-              />
-            }
-          >
-            {(items) => (
-              <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {items.map((it) => (
-                  <li key={it.id}>
-                    <MediaCard item={it} onOpen={() => setSelected(it)} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </QueryState>
-        </section>
-
-        <aside className="order-1 lg:order-2" aria-label="فیلترهای کتابخانه رسانه">
-          <Card className="flex flex-col gap-4 lg:sticky lg:top-4">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-bold text-primary-fg">پیدا کردن فایل</p>
-                <h2 className="mt-1 font-bold">فیلترها</h2>
-              </div>
-              <Button
-                variant="ghost"
-                className="px-2 text-xs"
-                aria-label="پاک کردن فیلترها"
-                disabled={kind === 'all' && !brandId && !onlyUnassigned && !search}
-                icon={<RotateCcw className="size-4" aria-hidden />}
-                onClick={() => {
-                  setKind('all');
-                  setBrandId('');
-                  setOnlyUnassigned(false);
-                  setSearch('');
-                }}
-              >
-                پاک کردن
-              </Button>
-            </div>
-            <Input
-              label="جست‌وجو در نام فایل"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="مثلاً معرفی محصول…"
-              icon={<Search className="size-4" aria-hidden />}
+      <section aria-label="فایل‌های کتابخانه" className="mt-6">
+        <div className="mb-3 flex flex-wrap items-end gap-3">
+          <div className="min-w-[14rem] flex-1">
+            <Tabs
+              label="نوع رسانه"
+              value={kind}
+              onChange={setKind}
+              items={[
+                { value: 'all', label: 'همه' },
+                { value: 'video', label: 'ویدئو' },
+                { value: 'audio', label: 'صوت' },
+              ]}
             />
-            <div className="flex flex-col gap-2">
-              <p className="text-sm font-bold">نوع رسانه</p>
-              <Tabs
-                label="نوع رسانه"
-                value={kind}
-                onChange={setKind}
-                items={[
-                  { value: 'all', label: 'همه' },
-                  { value: 'video', label: 'ویدئو' },
-                  { value: 'audio', label: 'صوت' },
-                ]}
-              />
-            </div>
+          </div>
+          <div className="w-full sm:w-52">
             <Select label="برند" value={brandId} onChange={(e) => setBrandId(e.target.value)}>
               <option value="">همه برندها</option>
               {(brands.data ?? [])
-                .filter((brand) => !brand.archived)
-                .map((brand) => (
-                  <option key={brand.id} value={brand.id}>
-                    {brand.name}
+                .filter((b) => !b.archived)
+                .map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
                   </option>
                 ))}
             </Select>
-            <label className="flex min-h-12 items-center gap-2 border-t border-border pt-3 text-sm font-medium text-text">
-              <input
-                type="checkbox"
-                checked={onlyUnassigned}
-                onChange={(event) => setOnlyUnassigned(event.target.checked)}
-                className="size-5 accent-primary"
-              />
-              فقط موارد تخصیص‌نیافته
-            </label>
-          </Card>
-        </aside>
-      </div>
+          </div>
+          <div className="w-full sm:w-52">
+            <Input
+              label="جستجو"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="نام فایل…"
+            />
+          </div>
+          <label className="mb-1.5 flex min-h-12 items-center gap-2 text-sm text-text">
+            <input
+              type="checkbox"
+              checked={onlyUnassigned}
+              onChange={(e) => setOnlyUnassigned(e.target.checked)}
+              className="size-5"
+            />
+            بدون برند
+          </label>
+        </div>
+
+        <QueryState
+          query={list}
+          loading={<Skeleton className="h-40 w-full" />}
+          isEmpty={(d) => d.length === 0}
+          empty={
+            <EmptyState
+              icon={<Library className="size-10" aria-hidden />}
+              title="هنوز فایلی در کتابخانه نیست"
+              description="فایل‌های ویدئویی یا صوتی را در کادر بالا رها کنید."
+            />
+          }
+        >
+          {(items) => (
+            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {items.map((it) => (
+                <li key={it.id}>
+                  <MediaCard item={it} onOpen={() => setSelected(it)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </QueryState>
+      </section>
 
       {selected && (
         <ItemModal key={selected.id} item={selected} onClose={() => setSelected(null)} />
@@ -310,7 +216,7 @@ function UploadPanel() {
           over ? 'border-primary bg-primary-light' : 'border-border'
         }`}
       >
-        <UploadCloud className="size-10 text-primary-fg" aria-hidden />
+        <UploadCloud className="size-10 text-primary" aria-hidden />
         <p className="text-sm text-text">فایل‌های ویدئویی یا صوتی را اینجا رها کنید</p>
         <p className="text-xs text-text-secondary">
           حجم فایل مهم نیست؛ سیستم خودش آن را برای پخش روان آماده می‌کند. تا پایان کار این صفحه را
@@ -445,7 +351,7 @@ function JobList({ jobs }: { jobs: Job[] }) {
               </div>
             )}
             {j.stage === 'done' && (
-              <p className="flex items-center gap-1 text-xs font-medium text-primary-fg">
+              <p className="flex items-center gap-1 text-xs font-medium text-primary">
                 <CheckCircle2 className="size-4" aria-hidden /> به کتابخانه اضافه شد
               </p>
             )}
@@ -472,7 +378,7 @@ function MediaCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) 
       className="flex w-full flex-col gap-2 rounded-card border border-border bg-surface p-4 text-start shadow-sm transition-colors hover:border-primary focus-visible:outline-2"
     >
       <div className="flex items-start gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-card bg-primary-light text-primary-fg">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-card bg-primary-light text-primary">
           <Icon className="size-5" aria-hidden />
         </span>
         <div className="min-w-0">
@@ -487,7 +393,7 @@ function MediaCard({ item, onOpen }: { item: LibraryItem; onOpen: () => void }) 
       </div>
       <div className="flex flex-wrap gap-1.5 text-xs">
         {item.brandName ? (
-          <span className="rounded-full bg-primary-light px-2 py-0.5 text-primary-fg">
+          <span className="rounded-full bg-primary-light px-2 py-0.5 text-primary">
             {item.brandName}
             {item.productName ? ` › ${item.productName}` : ''}
           </span>
@@ -596,7 +502,7 @@ function AddToPackage({
         </p>
         <Link
           to={`/admin/packages/${added.packageId}`}
-          className="mt-2 inline-block font-bold text-primary-fg underline"
+          className="mt-2 inline-block font-bold text-primary underline"
         >
           رفتن به آموزش
         </Link>

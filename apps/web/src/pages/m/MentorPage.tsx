@@ -1,5 +1,4 @@
-import { PhoneCall } from 'lucide-react';
-import { Mascot } from '@/components/brand/Mascot';
+import { Bot, PhoneCall } from 'lucide-react';
 import { MentorChat } from '@/components/learning/MentorChat';
 
 /**
@@ -12,21 +11,20 @@ import { MentorChat } from '@/components/learning/MentorChat';
  */
 export function MentorPage() {
   return (
-    <div className="-mx-4 -my-4 min-h-[calc(100dvh-4rem)] bg-marketer-canvas px-4 py-5 sm:py-6">
-      <div className="mx-auto flex h-[calc(100dvh-10rem)] w-full max-w-[760px] flex-col md:h-[calc(100dvh-8rem)]">
-        <div className="mb-3 flex items-center gap-3 rounded-card border border-marketer-border bg-marketer-surface px-4 py-3 shadow-sm">
-          {/* mentor state (handoff: mascot may support mentor moments) — small, supportive */}
-          <Mascot mood="welcome" className="h-11 w-auto shrink-0" />
-          <div className="min-w-0">
-            <h1 className="text-lg font-bold leading-6 text-marketer-ink">منتور</h1>
-            <p className="flex items-center gap-1 text-xs text-marketer-muted">
-              <PhoneCall className="size-3" aria-hidden />
-              درباره‌ی هر محصول، برند یا آزمونی بپرس
-            </p>
-          </div>
+    <div className="flex h-[calc(100dvh-12rem)] flex-col md:h-[calc(100dvh-8rem)]">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="flex size-9 items-center justify-center rounded-full bg-primary-light">
+          <Bot className="size-5 text-primary" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold leading-6">منتور</h1>
+          <p className="flex items-center gap-1 text-xs text-text-secondary">
+            <PhoneCall className="size-3" aria-hidden />
+            درباره‌ی هر محصول، برند یا آزمونی بپرس
+          </p>
         </div>
-        <MentorChat packageId={null} className="min-h-0 flex-1" />
       </div>
+      <MentorChat packageId={null} className="min-h-0 flex-1" />
     </div>
   );
 }

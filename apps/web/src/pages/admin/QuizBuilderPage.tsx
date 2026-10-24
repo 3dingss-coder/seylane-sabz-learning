@@ -41,9 +41,6 @@ function Builder({ d }: { d: AdminQuiz }) {
   });
   const [edit, setEdit] = useState<AdminQuestion | 'new' | null>(null);
   const [del, setDel] = useState<AdminQuestion | null>(null);
-  const [selectedQuestionId, setSelectedQuestionId] = useState(d.questions[0]?.id ?? '');
-  const selectedQuestion =
-    d.questions.find((question) => question.id === selectedQuestionId) ?? d.questions[0] ?? null;
   const [passScore, setPassScore] = useState(qz.passScore === null ? '' : String(qz.passScore));
   const [maxAttempts, setMaxAttempts] = useState(
     qz.maxAttempts === null ? '' : String(qz.maxAttempts),
@@ -85,7 +82,6 @@ function Builder({ d }: { d: AdminQuiz }) {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        variant="admin"
         title="سازنده آزمون"
         back={`/admin/packages/${qz.packageId}`}
         subtitle={`نسخه ${toPersianDigits(qz.version)} • ${toPersianDigits(d.questions.length)} سؤال فعال`}
@@ -105,15 +101,99 @@ function Builder({ d }: { d: AdminQuiz }) {
           </Button>
         </div>
       )}
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[19rem_minmax(0,1fr)_19rem]" dir="rtl">
-        <aside className="order-3 xl:order-1" aria-labelledby="quiz-settings-heading">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <section className="flex flex-col gap-2 lg:flex-1">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold">سؤال‌ها</h2>
+            <Button
+              variant="secondary"
+              icon={<Plus className="size-4" aria-hidden />}
+              onClick={() => setEdit('new')}
+            >
+              سؤال جدید
+            </Button>
+          </div>
+          {d.questions.length < 3 && (
+            <p className="text-sm font-bold text-danger">
+              برای انتشار، هر آزمون حداقل ۳ سؤال لازم دارد.
+            </p>
+          )}
+          {d.questions.length === 0 ? (
+            <EmptyState
+              title="هنوز سؤالی ندارد"
+              actionText="افزودن سؤال"
+              onAction={() => setEdit('new')}
+            />
+          ) : (
+            <ol className="flex flex-col gap-2">
+              {d.questions.map((x, i) => (
+                <li key={x.id}>
+                  <Card className="flex flex-col gap-2">
+                    <p className="font-bold leading-7">
+                      {toPersianDigits(i + 1)}. {x.stem}
+                    </p>
+                    <ul className="grid gap-1 sm:grid-cols-2">
+                      {x.options.map((o) => (
+                        <li
+                          key={o.key}
+                          className={cn(
+                            'flex items-center gap-2 rounded-input px-2 py-1 text-sm',
+                            o.key === x.answerKey
+                              ? 'bg-primary-light font-bold text-primary'
+                              : 'text-text-secondary',
+                          )}
+                        >
+                          {o.key === x.answerKey && (
+                            <CheckCircle2 className="size-4 shrink-0" aria-label="پاسخ صحیح" />
+                          )}
+                          {LABEL[o.key as keyof typeof LABEL] ?? o.key}) {o.text}
+                        </li>
+                      ))}
+                    </ul>
+                    {x.explanation && (
+                      <p className="text-xs text-text-secondary">توضیح: {x.explanation}</p>
+                    )}
+                    <div className="flex gap-1 self-end">
+                      <Button
+                        variant="ghost"
+                        className="px-2"
+                        aria-label="بالا"
+                        disabled={i === 0}
+                        onClick={() => move(i, -1)}
+                        icon={<ArrowUp className="size-4" />}
+                      />
+                      <Button
+                        variant="ghost"
+                        className="px-2"
+                        aria-label="پایین"
+                        disabled={i === d.questions.length - 1}
+                        onClick={() => move(i, 1)}
+                        icon={<ArrowDown className="size-4" />}
+                      />
+                      <Button
+                        variant="ghost"
+                        className="px-2"
+                        aria-label="ویرایش سؤال"
+                        onClick={() => setEdit(x)}
+                        icon={<Pencil className="size-4" />}
+                      />
+                      <Button
+                        variant="ghost"
+                        className="px-2 text-danger"
+                        aria-label="حذف سؤال"
+                        onClick={() => setDel(x)}
+                        icon={<Trash2 className="size-4" />}
+                      />
+                    </div>
+                  </Card>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+        <aside className="lg:w-80">
           <Card className="flex flex-col gap-3">
-            <div>
-              <p className="text-xs font-bold text-primary-fg">تنظیمات انتشار</p>
-              <h2 id="quiz-settings-heading" className="mt-1 font-bold">
-                تنظیمات آزمون
-              </h2>
-            </div>
+            <h2 className="font-bold">تنظیمات آزمون</h2>
             <Input
               label="نمره قبولی (٪)"
               type="number"
@@ -151,181 +231,6 @@ function Builder({ d }: { d: AdminQuiz }) {
             </p>
           </Card>
         </aside>
-
-        <section className="order-1 xl:order-2" aria-labelledby="question-preview-heading">
-          <Card className="flex min-h-full flex-col gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-              <div>
-                <p className="text-xs font-bold text-primary-fg">پیش‌نمایش آزمون</p>
-                <h2 id="question-preview-heading" className="mt-1 font-bold">
-                  {selectedQuestion
-                    ? `سؤال ${toPersianDigits(selectedQuestion.order)}`
-                    : 'سؤال انتخاب نشده'}
-                </h2>
-              </div>
-              {selectedQuestion && (
-                <Button
-                  variant="secondary"
-                  icon={<Pencil className="size-4" aria-hidden />}
-                  onClick={() => setEdit(selectedQuestion)}
-                >
-                  ویرایش سؤال انتخاب‌شده
-                </Button>
-              )}
-            </div>
-            {selectedQuestion ? (
-              <article className="flex flex-1 flex-col gap-4">
-                <p className="text-lg font-extrabold leading-8 text-text">
-                  {selectedQuestion.stem}
-                </p>
-                <ul className="grid gap-2 sm:grid-cols-2">
-                  {selectedQuestion.options.map((option) => (
-                    <li
-                      key={option.key}
-                      className={cn(
-                        'flex min-h-12 items-center gap-2 rounded-xl border px-3 py-2 text-sm',
-                        option.key === selectedQuestion.answerKey
-                          ? 'border-success/30 bg-success-light font-bold text-success-fg'
-                          : 'border-border bg-surface-2 text-text-secondary',
-                      )}
-                    >
-                      {option.key === selectedQuestion.answerKey && (
-                        <CheckCircle2 className="size-4 shrink-0" aria-label="پاسخ صحیح" />
-                      )}
-                      <span>
-                        {LABEL[option.key as keyof typeof LABEL] ?? option.key}) {option.text}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                {selectedQuestion.explanation && (
-                  <div className="rounded-xl border border-info/20 bg-info-light p-3">
-                    <p className="text-xs font-bold text-info-fg">توضیح پاسخ</p>
-                    <p className="mt-1 text-sm leading-6 text-text-secondary">
-                      {selectedQuestion.explanation}
-                    </p>
-                  </div>
-                )}
-                <p className="mt-auto text-xs text-text-secondary">
-                  پاسخ صحیح فقط برای مدیر نمایش داده می‌شود و به بازاریاب ارسال نمی‌شود.
-                </p>
-              </article>
-            ) : (
-              <EmptyState
-                title="هنوز سؤالی ندارد"
-                description="برای شروع، سؤال اول را اضافه کنید."
-                actionText="افزودن سؤال"
-                onAction={() => setEdit('new')}
-              />
-            )}
-          </Card>
-        </section>
-
-        <section
-          className="order-2 flex flex-col gap-2 xl:order-3"
-          aria-labelledby="questions-heading"
-        >
-          <Card className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-bold text-primary-fg">بانک سؤال‌ها</p>
-                <h2 id="questions-heading" className="mt-1 font-bold">
-                  سؤال‌ها ({toPersianDigits(d.questions.length)})
-                </h2>
-              </div>
-              <Button
-                variant="secondary"
-                aria-label="سؤال جدید"
-                className="px-3"
-                icon={<Plus className="size-4" aria-hidden />}
-                onClick={() => setEdit('new')}
-              >
-                افزودن
-              </Button>
-            </div>
-            {d.questions.length < 3 && (
-              <p className="rounded-xl bg-danger-light px-3 py-2 text-xs font-bold text-danger">
-                برای انتشار، هر آزمون حداقل ۳ سؤال لازم دارد.
-              </p>
-            )}
-            {d.questions.length === 0 ? (
-              <EmptyState
-                title="هنوز سؤالی ندارد"
-                actionText="افزودن سؤال"
-                onAction={() => setEdit('new')}
-              />
-            ) : (
-              <ol className="flex flex-col gap-2">
-                {d.questions.map((question, index) => (
-                  <li key={question.id}>
-                    <div
-                      className={cn(
-                        'flex items-center gap-1 rounded-xl border p-2 transition-colors',
-                        selectedQuestion?.id === question.id
-                          ? 'border-primary/40 bg-primary-light/60'
-                          : 'border-border bg-surface hover:bg-surface-2',
-                      )}
-                    >
-                      <button
-                        type="button"
-                        aria-pressed={selectedQuestion?.id === question.id}
-                        aria-label={`انتخاب سؤال ${toPersianDigits(index + 1)}: ${question.stem}`}
-                        onClick={() => setSelectedQuestionId(question.id)}
-                        className="min-h-12 min-w-0 flex-1 text-start"
-                      >
-                        <span className="flex items-start gap-2">
-                          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-white text-xs font-extrabold text-primary-fg">
-                            {toPersianDigits(index + 1)}
-                          </span>
-                          <span className="line-clamp-2 text-xs font-bold leading-5 text-text">
-                            {question.stem}
-                          </span>
-                        </span>
-                        <span className="mt-1 block text-[11px] text-text-secondary">
-                          {toPersianDigits(question.options.length)} گزینه
-                        </span>
-                      </button>
-                      <div className="flex shrink-0 flex-col gap-0.5">
-                        <Button
-                          variant="ghost"
-                          className="px-2"
-                          aria-label="بالا"
-                          disabled={index === 0}
-                          onClick={() => move(index, -1)}
-                          icon={<ArrowUp className="size-4" aria-hidden />}
-                        />
-                        <Button
-                          variant="ghost"
-                          className="px-2"
-                          aria-label="پایین"
-                          disabled={index === d.questions.length - 1}
-                          onClick={() => move(index, 1)}
-                          icon={<ArrowDown className="size-4" aria-hidden />}
-                        />
-                      </div>
-                      <div className="flex shrink-0 flex-col gap-0.5">
-                        <Button
-                          variant="ghost"
-                          className="px-2"
-                          aria-label="ویرایش سؤال"
-                          onClick={() => setEdit(question)}
-                          icon={<Pencil className="size-4" aria-hidden />}
-                        />
-                        <Button
-                          variant="ghost"
-                          className="px-2 text-danger"
-                          aria-label="حذف سؤال"
-                          onClick={() => setDel(question)}
-                          icon={<Trash2 className="size-4" aria-hidden />}
-                        />
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </Card>
-        </section>
       </div>
       {edit && (
         <QuestionDialog
@@ -439,7 +344,7 @@ function QuestionDialog({
                 maxLength={200}
                 onChange={(e) => setOptions((o) => o.map((x, j) => (j === i ? e.target.value : x)))}
                 aria-label={`متن گزینه ${LABEL[k]}`}
-                className="min-h-12 flex-1 rounded-input border border-border bg-surface px-2 text-base focus:border-info focus:outline-none"
+                className="min-h-11 flex-1 rounded-input border border-border bg-surface px-2 text-base focus:border-info focus:outline-none"
               />
             </div>
           ))}

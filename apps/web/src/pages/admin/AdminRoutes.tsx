@@ -4,7 +4,6 @@ import {
   BarChart3,
   Bell,
   Bot,
-  ClipboardList,
   FolderTree,
   Library,
   LayoutDashboard,
@@ -15,13 +14,11 @@ import {
   UserRound,
   Users,
   UsersRound,
-  Workflow,
 } from 'lucide-react';
-import { AdminPanelLayout } from '@/layouts/AdminPanelLayout';
+import { PanelLayout } from '@/layouts/PanelLayout';
 import { NotFoundPage } from '@/pages/NotFoundPage';
-import { AdminProfilePage } from './AdminProfilePage';
+import { ProfilePage } from '@/pages/m/ProfilePage';
 import { AdminDashboard } from './AdminDashboard';
-import { AdminRetakeRequestsPage } from './AdminRetakeRequestsPage';
 import { AssignmentsPage } from './AssignmentsPage';
 import { AuditPage } from './AuditPage';
 import { BrandDetailPage } from './BrandDetailPage';
@@ -57,15 +54,9 @@ const NAV = [
   { to: '/admin/users', label: 'کاربران', icon: Users },
   { to: '/admin/teams', label: 'تیم‌ها', icon: UsersRound },
   { to: '/admin/reports', label: 'گزارش‌ها', icon: BarChart3 },
-  { to: '/admin/retake-requests', label: 'آزمون‌های مجدد', icon: ClipboardList },
   { to: '/admin/archive', label: 'آرشیو', icon: Archive },
   { to: '/admin/notifications', label: 'اعلان‌ها', icon: Bell },
   { to: '/admin/push-campaigns', label: 'کمپین‌های Push', icon: Megaphone },
-  {
-    to: '/admin/push-campaigns/automations',
-    label: 'اتوماسیون',
-    icon: Workflow,
-  },
   { to: '/admin/policies', label: 'سیاست‌ها', icon: Settings2 },
   { to: '/admin/audit', label: 'لاگ تغییرات', icon: ScrollText },
   { to: '/admin/profile', label: 'پروفایل', icon: UserRound },
@@ -74,7 +65,7 @@ const NAV = [
 export default function AdminRoutes() {
   return (
     <Routes>
-      <Route element={<AdminPanelLayout title="پنل ادمین" items={NAV} />}>
+      <Route element={<PanelLayout title="پنل ادمین" items={NAV} />}>
         <Route index element={<AdminDashboard />} />
         <Route path="content" element={<ContentPage />} />
         <Route path="media" element={<MediaLibraryPage />} />
@@ -87,7 +78,6 @@ export default function AdminRoutes() {
         <Route path="users/:id" element={<AdminUserDetail />} />
         <Route path="teams" element={<TeamsPage />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route path="retake-requests" element={<AdminRetakeRequestsPage />} />
         <Route path="archive" element={<ArchivePage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="push-campaigns" element={<PushCampaignsPage />} />
@@ -106,7 +96,7 @@ export default function AdminRoutes() {
         <Route path="push-campaigns/:id" element={<PushCampaignEditorPage />} />
         <Route path="policies" element={<PoliciesPage />} />
         <Route path="audit" element={<AuditPage />} />
-        <Route path="profile" element={<AdminProfilePage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

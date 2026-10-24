@@ -60,24 +60,6 @@ describe('auth (PROMPT 002)', () => {
     );
   });
 
-  it('allows staff to sign in with the documented phone identifier', async () => {
-    await ensureUser(ctx.deps, {
-      name: 'ادمین آزمایشی',
-      identifier: '09120000002',
-      password: 'demo1234',
-      role: 'admin',
-    });
-
-    const login = await ctx.api().post('/v1/auth/staff-login', {
-      username: '09120000002',
-      password: 'demo1234',
-      panel: 'admin',
-    });
-
-    expect(login.status).toBe(200);
-    expect(login.body.data.user).toMatchObject({ role: 'admin', phone: '09120000002' });
-  });
-
   it('phone-register signs the new marketer in directly, then phone login works', async () => {
     const reg = await ctx.api().post('/v1/auth/phone-register', {
       name: 'نیلوفر',

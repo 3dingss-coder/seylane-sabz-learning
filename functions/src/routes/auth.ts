@@ -11,7 +11,6 @@ import { ApiError } from '../http/errors';
 import { randomBytesBase64Url } from '../lib/crypto';
 import { ids } from '../lib/ids';
 import type { User } from '../domain/types';
-import * as managerAccess from '../services/manager-access';
 
 type PasswordlessIdentifier = Extract<users.Identifier, { kind: 'phone' | 'nationalCode' }>;
 
@@ -198,59 +197,6 @@ export function authRouter(d: Deps, limiter: RateLimiter): LightRouter {
       }
       return res;
     }),
-  );
-  // Manager self-service entry is intentionally separate from marketer signup. Accounts created
-  // here remain inactive until an Admin approves them; no SMS/OTP verification is claimed.
-  r.post(
-    '/auth/manager-access/lookup',
-    perIp('manager-access-lookup', 10),
-    h(async (req) =>
-      managerAccess.lookupManagerAccess(
-        d,
-        parse(managerAccess.managerAccessLookupSchema, req.body).phone,
-      ),
-    ),
-  );
-  r.post(
-    '/auth/manager-access/avatar-upload-url',
-    perIp('manager-access-avatar', 5),
-    h(
-      async (req) =>
-        managerAccess.createManagerAvatarUpload(
-          d,
-          parse(managerAccess.managerAccessAvatarSchema, req.body),
-        ),
-      201,
-    ),
-  );
-  r.post(
-    '/auth/manager-access/requests',
-    perIp('manager-access-request', 5),
-    h(
-      async (req) =>
-        managerAccess.submitManagerAccessRequest(
-          d,
-          parse(managerAccess.managerAccessRequestSchema, req.body),
-        ),
-      201,
-    ),
-  );
-  r.post(
-    '/auth/manager-access/sign-in',
-    perIp('manager-access-sign-in', 10),
-    h(async (req) =>
-      managerAccess.managerAccessSignIn(d, parse(managerAccess.managerAccessLoginSchema, req.body)),
-    ),
-  );
-  r.post(
-    '/auth/manager-access/appeals',
-    perIp('manager-access-appeal', 5),
-    h(async (req) =>
-      managerAccess.submitManagerAccessAppeal(
-        d,
-        parse(managerAccess.managerAccessAppealSchema, req.body),
-      ),
-    ),
   );
   r.post(
     '/auth/refresh',

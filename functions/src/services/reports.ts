@@ -2,21 +2,12 @@ import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { DAY, HOUR, zonedOffsetMs } from '../lib/time';
 import type { Doc } from '../store/types';
-import type {
-  Attempt,
-  Message,
-  Package,
-  PushCampaign,
-  RetakeRequest,
-  Team,
-  User,
-} from '../domain/types';
+import type { Attempt, Message, RetakeRequest, Team, User } from '../domain/types';
 import { audit, track, type Actor, type Deps } from './context';
 import { loadLearningForUsers, loadUserLearning, type PackageView } from './learning-state';
 import { archivedReportKeys } from './archive';
 import { notifyTemplate } from './notify';
 import { publicUser } from './users';
-import { isUserInManagerTeam, teamMarketers } from './team-scope';
 
 /** Laggard = overdue & incomplete, or ≤72h left with < 50% progress. */
 export function isLagging(p: PackageView, now: Date): boolean {
@@ -109,10 +100,16 @@ export function summarize(members: MemberLearning[], now: Date) {
   };
 }
 
-// ─── Manager scope: explicit team members plus the team's optional city territory ───
+// ─── Manager scope (spec §19.4 #3: teamId == manager.teamId) ────────────────
 export async function teamMembers(d: Deps, manager: Doc<User>): Promise<Array<Doc<User>>> {
   if (!manager.teamId) return [];
-  return teamMarketers(d, manager.teamId);
+  return d.store.query<User>({
+    collection: 'users',
+    where: [
+      ['teamId', '==', manager.teamId],
+      ['role', '==', 'marketer'],
+    ],
+  });
 }
 
 export async function assertTeamMember(
@@ -123,111 +120,31 @@ export async function assertTeamMember(
   const u = await d.store.get<User>(`users/${userId}`);
   // Admins may inspect anyone; managers only their own team. Same 403 for "not found" to avoid probing.
   if (!u) throw new ApiError(manager.role === 'manager' ? 'FORBIDDEN' : 'NOT_FOUND');
-  if (manager.role === 'manager') {
-    const team = manager.teamId ? await d.store.get<Team>(`teams/${manager.teamId}`) : null;
-    if (!manager.teamId || !isUserInManagerTeam(u, manager.teamId, team))
-      throw new ApiError('FORBIDDEN', 'این کاربر عضو تیم شما نیست.');
-  }
+  if (manager.role === 'manager' && (!manager.teamId || u.teamId !== manager.teamId))
+    throw new ApiError('FORBIDDEN', 'این کاربر عضو تیم شما نیست.');
   return u;
-}
-
-export async function managerProfile(d: Deps, manager: Doc<User>) {
-  // A Manager can only resolve their own assigned team; the client cannot supply a team/user id.
-  const team = manager.teamId ? await d.store.get<Team>(`teams/${manager.teamId}`) : null;
-  return {
-    team: team && !team.archived ? { id: manager.teamId, name: team.name } : null,
-    managementArea: {
-      province: manager.province ?? null,
-      city: manager.city ?? null,
-    },
-    createdAt: manager.createdAt,
-  };
 }
 
 export async function managerDashboard(d: Deps, manager: Doc<User>) {
   const team = manager.teamId ? await d.store.get<Team>(`teams/${manager.teamId}`) : null;
-  const scopedUsers = await teamMembers(d, manager);
   const members = await loadMembers(
     d,
-    scopedUsers.filter((u) => u.status === 'active'),
+    (await teamMembers(d, manager)).filter((u) => u.status === 'active'),
   );
-  const memberIds = new Set(scopedUsers.map((u) => u.id));
   const pendingRetakes = manager.teamId
-    ? (
-        await d.store.query<RetakeRequest>({
-          collection: 'retake_requests',
-          where: [['status', '==', 'pending']],
-        })
-      ).filter((request) => memberIds.has(request.userId))
+    ? await d.store.query<RetakeRequest>({
+        collection: 'retake_requests',
+        where: [
+          ['teamId', '==', manager.teamId],
+          ['status', '==', 'pending'],
+        ],
+      })
     : [];
   await track(d, 'manager_dashboard_viewed', manager.id);
   return {
     team: team ? { id: team.id, name: team.name } : null,
     ...summarize(members, d.clock()),
     pendingRetakes: pendingRetakes.length,
-  };
-}
-
-/** A team-scoped directory with product-training health, suitable for coaching workflows. */
-export async function managerMembers(d: Deps, manager: Doc<User>) {
-  const now = d.clock();
-  const team = manager.teamId ? await d.store.get<Team>(`teams/${manager.teamId}`) : null;
-  const users = (await teamMembers(d, manager)).filter((user) => user.status !== 'blacklisted');
-  const members = await loadMembers(d, users);
-  const items = members.map(({ user, packages }) => {
-    const reportable = packages.filter(
-      (pkg) => pkg.packageStatus === 'published' || pkg.status === 'completed',
-    );
-    const completed = reportable.filter((pkg) => pkg.status === 'completed');
-    const lagging = reportable.filter((pkg) => isLagging(pkg, now));
-    const latestPackageActivity = packages
-      .map((pkg) => pkg.lastActivityAt)
-      .filter((at): at is string => Boolean(at))
-      .sort((a, b) => b.localeCompare(a))[0];
-    return {
-      id: user.id,
-      name: user.name,
-      avatarUrl: user.avatarUrl ?? null,
-      phone: user.phone,
-      province: user.province,
-      city: user.city,
-      status: user.status,
-      createdAt: user.createdAt,
-      lastActiveAt:
-        [user.lastActiveAt, latestPackageActivity]
-          .filter((at): at is string => Boolean(at))
-          .sort((a, b) => b.localeCompare(a))[0] ?? null,
-      stats: {
-        assigned: reportable.length,
-        completed: completed.length,
-        averageProgress: reportable.length
-          ? Math.round(reportable.reduce((sum, pkg) => sum + pkg.percent, 0) / reportable.length)
-          : 0,
-        lagging: lagging.length,
-      },
-      packages: reportable.map((pkg) => ({
-        id: pkg.id,
-        title: pkg.title,
-        brandName: pkg.brand?.name ?? null,
-        productName: pkg.product?.name ?? null,
-        status: pkg.status,
-        percent: pkg.percent,
-        overdue: pkg.overdue,
-        deadlineAt: pkg.deadlineAt,
-        completedAt: pkg.completedAt,
-      })),
-    };
-  });
-  await track(d, 'manager_members_viewed', manager.id, { count: items.length });
-  return {
-    team: team ? { id: team.id, name: team.name } : null,
-    totals: {
-      members: items.length,
-      active: items.filter((item) => item.status === 'active').length,
-      inactive: items.filter((item) => item.status === 'inactive').length,
-      lagging: items.filter((item) => item.stats.lagging > 0).length,
-    },
-    members: items.sort((a, b) => a.name.localeCompare(b.name, 'fa')),
   };
 }
 
@@ -728,12 +645,11 @@ export async function listRetakes(
   status: 'pending' | 'approved' | 'rejected' = 'pending',
 ) {
   const where: Array<[string, '==', unknown]> = [['status', '==', status]];
-  let list = await d.store.query<RetakeRequest>({ collection: 'retake_requests', where });
   if (viewer.role === 'manager') {
     if (!viewer.teamId) return [];
-    const memberIds = new Set((await teamMembers(d, viewer)).map((member) => member.id));
-    list = list.filter((request) => memberIds.has(request.userId));
+    where.push(['teamId', '==', viewer.teamId]);
   }
+  const list = await d.store.query<RetakeRequest>({ collection: 'retake_requests', where });
   const userDocs = (
     await d.store.getMany<User>([...new Set(list.map((r) => r.userId))].map((id) => `users/${id}`))
   ).filter((u): u is Doc<User> => !!u);
@@ -783,15 +699,8 @@ export async function reviewRetake(
   const result = await d.store.runTransaction(async (tx) => {
     const r = await tx.get<RetakeRequest>(path);
     if (!r) throw new ApiError('NOT_FOUND', 'درخواست پیدا نشد.');
-    if (reviewer.role === 'manager') {
-      if (!reviewer.teamId) throw new ApiError('FORBIDDEN', 'این درخواست مربوط به تیم شما نیست.');
-      const [member, team] = await Promise.all([
-        tx.get<User>(`users/${r.userId}`),
-        tx.get<Team>(`teams/${reviewer.teamId}`),
-      ]);
-      if (!member || !isUserInManagerTeam(member, reviewer.teamId, team))
-        throw new ApiError('FORBIDDEN', 'این درخواست مربوط به تیم شما نیست.');
-    }
+    if (reviewer.role === 'manager' && (!reviewer.teamId || r.teamId !== reviewer.teamId))
+      throw new ApiError('FORBIDDEN', 'این درخواست مربوط به تیم شما نیست.');
     if (reviewer.role === 'manager' && r.escalated && r.status === 'pending')
       throw new ApiError('FORBIDDEN', 'این درخواست به مدیر سیستم ارجاع شده است.');
     if (r.status !== 'pending') {
@@ -843,29 +752,15 @@ export async function adminCompletion(d: Deps, f: z.infer<typeof reportQuery>) {
   return { rows: completionRows(members, f, d.clock()), ...summarize(members, d.clock()) };
 }
 
-type AdminDashboardEvent = {
-  name: string;
-  userId: string | null;
-  ts: string;
-  props?: Record<string, unknown>;
-};
-
-type AdminDashboardAudit = {
-  action: string;
-  entity: string;
-  entityId: string;
-  actorId: string;
-  createdAt: string;
-};
-
-async function loadAdminKpiSources(d: Deps) {
+export async function adminKpis(d: Deps) {
   const now = d.clock();
-  const since90 = new Date(now.getTime() - 90 * DAY).toISOString();
+  const since30 = new Date(now.getTime() - 30 * DAY).toISOString();
+  const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
   const [users, events, completions, firstAttempts] = await Promise.all([
-    d.store.query<User>({ collection: 'users' }),
-    d.store.query<AdminDashboardEvent>({
+    d.store.query<User>({ collection: 'users', where: [['role', '==', 'marketer']] }),
+    d.store.query<{ name: string; userId: string | null; ts: string }>({
       collection: 'analytics_events',
-      where: [['ts', '>=', since90]],
+      where: [['ts', '>=', since30]],
     }),
     d.store.query<{ userId: string; completedAt: string; onTime: boolean; delayHours: number }>({
       collection: 'package_completions',
@@ -878,45 +773,26 @@ async function loadAdminKpiSources(d: Deps) {
       ],
     }),
   ]);
-  return { now, users, events, completions, firstAttempts };
-}
-
-function calculateAdminKpis({
-  now,
-  users,
-  events,
-  completions,
-  firstAttempts,
-}: Awaited<ReturnType<typeof loadAdminKpiSources>>) {
-  const since30 = new Date(now.getTime() - 30 * DAY).toISOString();
-  const since7 = new Date(now.getTime() - 7 * DAY).toISOString();
-  const recentEvents = events.filter((e) => e.ts >= since30);
-  const played = recentEvents.filter(
+  const played = events.filter(
     (e) => e.name === 'section_played' || e.name === 'playback_heartbeat',
   );
-  const mau = new Set(played.map((e) => e.userId).filter((id): id is string => !!id)).size;
-  const wau = new Set(
-    played
-      .filter((e) => e.ts >= since7)
-      .map((e) => e.userId)
-      .filter((id): id is string => !!id),
-  ).size;
-  const marketers = users.filter((user) => user.role === 'marketer');
+  const mau = new Set(played.map((e) => e.userId)).size;
+  const wau = new Set(played.filter((e) => e.ts >= since7).map((e) => e.userId)).size;
   const firstCompletion = new Map<string, string>();
   for (const c of completions)
     if (!firstCompletion.has(c.userId) || (firstCompletion.get(c.userId) ?? '') > c.completedAt)
       firstCompletion.set(c.userId, c.completedAt);
-  const activated = marketers.filter((u) => {
+  const activated = users.filter((u) => {
     const fc = firstCompletion.get(u.id);
     return fc && Date.parse(fc) - Date.parse(u.createdAt) <= 7 * DAY;
   }).length;
   const late = completions.filter((c) => !c.onTime);
-  const nudges = recentEvents.filter((e) => e.name === 'mentor_nudge_created').length;
-  const reengaged = recentEvents.filter((e) => e.name === 'reengaged_after_nudge').length;
+  const nudges = events.filter((e) => e.name === 'mentor_nudge_created').length;
+  const reengaged = events.filter((e) => e.name === 'reengaged_after_nudge').length;
   return {
-    marketers: marketers.length,
-    activeMarketers: marketers.filter((u) => u.status === 'active').length,
-    activationRate: marketers.length ? Math.round((activated / marketers.length) * 100) : 0,
+    marketers: users.length,
+    activeMarketers: users.filter((u) => u.status === 'active').length,
+    activationRate: users.length ? Math.round((activated / users.length) * 100) : 0,
     wau,
     mau,
     wauMau: mau ? Math.round((wau / mau) * 100) : 0,
@@ -934,140 +810,15 @@ function calculateAdminKpis({
   };
 }
 
-export async function adminKpis(d: Deps) {
-  return calculateAdminKpis(await loadAdminKpiSources(d));
-}
-
-const DASHBOARD_EVENTS = new Set([
-  'signup_completed',
-  'package_completed',
-  'quiz_passed',
-  'quiz_failed',
-  'retake_requested',
-  'mentor_message_sent',
-]);
-
-function asString(value: unknown): string | null {
-  return typeof value === 'string' && value.length ? value : null;
-}
-
 export async function adminDashboard(d: Deps) {
-  const now = d.clock();
-  const since30 = new Date(now.getTime() - 30 * DAY).toISOString();
-  const [sources, packages, pendingRetakes, campaigns, auditRows] = await Promise.all([
-    loadAdminKpiSources(d),
-    d.store.query<Package>({ collection: 'packages' }),
+  const [kpis, packages, pendingRetakes] = await Promise.all([
+    adminKpis(d),
+    d.store.query<{ status: string; brandId: string | null }>({ collection: 'packages' }),
     d.store.query<RetakeRequest>({
       collection: 'retake_requests',
       where: [['status', '==', 'pending']],
     }),
-    d.store.query<PushCampaign>({ collection: 'push_campaigns', orderBy: [['createdAt', 'desc']] }),
-    d.store.query<AdminDashboardAudit>({
-      collection: 'audit_logs',
-      orderBy: [['createdAt', 'desc']],
-      limit: 12,
-    }),
   ]);
-  const { users, events } = sources;
-  const kpis = calculateAdminKpis(sources);
-  const visibleUsers = users.filter((u) => u.status !== 'blacklisted');
-  const usersByRole = { marketer: 0, manager: 0, admin: 0, superadmin: 0 };
-  for (const user of visibleUsers) usersByRole[user.role] += 1;
-
-  const recentUsers = [...visibleUsers]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 5)
-    .map((user) => ({
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      status: user.status,
-      createdAt: user.createdAt,
-      province: user.province,
-      city: user.city,
-    }));
-
-  const recentPackages = [...packages]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 5)
-    .map((pkg) => ({
-      id: pkg.id,
-      title: pkg.title,
-      status: pkg.status,
-      createdAt: pkg.createdAt,
-      updatedAt: pkg.updatedAt,
-      brandId: pkg.brandId,
-    }));
-
-  const liveCampaigns = campaigns.filter((campaign) => !campaign.archivedAt);
-  const campaignsByStatus = {
-    total: liveCampaigns.length,
-    draft: liveCampaigns.filter((campaign) => campaign.status === 'draft').length,
-    scheduled: liveCampaigns.filter((campaign) => campaign.status === 'scheduled').length,
-    inProgress: liveCampaigns.filter((campaign) => ['queued', 'sending'].includes(campaign.status))
-      .length,
-    sent: liveCampaigns.filter((campaign) => ['sent', 'sent_with_errors'].includes(campaign.status))
-      .length,
-    failed: liveCampaigns.filter((campaign) => campaign.status === 'failed').length,
-    cancelled: liveCampaigns.filter((campaign) => campaign.status === 'cancelled').length,
-  };
-
-  const dayKeys = Array.from({ length: 90 }, (_, i) =>
-    new Date(now.getTime() - (89 - i) * DAY).toISOString().slice(0, 10),
-  );
-  const activeByDay = new Map(dayKeys.map((day) => [day, new Set<string>()]));
-  const signupsByDay = new Map(dayKeys.map((day) => [day, 0]));
-  const completionsByDay = new Map(dayKeys.map((day) => [day, 0]));
-  const quizzesByDay = new Map(dayKeys.map((day) => [day, 0]));
-  for (const event of events) {
-    const day = event.ts.slice(0, 10);
-    if (!activeByDay.has(day)) continue;
-    if ((event.name === 'section_played' || event.name === 'playback_heartbeat') && event.userId)
-      activeByDay.get(day)?.add(event.userId);
-    if (event.name === 'signup_completed') signupsByDay.set(day, (signupsByDay.get(day) ?? 0) + 1);
-    if (event.name === 'package_completed')
-      completionsByDay.set(day, (completionsByDay.get(day) ?? 0) + 1);
-    if (event.name === 'quiz_passed' || event.name === 'quiz_failed')
-      quizzesByDay.set(day, (quizzesByDay.get(day) ?? 0) + 1);
-  }
-  const activityTrend = dayKeys.map((date) => ({
-    date,
-    activeUsers: activeByDay.get(date)?.size ?? 0,
-    signups: signupsByDay.get(date) ?? 0,
-    completions: completionsByDay.get(date) ?? 0,
-    quizAttempts: quizzesByDay.get(date) ?? 0,
-  }));
-
-  const userNames = new Map(visibleUsers.map((user) => [user.id, user.name]));
-  const appActivity = events
-    .filter((event) => event.ts >= since30 && DASHBOARD_EVENTS.has(event.name))
-    .map((event) => ({
-      id: event.id,
-      source: 'app' as const,
-      name: event.name,
-      at: event.ts,
-      actorId: event.userId,
-      actorName: event.userId ? (userNames.get(event.userId) ?? 'کاربر حذف‌شده') : 'سیستم',
-      entity: null,
-      entityId:
-        asString(event.props?.packageId) ??
-        asString(event.props?.quizId) ??
-        asString(event.props?.userId),
-    }));
-  const adminActivity = auditRows.map((event) => ({
-    id: event.id,
-    source: 'admin' as const,
-    name: event.action,
-    at: event.createdAt,
-    actorId: event.actorId,
-    actorName: userNames.get(event.actorId) ?? 'مدیر سیستم',
-    entity: event.entity,
-    entityId: event.entityId,
-  }));
-  const recentActivity = [...appActivity, ...adminActivity]
-    .sort((a, b) => b.at.localeCompare(a.at))
-    .slice(0, 8);
-
   return {
     kpis,
     content: {
@@ -1077,18 +828,6 @@ export async function adminDashboard(d: Deps) {
       archived: packages.filter((p) => p.status === 'archived').length,
     },
     pendingRetakes: pendingRetakes.length,
-    insights: {
-      users: {
-        total: visibleUsers.length,
-        active: visibleUsers.filter((user) => user.status === 'active').length,
-        byRole: usersByRole,
-        recent: recentUsers,
-      },
-      activityTrend,
-      recentPackages,
-      recentActivity,
-      campaigns: campaignsByStatus,
-    },
   };
 }
 

@@ -33,7 +33,6 @@ import { awardPoints, evaluateBadges } from './rewards';
 // The outbox of the automation engine (prompt §5.2): a request records what happened and carries
 // on. `emitAutomationEvent` never throws and writes nothing while no rule listens for the event.
 import { emitAutomationEvent } from './push-automation-events';
-import { managersForMarketer } from './team-scope';
 
 const LOCKED = 'این قسمت هنوز قفل است. ابتدا قسمت قبل را کامل کنید و در آزمون آن قبول شوید.';
 
@@ -1149,7 +1148,16 @@ export async function requestRetake(d: Deps, user: Doc<User>, quizId: string) {
   await track(d, 'retake_requested', user.id, { quizId });
   const section = view.sections.find((s) => s.id === quiz.sectionId);
   const title = section?.title ?? view.title;
-  const managers = await managersForMarketer(d, user);
+  const managers = user.teamId
+    ? await d.store.query<User>({
+        collection: 'users',
+        where: [
+          ['teamId', '==', user.teamId],
+          ['role', '==', 'manager'],
+          ['status', '==', 'active'],
+        ],
+      })
+    : [];
   let reviewers = managers.map((m) => m.id);
   if (escalated || reviewers.length === 0) {
     const admins = await d.store.query<User>({

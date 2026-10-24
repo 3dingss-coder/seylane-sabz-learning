@@ -11,11 +11,6 @@ export interface User {
   name: string;
   phone: string | null;
   email: string | null;
-  /** Optional profile photo stored in the app blob store. */
-  avatarUrl?: string | null;
-  avatarPath?: string | null;
-  /** Optional marketer workplace label selected from the profile screen. */
-  workplace?: string | null;
   /** HMAC lookup value for passwordless national-code accounts; never returned by publicUser. */
   nationalCodeHash?: string | null;
   /** Residence («محل سکونت»), captured at sign-up; null on accounts created before it existed. */
@@ -28,60 +23,12 @@ export interface User {
   status: UserStatus;
   pointsBalance: number;
   onboardedAt: string | null;
-  /** Admin-provisioned Managers must complete their own profile before using Manager APIs. */
-  managerProfileRequired?: boolean;
-  managerProfileCompletedAt?: string | null;
   lastActiveAt: string | null;
   createdAt: string;
   updatedAt: string;
-  /** Previous access state while status is `blacklisted`, restored on archive restore. */
-  blacklistedFromStatus?: 'active' | 'inactive' | null;
   /** Set while status is `blacklisted` (archive tab «لیست سیاه»). */
   blacklistedAt?: string | null;
   blacklistedBy?: string | null;
-}
-
-export type ManagerAccessStatus = 'pending' | 'review_requested' | 'approved' | 'rejected';
-
-export interface ManagerAccessAppeal {
-  message: string;
-  submittedAt: string;
-}
-
-/** A Manager application. National-code plaintext is encrypted at rest and only revealed to Admins. */
-export interface ManagerAccessRequest {
-  userId: string;
-  /** True when the application requests a role change on an existing active marketer account. */
-  existingAccount?: boolean;
-  /** Encrypted proposed Manager password; retained only until approval for existing accounts. */
-  managerPasswordCiphertext?: string | null;
-  fullName: string;
-  phone: string;
-  nationalCodeCiphertext: string;
-  nationalCodeHash: string;
-  managementProvince: string;
-  managementCity: string;
-  avatarUrl: string;
-  avatarPath: string;
-  status: ManagerAccessStatus;
-  reviewNote: string | null;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
-  /** Admin attestation that the phone was checked outside this app; no SMS/OTP is implied. */
-  phoneReviewedExternallyBy: string | null;
-  phoneReviewedExternallyAt: string | null;
-  appeals: ManagerAccessAppeal[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-/** One-time upload ticket metadata for a public Manager application photo. */
-export interface ManagerAccessUpload {
-  path: string;
-  mime: string;
-  consumedAt: string | null;
-  createdAt: string;
-  expireAt: Date;
 }
 
 /**
@@ -105,11 +52,7 @@ export interface ArchivedReport {
 
 export interface Team {
   name: string;
-  /** Legacy primary-manager pointer; all Managers with `teamId` are now first-class team managers. */
   managerId: string | null;
-  /** Optional city territory; managers also see marketers whose residence matches this pair. */
-  province?: string | null;
-  city?: string | null;
   archived: boolean;
   createdAt: string;
   updatedAt: string;

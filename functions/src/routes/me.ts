@@ -47,20 +47,6 @@ export function meRouter(d: Deps, limiter: RateLimiter): LightRouter {
     h(async (req) => users.updateMe(d, me(req), parse(users.patchMeSchema, req.body))),
   );
   r.post(
-    '/me/avatar/upload-url',
-    rateLimit(limiter, 'profile-avatar-upload', 10, 60_000, uid),
-    h(
-      async (req) =>
-        users.createAvatarUploadUrl(d, me(req), parse(users.avatarUploadSchema, req.body)),
-      201,
-    ),
-  );
-  r.post(
-    '/me/avatar/finalize',
-    rateLimit(limiter, 'profile-avatar-finalize', 10, 60_000, uid),
-    h(async (req) => users.finalizeAvatar(d, me(req), parse(users.avatarFinalizeSchema, req.body))),
-  );
-  r.post(
     '/me/password',
     rateLimit(limiter, 'pwchange', 5, 60_000, uid),
     h(

@@ -34,7 +34,7 @@ export function ReportsPage() {
   const [tab, setTab] = useState<'completion' | 'quizzes' | 'retakes' | 'mentor'>('completion');
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader variant="admin" title="گزارش‌ها" />
+      <PageHeader title="گزارش‌ها" />
       <Tabs
         label="گزارش"
         value={tab}

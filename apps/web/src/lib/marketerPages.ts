@@ -1,8 +1,6 @@
 /** Lazy loaders for the marketer sub-pages, shared by the router (React.lazy) and the idle prefetch. */
 export const marketerPages = {
   CardsPage: () => import('@/pages/m/CardsPage').then((m) => ({ default: m.CardsPage })),
-  LearningPathPage: () =>
-    import('@/pages/m/LearningPathPage').then((m) => ({ default: m.LearningPathPage })),
   LearnPage: () => import('@/pages/m/LearnPage').then((m) => ({ default: m.LearnPage })),
   MentorPage: () => import('@/pages/m/MentorPage').then((m) => ({ default: m.MentorPage })),
   MessagesPage: () => import('@/pages/m/MessagesPage').then((m) => ({ default: m.MessagesPage })),

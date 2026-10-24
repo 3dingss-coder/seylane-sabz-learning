@@ -5,7 +5,7 @@ import type { Doc, Where } from '../store/types';
 import type { ArchivedReport, Team, User } from '../domain/types';
 import { audit, nowIso, track, type Actor, type Deps } from './context';
 import { loadLearningForUsers } from './learning-state';
-import { publicUser, staffAuthEmail, syncTeamManagerPointer } from './users';
+import { publicUser, staffAuthEmail } from './users';
 
 /**
  * Admin archive (آرشیو): the place deleted users («لیست سیاه») and deleted reports wait.
@@ -79,42 +79,27 @@ export async function blacklistUser(d: Deps, actor: Actor, userId: string) {
       throw new ApiError('CONFLICT', 'این آخرین مدیر ارشد سیستم است و حذف نمی‌شود.');
   }
   const warnings: string[] = [];
-  const managed =
-    target.role === 'manager'
-      ? await d.store.query<Team>({
-          collection: 'teams',
-          where: [['managerId', '==', userId]],
-        })
-      : [];
+  if (target.role === 'manager') {
+    const managed = await d.store.query<Team>({
+      collection: 'teams',
+      where: [['managerId', '==', userId]],
+    });
+    for (const t of managed)
+      await d.store.update(`teams/${t.id}`, { managerId: null, updatedAt: nowIso(d) });
+    if (managed.length)
+      warnings.push(
+        `مدیریت تیم «${managed.map((t) => t.name).join('، ')}» از این کاربر گرفته شد؛ مدیر جدیدی انتخاب کنید.`,
+      );
+  }
   const now = nowIso(d);
   await d.store.update(`users/${userId}`, {
     status: 'blacklisted',
-    blacklistedFromStatus: target.status === 'inactive' ? 'inactive' : 'active',
     blacklistedAt: now,
     blacklistedBy: actor.id,
     updatedAt: now,
   });
   await d.auth.setDisabled(userId, true);
   await d.auth.revoke(userId);
-  for (const team of managed) {
-    const peers = (
-      await d.store.query<User>({
-        collection: 'users',
-        where: [['teamId', '==', team.id]],
-      })
-    )
-      .filter((user) => user.id !== userId && user.role === 'manager' && user.status === 'active')
-      .sort((a, b) => a.name.localeCompare(b.name, 'fa'));
-    await d.store.update(`teams/${team.id}`, {
-      managerId: peers[0]?.id ?? null,
-      updatedAt: now,
-    });
-    warnings.push(
-      peers[0]
-        ? `مدیریت اصلی تیم «${team.name}» به مدیر دیگری منتقل شد.`
-        : `تیم «${team.name}» مدیر فعالی ندارد؛ مدیر دیگری انتخاب کنید.`,
-    );
-  }
   // A deleted user must not receive pushes any more.
   await deleteWhere(d, 'device_tokens', [['userId', '==', userId]]);
   await audit(d, actor, 'user.blacklisted', 'users', userId, { status: target.status }, null);
@@ -138,17 +123,13 @@ export async function restoreUser(d: Deps, actor: Actor, userId: string) {
   if (!target) throw new ApiError('NOT_FOUND', 'کاربر پیدا نشد.');
   if (target.status !== 'blacklisted')
     throw new ApiError('CONFLICT', 'این کاربر در لیست سیاه نیست.');
-  const restoredStatus = target.blacklistedFromStatus === 'inactive' ? 'inactive' : 'active';
   await d.store.update(`users/${userId}`, {
-    status: restoredStatus,
-    blacklistedFromStatus: null,
+    status: 'active',
     blacklistedAt: null,
     blacklistedBy: null,
     updatedAt: nowIso(d),
   });
-  await d.auth.setDisabled(userId, restoredStatus !== 'active');
-  if (target.role === 'manager' && restoredStatus === 'active' && target.teamId)
-    await syncTeamManagerPointer(d, target.teamId);
+  await d.auth.setDisabled(userId, false);
   await audit(d, actor, 'user.restored', 'users', userId, { status: 'blacklisted' }, null);
   await track(d, 'admin_user_restored', actor.id, {});
   const updated = await d.store.get<User>(`users/${userId}`);

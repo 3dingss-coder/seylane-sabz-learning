@@ -15,7 +15,7 @@ import { unregisterPush } from './native';
 import { session } from './session';
 import { lastKnown } from './lastKnown';
 
-import type { AuthResult, ManagerAccessAuthResult, Me, Role } from './types';
+import type { AuthResult, Me, Role } from './types';
 
 type LoginIdentifier = { kind: 'phone' | 'nationalCode'; value: string };
 type MarketerRegistration = {
@@ -37,7 +37,6 @@ interface AuthState {
     username: string;
     password: string;
   }): Promise<Me>;
-  managerAccessLogin(input: { phone: string; password: string }): Promise<ManagerAccessAuthResult>;
   logout(): Promise<void>;
   refreshMe(): Promise<void>;
   setUser(u: Me): void;
@@ -136,21 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return accept(result);
       },
       staffLogin: async (input) => accept(await api.post<AuthResult>('/auth/staff-login', input)),
-      managerAccessLogin: async (input) => {
-        const result = await api.post<ManagerAccessAuthResult>(
-          '/auth/manager-access/sign-in',
-          input,
-        );
-        if (result.state === 'active') {
-          accept({
-            user: result.user,
-            idToken: result.idToken,
-            refreshToken: result.refreshToken,
-            expiresIn: result.expiresIn,
-          });
-        }
-        return result;
-      },
       logout: async () => {
         try {
           await flushBeats(); // send offline progress before the token is revoked

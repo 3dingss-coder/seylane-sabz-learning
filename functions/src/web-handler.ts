@@ -334,9 +334,7 @@ export function createFetchHandler(
         return serveBytes(request, file.data, file.contentType, baseHeaders);
       }
 
-      const pubMatch = /^\/files\/public\/((?:brands|products|branding|avatars)\/.+)$/.exec(
-        subPath,
-      );
+      const pubMatch = /^\/files\/public\/((?:brands|products|branding)\/.+)$/.exec(subPath);
       if (pubMatch && (request.method === 'GET' || request.method === 'HEAD')) {
         const rawPath = (pubMatch[1] ?? '')
           .split('/')
@@ -353,9 +351,8 @@ export function createFetchHandler(
             uploaded.data,
             uploaded.contentType,
             baseHeaders,
-            rawPath.startsWith('avatars/')
-              ? 'private, max-age=3600'
-              : 'public, max-age=86400, stale-while-revalidate=604800',
+            // Public catalog images: let browsers and the Cloudflare edge reuse them.
+            'public, max-age=86400, stale-while-revalidate=604800',
           );
         }
         if (rawPath === 'branding/holding-logo.png') {

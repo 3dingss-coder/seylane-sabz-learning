@@ -12,13 +12,12 @@ export function PushAutomationsPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        variant="admin"
         title="اتوماسیون اعلان (Push)"
         subtitle="قانون‌هایی که بر پایه رفتار کاربر اعلان می‌سازند؛ هر کدام روشن/خاموش، با سقف و پنجره زمانی خودشان"
         actions={
           <Link
             to="/admin/push-campaigns"
-            className="inline-flex items-center gap-1.5 text-sm font-bold text-primary-fg hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-bold text-primary hover:underline"
           >
             <ArrowRight className="size-4" aria-hidden />
             بازگشت به کمپین‌ها

@@ -78,7 +78,7 @@ export function RetakeList({
                 <li key={r.id}>
                   <Card className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-sm">
-                      <Link to={memberLink(r.userId)} className="font-bold text-primary-fg">
+                      <Link to={memberLink(r.userId)} className="font-bold text-primary">
                         {r.userName}
                       </Link>
                       {r.userCity && (

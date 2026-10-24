@@ -27,7 +27,7 @@ async function login(page: Page, identifier: string) {
   }
   await page.goto('/login');
   await page.getByLabel(/شماره موبایل/).fill(identifier);
-  await page.getByRole('button', { name: 'ورود و ادامه' }).click();
+  await page.getByRole('button', { name: 'ورود' }).click();
   // Wait until the session is established before navigating (avoids racing the login call).
   await expect(page).not.toHaveURL(/\/login$/, { timeout: 15_000 });
 }
@@ -50,18 +50,14 @@ async function expectNoViolations(page: Page) {
 
 test('login page', async ({ page }) => {
   await page.goto('/login');
-  await expect(page.getByRole('button', { name: 'ورود و ادامه' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ورود' })).toBeVisible();
   await expectNoViolations(page);
 });
 
 test('sign-up page: residence picker, province and city lists open', async ({ page }) => {
   await page.goto('/register');
+  await expect(page.getByRole('button', { name: 'ثبت‌نام و ورود' })).toBeVisible();
   await expectNoViolations(page);
-
-  // Wizard step 1 (name) — walk to the activity-location step.
-  await page.getByLabel('نام', { exact: true }).fill('سارا');
-  await page.getByLabel('نام خانوادگی').fill('محمدی');
-  await page.getByRole('button', { name: 'ادامه' }).click();
 
   // The long province list is opened (contrast of the option rows is measured in a real browser).
   await page.getByLabel('انتخاب محل فعالیت شما').click();
@@ -70,16 +66,8 @@ test('sign-up page: residence picker, province and city lists open', async ({ pa
 
   await page.getByRole('combobox', { name: 'جستجوی استان' }).fill('یزد');
   await page.getByRole('option', { name: 'یزد', exact: true }).click();
-  await page.getByRole('button', { name: 'ادامه' }).click();
-
   await page.getByLabel('شهر').click();
-  const cityList = page.getByRole('listbox', { name: 'شهرهای استان یزد' });
-  await expect(cityList).toBeVisible();
-  await expectNoViolations(page);
-  await cityList.getByRole('option').first().click();
-  await page.getByRole('button', { name: 'ادامه' }).click();
-
-  await expect(page.getByRole('button', { name: 'ثبت‌نام و ورود' })).toBeVisible();
+  await expect(page.getByRole('listbox', { name: 'شهرهای استان یزد' })).toBeVisible();
   await expectNoViolations(page);
 });
 

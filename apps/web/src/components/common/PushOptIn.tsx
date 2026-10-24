@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Bell } from 'lucide-react';
-import { MarketerIcon } from '@/components/brand/MarketerIcon';
 import { Button, Card, useToast } from '@/components/ui';
 import { enableWebPush, retryWebPush, webPushState, type WebPushState } from '@/lib/webPush';
 
 /** Browser/PWA notification opt-in. Hidden when Web Push isn't configured or supported. */
-export function PushOptIn({ marketerIcons = false }: { marketerIcons?: boolean }) {
+export function PushOptIn() {
   const toast = useToast();
   const [state, setState] = useState<WebPushState>(() => webPushState());
   const [busy, setBusy] = useState(false);
@@ -14,11 +13,7 @@ export function PushOptIn({ marketerIcons = false }: { marketerIcons?: boolean }
   return (
     <Card className="flex flex-col gap-2">
       <h2 className="flex items-center gap-2 text-base font-bold">
-        {marketerIcons ? (
-          <MarketerIcon name="notification" className="size-6" />
-        ) : (
-          <Bell className="size-5 text-primary-fg" aria-hidden />
-        )}
+        <Bell className="size-5 text-primary" aria-hidden />
         اعلان‌های گوشی/مرورگر
       </h2>
       {state === 'granted' && (

@@ -16,7 +16,6 @@ import type {
   User,
 } from '../domain/types';
 import { audit, track, type Actor, type Deps } from './context';
-import { activeTeamAudience } from './team-scope';
 
 /**
  * Admin push campaigns (studio). Storage: the generic document store (`push_campaigns`,
@@ -234,10 +233,11 @@ export async function listCampaigns(d: Deps, q: CampaignListQuery) {
   return { items: page.items.map(view), nextCursor: page.nextCursor, total: page.total };
 }
 
-async function campaignDetailFor(d: Deps, c: Doc<PushCampaign>) {
+export async function campaignDetail(d: Deps, id: string) {
+  const c = await getCampaignOrThrow(d, id);
   const batches = await d.store.query<PushCampaignBatch>({
     collection: BATCHES,
-    where: [['campaignId', '==', c.id]],
+    where: [['campaignId', '==', id]],
   });
   const sorted = batches.sort((a, b) => a.index - b.index);
   return {
@@ -258,10 +258,6 @@ async function campaignDetailFor(d: Deps, c: Doc<PushCampaign>) {
     })),
     batchesTruncated: sorted.length > BATCH_DETAIL_LIMIT,
   };
-}
-
-export async function campaignDetail(d: Deps, id: string) {
-  return campaignDetailFor(d, await getCampaignOrThrow(d, id));
 }
 
 export async function dashboard(d: Deps) {
@@ -315,11 +311,9 @@ async function resolveAudience(
   tokens: Map<string, DeviceToken[]>,
 ): Promise<{ userIds: string[]; reachable: number; webDevices: number; androidDevices: number }> {
   const where: Where[] = [['status', '==', 'active']];
+  if (aud.type === 'team') where.push(['teamId', '==', aud.targetId]);
   if (aud.type === 'role') where.push(['role', '==', aud.targetId]);
-  let users =
-    aud.type === 'team'
-      ? await activeTeamAudience(d, aud.targetId ?? '')
-      : await d.store.query<User>({ collection: 'users', where });
+  let users = await d.store.query<User>({ collection: 'users', where });
   if (aud.type === 'user') users = users.filter((u) => u.id === aud.targetId);
   const platform = aud.channel === 'any' ? null : aud.channel;
   const userIds: string[] = [];
@@ -350,108 +344,6 @@ export async function audiencePreview(d: Deps, audience: PushCampaignAudience) {
     androidDevices: r.androidDevices,
     note: 'این عدد تقریبی است و در لحظه ارسال دوباره محاسبه می‌شود.',
   };
-}
-
-function managerTeamId(manager: Doc<User>): string {
-  if (manager.role !== 'manager' || !manager.teamId)
-    throw new ApiError(
-      'FORBIDDEN',
-      'برای استفاده از ابزارهای تیمی باید به یک تیم فعال متصل باشید.',
-    );
-  return manager.teamId;
-}
-
-function isManagerTeamCampaign(campaign: Doc<PushCampaign>, manager: Doc<User>): boolean {
-  return campaign.audience.type === 'team' && campaign.audience.targetId === managerTeamId(manager);
-}
-
-async function getManagerCampaignOrThrow(
-  d: Deps,
-  manager: Doc<User>,
-  id: string,
-): Promise<Doc<PushCampaign>> {
-  const campaign = await getCampaignOrThrow(d, id);
-  if (!isManagerTeamCampaign(campaign, manager)) throw new ApiError('NOT_FOUND', 'کمپین پیدا نشد.');
-  return campaign;
-}
-
-function assertManagerOwnsCampaign(campaign: Doc<PushCampaign>, manager: Doc<User>) {
-  if (campaign.createdBy !== manager.id)
-    throw new ApiError('FORBIDDEN', 'فقط سازندهٔ کمپین می‌تواند آن را تغییر دهد.');
-}
-
-function assertManagerAudience(audience: PushCampaignAudience, manager: Doc<User>) {
-  const teamId = managerTeamId(manager);
-  if (audience.type !== 'team' || audience.targetId !== teamId)
-    throw new ApiError('FORBIDDEN', 'کمپین مدیر فقط می‌تواند برای اعضای تیم خودش ساخته شود.');
-}
-
-/** Manager campaigns are isolated to one team; admin/global audiences never enter this read model. */
-export async function managerCampaignList(d: Deps, manager: Doc<User>, q: CampaignListQuery) {
-  const teamId = managerTeamId(manager);
-  const rows = await d.store.query<PushCampaign>({
-    collection: CAMPAIGNS,
-    orderBy: [['createdAt', 'desc']],
-  });
-  const filtered = rows.filter(
-    (campaign) =>
-      (q.includeArchived || !campaign.archivedAt) &&
-      campaign.audience.type === 'team' &&
-      campaign.audience.targetId === teamId &&
-      (!q.status || campaign.status === q.status),
-  );
-  const page = paginate(filtered, q.limit, q.cursor);
-  return { items: page.items.map(view), nextCursor: page.nextCursor, total: page.total };
-}
-
-export async function managerCampaignDashboard(d: Deps, manager: Doc<User>) {
-  const teamId = managerTeamId(manager);
-  const rows = await d.store.query<PushCampaign>({
-    collection: CAMPAIGNS,
-    orderBy: [['createdAt', 'desc']],
-  });
-  const live = rows.filter(
-    (campaign) =>
-      !campaign.archivedAt &&
-      campaign.audience.type === 'team' &&
-      campaign.audience.targetId === teamId,
-  );
-  const count = (...statuses: PushCampaignStatus[]) =>
-    live.filter((campaign) => statuses.includes(campaign.status)).length;
-  const providerRequests = live.reduce(
-    (total, campaign) => ({
-      attempted: total.attempted + (campaign.summary?.attempted ?? 0),
-      accepted: total.accepted + (campaign.summary?.accepted ?? 0),
-      failed: total.failed + (campaign.summary?.failed ?? 0),
-      noDevice: total.noDevice + (campaign.summary?.noDevice ?? 0),
-    }),
-    { attempted: 0, accepted: 0, failed: 0, noDevice: 0 },
-  );
-  return {
-    counts: {
-      total: live.length,
-      draft: count('draft'),
-      scheduled: count('scheduled'),
-      inProgress: count('queued', 'sending'),
-      sent: count('sent', 'sent_with_errors'),
-      failed: count('failed'),
-      cancelled: count('cancelled'),
-    },
-    providerRequests,
-    recent: live.slice(0, 5).map(view),
-  };
-}
-
-export async function managerAudiencePreview(
-  d: Deps,
-  manager: Doc<User>,
-  channel: PushCampaignAudience['channel'],
-) {
-  return audiencePreview(d, { type: 'team', targetId: managerTeamId(manager), channel });
-}
-
-export async function managerCampaignDetail(d: Deps, manager: Doc<User>, id: string) {
-  return campaignDetailFor(d, await getManagerCampaignOrThrow(d, manager, id));
 }
 
 // ─── Write operations ─────────────────────────────────────────────────────────
@@ -588,51 +480,6 @@ export async function archiveCampaign(d: Deps, actor: Actor, id: string) {
   });
   await audit(d, actor, 'push_campaign.archived', CAMPAIGNS, id, { status: c.status }, null);
   return { id, archived: true };
-}
-
-/** Create/edit/send permissions for managers are deliberately limited to campaigns for their team. */
-export async function createManagerCampaign(d: Deps, manager: Doc<User>, input: CampaignInput) {
-  assertManagerAudience(input.audience, manager);
-  const result = await createCampaign(d, manager, input);
-  await track(d, 'manager_campaign_created', manager.id, { campaignId: result.campaign.id });
-  return result;
-}
-
-export async function updateManagerCampaign(
-  d: Deps,
-  manager: Doc<User>,
-  id: string,
-  input: z.infer<typeof campaignUpdateSchema>,
-) {
-  const campaign = await getManagerCampaignOrThrow(d, manager, id);
-  assertManagerOwnsCampaign(campaign, manager);
-  assertManagerAudience(input.audience, manager);
-  return updateCampaign(d, manager, id, input);
-}
-
-export async function sendManagerCampaignNow(
-  d: Deps,
-  manager: Doc<User>,
-  id: string,
-  requestId: string,
-) {
-  const campaign = await getManagerCampaignOrThrow(d, manager, id);
-  assertManagerOwnsCampaign(campaign, manager);
-  const detail = await sendCampaignNow(d, manager, id, requestId);
-  await track(d, 'manager_campaign_started', manager.id, { campaignId: id });
-  return detail;
-}
-
-export async function cancelManagerCampaign(d: Deps, manager: Doc<User>, id: string) {
-  const campaign = await getManagerCampaignOrThrow(d, manager, id);
-  assertManagerOwnsCampaign(campaign, manager);
-  return cancelCampaign(d, manager, id);
-}
-
-export async function archiveManagerCampaign(d: Deps, manager: Doc<User>, id: string) {
-  const campaign = await getManagerCampaignOrThrow(d, manager, id);
-  assertManagerOwnsCampaign(campaign, manager);
-  return archiveCampaign(d, manager, id);
 }
 
 /**

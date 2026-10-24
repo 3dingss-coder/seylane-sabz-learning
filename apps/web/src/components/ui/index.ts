@@ -12,12 +12,8 @@ export { KpiCard } from './KpiCard';
 export { Modal } from './Modal';
 export { ProgressBar, ProgressRing } from './ProgressRing';
 export { LoadingRegion, PackageCardSkeleton, Skeleton, TableSkeleton } from './Skeleton';
-export { Select, type SelectProps } from './Select';
 export { Spinner } from './Spinner';
 export { StatusBadge, type BadgeStatus } from './StatusBadge';
-export { Table, DataTable, type Column } from './Table';
-export { Tabs, type TabItem, type TabsProps } from './Tabs';
-export { Textarea, type TextareaProps } from './Textarea';
 export { ToastProvider } from './Toast';
 export { useToast } from './toast-context';
 export {

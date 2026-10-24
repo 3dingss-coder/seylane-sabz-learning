@@ -1,4 +1,4 @@
-import { randomBytesBase64Url, randomInt } from '../lib/crypto';
+import { randomInt } from '../lib/crypto';
 import { z } from 'zod';
 import { ApiError } from '../http/errors';
 import { text } from '../http/validate';
@@ -10,7 +10,6 @@ import {
   normalizePhone,
   phoneToAuthEmail,
 } from '../lib/ids';
-import { EXT, MEDIA_RULES, sniff } from '../lib/media';
 import { provinceUsesNationalCode } from '../domain/nationalCode';
 import { StoreConflictError, type Doc } from '../store/types';
 import {
@@ -21,7 +20,6 @@ import {
 } from '../domain/iranLocations';
 import type { Role, Team, User } from '../domain/types';
 import { audit, nowIso, SYSTEM, track, type Actor, type Deps } from './context';
-import { isTeamMarketer } from './team-scope';
 
 // ─── Validation (PROMPT 002) ────────────────────────────────────────────────
 export const passwordSchema = z
@@ -174,9 +172,6 @@ export const staffLoginSchema = z.object({
 
 /** Staff (admin/manager) usernames map to an internal, non-routable auth email. */
 export function staffAuthEmail(username: string): string {
-  const phone = normalizePhone(username);
-  if (phone) return phoneToAuthEmail(phone);
-
   const slug = username
     .trim()
     .toLowerCase()
@@ -229,9 +224,6 @@ export function publicUser(u: Doc<User>) {
   return {
     id: u.id,
     name: u.name,
-    avatarUrl: u.avatarUrl ?? null,
-    workplace: u.workplace ?? null,
-    hasNationalCode: Boolean(u.nationalCodeHash),
     phone: u.phone,
     email: u.email,
     province: u.province ?? null,
@@ -242,12 +234,6 @@ export function publicUser(u: Doc<User>) {
     status: u.status,
     pointsBalance: u.pointsBalance,
     onboardedAt: u.onboardedAt,
-    ...(u.role === 'manager'
-      ? {
-          managerProfileRequired: Boolean(u.managerProfileRequired),
-          managerProfileCompletedAt: u.managerProfileCompletedAt ?? null,
-        }
-      : {}),
     lastActiveAt: u.lastActiveAt,
     createdAt: u.createdAt,
   };
@@ -340,9 +326,6 @@ export async function register(
   }
   const user: User = {
     name: input.name,
-    avatarUrl: null,
-    avatarPath: null,
-    workplace: null,
     phone: idf.kind === 'phone' ? idf.phone : null,
     email: idf.kind === 'email' ? idf.email : null,
     nationalCodeHash: idf.kind === 'nationalCode' ? idf.nationalCodeHash : null,
@@ -531,98 +514,15 @@ export async function requestPasswordReset(d: Deps, identifier: string) {
 }
 
 // ─── Profile (Me) ───────────────────────────────────────────────────────────
-export const patchMeSchema = z
-  .object({
-    name: text(2, 60, 'نام').optional(),
-    province: provinceSchema.optional(),
-    city: citySchema.optional(),
-    workplace: z.string().trim().max(80, 'محل فعالیت خیلی طولانی است.').nullable().optional(),
-  })
-  .superRefine(checkResidence)
-  .refine((v) => Object.keys(v).length > 0, 'هیچ تغییری ارسال نشده است.');
-
-export const avatarUploadSchema = z.object({
-  fileName: z.string().trim().min(1).max(200),
-  mime: z.string().trim().max(100),
-  sizeBytes: z.number().int().positive(),
-});
-
-export const avatarFinalizeSchema = z.object({
-  path: z.string().min(1).max(240),
-});
-
+export const patchMeSchema = z.object({ name: text(2, 60, 'نام') });
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
   newPassword: passwordSchema,
 });
 
 export async function updateMe(d: Deps, user: Doc<User>, input: z.infer<typeof patchMeSchema>) {
-  if (user.role === 'manager' && (input.province !== undefined || input.city !== undefined))
-    throw new ApiError(
-      'FORBIDDEN',
-      'محدوده مدیریت مدیر از سوی ادمین تعیین می‌شود و از این بخش قابل تغییر نیست.',
-    );
-  const patch: Partial<User> = { updatedAt: nowIso(d) };
-  if (input.name !== undefined) patch.name = input.name;
-  if (input.workplace !== undefined) patch.workplace = input.workplace;
-  if (input.province !== undefined || input.city !== undefined)
-    Object.assign(patch, residence(input));
-  await d.store.update(`users/${user.id}`, patch as Record<string, unknown>);
-  return publicUser({ ...user, ...patch });
-}
-
-export async function createAvatarUploadUrl(
-  d: Deps,
-  user: Doc<User>,
-  input: z.infer<typeof avatarUploadSchema>,
-) {
-  const rule = MEDIA_RULES.image;
-  const mime = input.mime.toLowerCase();
-  if (!rule.mimes.includes(mime))
-    throw new ApiError('VALIDATION', 'فقط تصویر PNG، JPEG یا WebP مجاز است.');
-  if (input.sizeBytes > rule.maxBytes)
-    throw new ApiError(
-      'VALIDATION',
-      `حجم عکس پروفایل حداکثر ${Math.round(rule.maxBytes / 1024 / 1024)} مگابایت است.`,
-    );
-  const ext = EXT[mime] ?? 'bin';
-  const path = `avatars/${user.id}/avatar-${d.store.newId()}.${ext}`;
-  return {
-    path,
-    upload: await d.blob.createUploadUrl(path, mime, rule.maxBytes),
-  };
-}
-
-export async function finalizeAvatar(
-  d: Deps,
-  user: Doc<User>,
-  input: z.infer<typeof avatarFinalizeSchema>,
-) {
-  const prefix = `avatars/${user.id}/avatar-`;
-  if (!input.path.startsWith(prefix))
-    throw new ApiError('FORBIDDEN', 'مسیر عکس پروفایل معتبر نیست.');
-  const stat = await d.blob.stat(input.path);
-  if (!stat) throw new ApiError('CONFLICT', 'فایل هنوز آپلود نشده است. دوباره تلاش کنید.');
-  const rule = MEDIA_RULES.image;
-  if (stat.size <= 0 || stat.size > rule.maxBytes) {
-    await d.blob.delete(input.path).catch(() => {});
-    throw new ApiError('VALIDATION', 'حجم عکس پروفایل معتبر نیست.');
-  }
-  const head = await d.blob.readRange(input.path, 0, Math.min(stat.size, 63));
-  const detected = sniff(head);
-  if (!detected || !detected.kinds.includes('image')) {
-    await d.blob.delete(input.path).catch(() => {});
-    throw new ApiError('VALIDATION', 'محتوای فایل تصویر معتبر نیست.');
-  }
-  const avatarUrl = await d.blob.publicUrl(input.path);
-  const previous = user.avatarPath;
-  await d.store.update(`users/${user.id}`, {
-    avatarPath: input.path,
-    avatarUrl,
-    updatedAt: nowIso(d),
-  });
-  if (previous && previous !== input.path) await d.blob.delete(previous).catch(() => {});
-  return publicUser({ ...user, avatarPath: input.path, avatarUrl });
+  await d.store.update(`users/${user.id}`, { name: input.name, updatedAt: nowIso(d) });
+  return publicUser({ ...user, name: input.name });
 }
 
 export async function changePassword(
@@ -649,85 +549,6 @@ export async function completeOnboarding(d: Deps, user: Doc<User>) {
   await d.store.update(`users/${user.id}`, { onboardedAt: at });
   await track(d, 'onboarding_completed', user.id);
   return { onboardedAt: at };
-}
-
-const managerProfileNationalCodeSchema = z
-  .string({ required_error: 'کد ملی را وارد کنید.' })
-  .trim()
-  .min(1, 'کد ملی را وارد کنید.')
-  .max(20)
-  .refine((value) => normalizeNationalCode(value) !== null, 'کد ملی معتبر ۱۰ رقمی وارد کنید.');
-
-export const managerProfileCompletionSchema = z
-  .object({
-    name: text(2, 60, 'نام و نام خانوادگی'),
-    nationalCode: managerProfileNationalCodeSchema,
-    province: provinceSchema,
-    city: citySchema,
-    newPassword: passwordSchema,
-  })
-  .superRefine(checkResidence);
-
-/** First-login setup for an Admin-created Manager: identity digest, management area, and new password. */
-export async function completeManagerProfile(
-  d: Deps,
-  manager: Doc<User>,
-  input: z.infer<typeof managerProfileCompletionSchema>,
-) {
-  if (manager.role !== 'manager' || manager.status !== 'active' || !manager.managerProfileRequired)
-    throw new ApiError('CONFLICT', 'تکمیل پروفایل مدیر برای این حساب در دسترس نیست.');
-  if (!manager.teamId) throw new ApiError('CONFLICT', 'حساب مدیر هنوز به تیمی متصل نشده است.');
-  const team = await d.store.get<Team>(`teams/${manager.teamId}`);
-  if (!team || team.archived) throw new ApiError('CONFLICT', 'تیم تخصیص‌داده‌شده در دسترس نیست.');
-
-  const nationalCode = normalizeNationalCode(input.nationalCode);
-  if (!nationalCode) throw new ApiError('VALIDATION', 'کد ملی معتبر ۱۰ رقمی وارد کنید.');
-  const nationalCodeHash = nationalCodeDigest(nationalCode, d.config.localSecret);
-  const keyPath = `unique_keys/${ids.uniqueKey('nationalCode', nationalCodeHash)}`;
-  const at = nowIso(d);
-  const canonicalResidence = residence(input);
-  await d.store.runTransaction(async (tx) => {
-    const [current, key] = await Promise.all([
-      tx.get<User>(`users/${manager.id}`),
-      tx.get<{ uid: string | null }>(keyPath),
-    ]);
-    if (
-      !current ||
-      current.role !== 'manager' ||
-      current.status !== 'active' ||
-      !current.managerProfileRequired ||
-      current.teamId !== manager.teamId
-    )
-      throw new ApiError('CONFLICT', 'وضعیت حساب تغییر کرده است؛ دوباره وارد پنل شوید.');
-    if (key?.uid && key.uid !== manager.id)
-      throw new ApiError('CONFLICT', 'این کد ملی پیش‌تر به حساب دیگری متصل شده است.');
-    if (!key) tx.create(keyPath, { kind: 'nationalCode', createdAt: at, uid: manager.id });
-    else if (!key.uid) tx.update(keyPath, { uid: manager.id });
-    tx.update(`users/${manager.id}`, {
-      name: input.name.trim(),
-      ...canonicalResidence,
-      nationalCodeHash,
-      updatedAt: at,
-    });
-  });
-
-  // The Manager is authenticated by the Admin-issued temporary password. Replace it before
-  // opening the team panel so a password merely handed over verbally is not a lasting credential.
-  await d.auth.setPassword(manager.id, input.newPassword);
-  await d.store.update(`users/${manager.id}`, {
-    managerProfileRequired: false,
-    managerProfileCompletedAt: at,
-    updatedAt: at,
-  });
-  const updated = await d.store.get<User>(`users/${manager.id}`);
-  const actor: Actor = { id: manager.id, role: 'manager' };
-  await audit(d, actor, 'manager.profile_completed', 'users', manager.id, null, {
-    teamId: manager.teamId,
-    province: canonicalResidence.province,
-    city: canonicalResidence.city,
-  });
-  await track(d, 'manager_profile_completed', manager.id);
-  return updated ? publicUser(updated) : null;
 }
 
 // ─── Admin: users (PROMPT 007) ──────────────────────────────────────────────
@@ -767,23 +588,6 @@ export async function listUsers(d: Deps, f: z.infer<typeof adminUserQuery>) {
   users.sort((a, b) => a.name.localeCompare(b.name, 'fa'));
   return users.map(publicUser);
 }
-
-export const adminCreateUserSchema = z
-  .object({
-    firstName: text(2, 30, 'نام'),
-    lastName: text(2, 40, 'نام خانوادگی'),
-    phone: z.string().trim().min(1, 'شماره موبایل را وارد کنید.').max(30),
-    role: z.enum(['marketer', 'manager']),
-    teamId: z.string().trim().max(80).nullable().optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.role === 'manager' && !value.teamId)
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['teamId'],
-        message: 'برای ساخت حساب مدیر، تیم را انتخاب کنید.',
-      });
-  });
 
 export const adminPatchUserSchema = z
   .object({
@@ -848,27 +652,32 @@ export async function adminUpdateUser(
     const team = await d.store.get<Team>(`teams/${patch.teamId}`);
     if (!team || team.archived) throw new ApiError('VALIDATION', 'تیم انتخاب‌شده معتبر نیست.');
   }
-  const nextRole = patch.role ?? target.role;
-  const nextTeamId = patch.teamId === undefined ? target.teamId : patch.teamId;
-  if (nextRole === 'manager' && !nextTeamId)
-    throw new ApiError('VALIDATION', 'مدیر باید به یک تیم فعال متصل باشد.', {
-      teamId: 'تیم را انتخاب کنید.',
-    });
   if (patch.brandIds?.length) {
     const brands = await d.store.getMany(patch.brandIds.map((b) => `brands/${b}`));
     if (brands.some((b) => !b)) throw new ApiError('VALIDATION', 'برند انتخاب‌شده معتبر نیست.');
   }
   const warnings: string[] = [];
+  // A user who stops being an active manager must not stay attached to a team: otherwise the team
+  // keeps showing them as its manager (listTeams) and their panel keeps listing its members.
   const wasManager = target.role === 'manager';
-  const movedTeam = wasManager && nextTeamId !== target.teamId;
-  const update: Partial<User> = { ...patch, updatedAt: nowIso(d) } as Partial<User>;
-  if (roleChanged && nextRole === 'manager') {
-    update.managerProfileRequired = true;
-    update.managerProfileCompletedAt = null;
-  } else if (roleChanged && wasManager) {
-    update.managerProfileRequired = false;
-    update.managerProfileCompletedAt = null;
+  const stopsManaging =
+    wasManager &&
+    ((patch.role !== undefined && patch.role !== 'manager') || patch.status === 'inactive');
+  const movedTeam = wasManager && patch.teamId !== undefined && patch.teamId !== target.teamId;
+  if (stopsManaging || movedTeam) {
+    const managed = await d.store.query<Team>({
+      collection: 'teams',
+      where: [['managerId', '==', userId]],
+    });
+    const toClear = stopsManaging ? managed : managed.filter((t) => t.id === target.teamId);
+    for (const t of toClear)
+      await d.store.update(`teams/${t.id}`, { managerId: null, updatedAt: nowIso(d) });
+    if (toClear.length)
+      warnings.push(
+        `مدیریت تیم «${toClear.map((t) => t.name).join('، ')}» از این کاربر گرفته شد؛ در بخش تیم‌ها مدیر جدیدی انتخاب کنید.`,
+      );
   }
+  const update: Partial<User> = { ...patch, updatedAt: nowIso(d) } as Partial<User>;
   // Store the canonical spellings, not whatever the picker/search box sent.
   if (patch.province) Object.assign(update, residence(patch));
   await d.store.update(`users/${userId}`, update as Record<string, unknown>);
@@ -876,29 +685,6 @@ export async function adminUpdateUser(
   if (roleChanged || patch.status === 'inactive') await d.auth.revoke(userId);
   if (patch.status !== undefined && patch.status !== target.status)
     await d.auth.setDisabled(userId, patch.status === 'inactive');
-  const affectedManagerTeams = new Set<string>();
-  if (wasManager && target.teamId) affectedManagerTeams.add(target.teamId);
-  if (nextRole === 'manager' && nextTeamId) affectedManagerTeams.add(nextTeamId);
-  if (wasManager || nextRole === 'manager') {
-    for (const teamId of affectedManagerTeams) await syncTeamManagerPointer(d, teamId);
-  }
-  if (wasManager && target.teamId && (roleChanged || movedTeam)) {
-    const remaining = await d.store.query<User>({
-      collection: 'users',
-      where: [
-        ['teamId', '==', target.teamId],
-        ['role', '==', 'manager'],
-        ['status', '==', 'active'],
-      ],
-    });
-    if (!remaining.length) {
-      const team = await d.store.get<Team>(`teams/${target.teamId}`);
-      if (team)
-        warnings.push(
-          `مدیریت تیم «${team.name}» مدیر فعالی ندارد؛ در بخش تیم‌ها مدیر دیگری انتخاب کنید.`,
-        );
-    }
-  }
   const before = Object.fromEntries(
     Object.keys(patch).map((k) => [k, (target as unknown as Record<string, unknown>)[k]]),
   );
@@ -926,63 +712,6 @@ function tempPassword(): string {
   return `${s}${randomInt(1000, 9999)}`;
 }
 
-/** Admin-provisioned accounts are active immediately; Managers receive a one-time password. */
-export async function adminCreateUser(
-  d: Deps,
-  actor: Actor,
-  input: z.infer<typeof adminCreateUserSchema>,
-) {
-  if (actor.role !== 'admin' && actor.role !== 'superadmin') throw new ApiError('FORBIDDEN');
-  const phone = normalizePhone(input.phone);
-  if (!phone)
-    throw new ApiError('VALIDATION', 'شماره موبایل معتبر وارد کنید.', {
-      phone: 'شماره موبایل معتبر وارد کنید.',
-    });
-  const teamId = input.teamId || null;
-  const team = teamId ? await d.store.get<Team>(`teams/${teamId}`) : null;
-  if (teamId && (!team || team.archived))
-    throw new ApiError('VALIDATION', 'تیم انتخاب‌شده معتبر نیست.', {
-      teamId: 'تیم انتخاب‌شده معتبر نیست.',
-    });
-  if (input.role === 'manager' && !teamId)
-    throw new ApiError('VALIDATION', 'برای ساخت حساب مدیر، تیم را انتخاب کنید.', {
-      teamId: 'تیم را انتخاب کنید.',
-    });
-
-  const name = `${input.firstName.trim()} ${input.lastName.trim()}`;
-  const temporaryPassword = input.role === 'manager' ? tempPassword() : null;
-  const user = await register(
-    d,
-    {
-      name,
-      identifier: phone,
-      // Marketers use the existing identity flow. Managers receive a random, strong password
-      // below and must replace it while completing their first-login profile.
-      password: temporaryPassword ?? randomBytesBase64Url(24),
-    },
-    input.role,
-    {
-      teamId,
-      ...(team ? { province: team.province ?? null, city: team.city ?? null } : {}),
-      ...(input.role === 'manager'
-        ? { managerProfileRequired: true, managerProfileCompletedAt: null }
-        : {}),
-    },
-    { passwordless: input.role === 'marketer' },
-  );
-  if (input.role === 'manager' && teamId) await syncTeamManagerPointer(d, teamId);
-  await audit(d, actor, 'user.admin_created', 'users', user.id, null, {
-    role: user.role,
-    teamId: user.teamId,
-    phone,
-  });
-  await track(d, 'admin_user_created', actor.id, { role: user.role });
-  return {
-    user: publicUser(user),
-    temporaryPassword,
-  };
-}
-
 /** D35: phone users → temporary password shown once to the admin; email users → reset mail. */
 export async function adminResetPassword(d: Deps, actor: Actor, userId: string) {
   const target = await d.store.get<User>(`users/${userId}`);
@@ -1007,264 +736,85 @@ export async function adminResetPassword(d: Deps, actor: Actor, userId: string) 
 // ─── Teams ─────────────────────────────────────────────────────────────────
 export const teamSchema = z.object({
   name: text(2, 60, 'نام تیم'),
-  /** Legacy single-manager input; multi-manager clients use `managerIds`. */
   managerId: z.string().max(80).nullable().optional(),
-  managerIds: z.array(z.string().max(80)).optional(),
-  province: provinceSchema.nullable().optional(),
-  city: citySchema.nullable().optional(),
 });
-
-export const teamPatchSchema = teamSchema.partial().extend({ archived: z.boolean().optional() });
-
-function normalizedTeamArea(input: { province?: string | null; city?: string | null }): {
-  province: string | null;
-  city: string | null;
-} {
-  const provinceInput = input.province?.trim() ?? '';
-  const cityInput = input.city?.trim() ?? '';
-  if (!provinceInput && !cityInput) return { province: null, city: null };
-  if (!provinceInput || !cityInput)
-    throw new ApiError('VALIDATION', 'برای محدودهٔ شهر، استان و شهر را با هم انتخاب کنید.');
-  const province = canonicalProvince(provinceInput);
-  const city = province ? canonicalCity(province, cityInput) : null;
-  if (!province || !city)
-    throw new ApiError('VALIDATION', 'شهر انتخاب‌شده در استان مشخص‌شده معتبر نیست.');
-  return { province, city };
-}
-
-async function ensureUniqueTeamArea(
-  d: Deps,
-  area: { province: string | null; city: string | null },
-  exceptId?: string,
-) {
-  const province = area.province;
-  const city = area.city;
-  if (!province || !city) return;
-  const teams = await d.store.query<Team>({ collection: 'teams' });
-  const duplicate = teams.find(
-    (team) =>
-      team.id !== exceptId &&
-      !team.archived &&
-      !!team.province &&
-      !!team.city &&
-      normalizeLocation(team.province) === normalizeLocation(province) &&
-      normalizeLocation(team.city) === normalizeLocation(city),
-  );
-  if (duplicate)
-    throw new ApiError(
-      'CONFLICT',
-      `محدودهٔ ${city}، ${province} از قبل به تیم «${duplicate.name}» تخصیص یافته است. برای این شهر یک تیم بسازید و چند مدیر به همان تیم اضافه کنید.`,
-    );
-}
-
-async function currentManagerIds(d: Deps, teamId: string, team?: Team | null): Promise<string[]> {
-  const assigned = await d.store.query<User>({
-    collection: 'users',
-    where: [
-      ['teamId', '==', teamId],
-      ['role', '==', 'manager'],
-    ],
-  });
-  const ids = new Set(assigned.map((manager) => manager.id));
-  if (team?.managerId && !ids.has(team.managerId)) {
-    const legacy = await d.store.get<User>(`users/${team.managerId}`);
-    if (legacy?.role === 'manager' && legacy.status !== 'blacklisted') ids.add(legacy.id);
-  }
-  return [...ids];
-}
-
-async function validateManagerIds(d: Deps, teamId: string, managerIds: string[]) {
-  const unique = [...new Set(managerIds)];
-  const managers = await d.store.getMany<User>(unique.map((id) => `users/${id}`));
-  for (let i = 0; i < unique.length; i++) {
-    const manager = managers[i];
-    if (
-      !manager ||
-      manager.role !== 'manager' ||
-      manager.status === 'blacklisted' ||
-      (manager.status !== 'active' && manager.teamId !== teamId)
-    )
-      throw new ApiError(
-        'VALIDATION',
-        'همهٔ مدیران تیم باید حساب فعال داشته باشند؛ مدیر غیرفعال را فقط از تیم فعلی می‌توان نگه داشت.',
-      );
-  }
-  return unique;
-}
-
-export async function syncTeamManagerPointer(d: Deps, teamId: string) {
-  const team = await d.store.get<Team>(`teams/${teamId}`);
-  if (!team) return;
-  if (team.archived) {
-    if (team.managerId !== null)
-      await d.store.update(`teams/${teamId}`, { managerId: null, updatedAt: nowIso(d) });
-    return;
-  }
-  const managers = await d.store.query<User>({
-    collection: 'users',
-    where: [
-      ['teamId', '==', teamId],
-      ['role', '==', 'manager'],
-      ['status', '==', 'active'],
-    ],
-  });
-  await d.store.update(`teams/${teamId}`, {
-    managerId: managers[0]?.id ?? null,
-    updatedAt: nowIso(d),
-  });
-}
-
-async function assignManagers(
-  d: Deps,
-  teamId: string,
-  requestedIds: string[],
-  team: Team | null,
-): Promise<string[]> {
-  const desired = await validateManagerIds(d, teamId, requestedIds);
-  const desiredSet = new Set(desired);
-  const currentIds = await currentManagerIds(d, teamId, team);
-  const previousTeamIds = new Set<string>();
-  const warnings: string[] = [];
-  const timestamp = nowIso(d);
-
-  for (const id of currentIds) {
-    if (desiredSet.has(id)) continue;
-    const manager = await d.store.get<User>(`users/${id}`);
-    if (manager?.role === 'manager' && manager.teamId === teamId) {
-      await d.store.update(`users/${id}`, { teamId: null, updatedAt: timestamp });
-      warnings.push(`مدیر «${manager.name}» از این تیم جدا شد.`);
-    }
-  }
-
-  for (const id of desired) {
-    const manager = await d.store.get<User>(`users/${id}`);
-    if (!manager) continue; // The validation above already guards this; tolerate a deletion race.
-    if (manager.teamId && manager.teamId !== teamId) {
-      previousTeamIds.add(manager.teamId);
-      const previousTeam = await d.store.get<Team>(`teams/${manager.teamId}`);
-      if (previousTeam?.managerId === manager.id)
-        await d.store.update(`teams/${manager.teamId}`, { managerId: null, updatedAt: timestamp });
-    }
-    if (manager.teamId !== teamId)
-      await d.store.update(`users/${id}`, { teamId, updatedAt: timestamp });
-  }
-
-  await syncTeamManagerPointer(d, teamId);
-  for (const previousTeamId of previousTeamIds) {
-    const previous = await d.store.get<Team>(`teams/${previousTeamId}`);
-    await syncTeamManagerPointer(d, previousTeamId);
-    const remaining = await d.store.query<User>({
-      collection: 'users',
-      where: [
-        ['teamId', '==', previousTeamId],
-        ['role', '==', 'manager'],
-        ['status', '==', 'active'],
-      ],
-    });
-    if (previous && !remaining.length)
-      warnings.push(`تیم قبلی «${previous.name}» هم بدون مدیر ماند؛ برایش مدیر فعالی انتخاب کنید.`);
-  }
-  return warnings;
-}
 
 export async function listTeams(d: Deps) {
   const [teams, users] = await Promise.all([
     d.store.query<Team>({ collection: 'teams' }),
-    d.store.query<User>({ collection: 'users' }),
+    d.store.query<User>({ collection: 'users', where: [['status', '==', 'active']] }),
   ]);
   return teams
-    .filter((team) => !team.archived)
-    .map((team) => {
-      const assigned = users.filter(
-        (user) =>
-          user.role === 'manager' &&
-          user.status !== 'blacklisted' &&
-          (user.teamId === team.id || (!user.teamId && user.id === team.managerId)),
-      );
-      const managers = assigned
-        .sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active'))
-        .map((manager) => ({ id: manager.id, name: manager.name, status: manager.status }));
-      const activeManagers = managers.filter((manager) => manager.status === 'active');
-      const primary = activeManagers[0] ?? null;
-      return {
-        id: team.id,
-        name: team.name,
-        managerId: primary?.id ?? null,
-        managerName: primary?.name ?? null,
-        managerIds: managers.map((manager) => manager.id),
-        managers,
-        activeManagerCount: activeManagers.length,
-        province: team.province ?? null,
-        city: team.city ?? null,
-        memberCount: users.filter(
-          (user) => user.status === 'active' && isTeamMarketer(user, team.id, team),
-        ).length,
-      };
-    })
+    .filter((t) => !t.archived)
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      managerId: t.managerId,
+      managerName: users.find((u) => u.id === t.managerId)?.name ?? null,
+      memberCount: users.filter((u) => u.teamId === t.id && u.role === 'marketer').length,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, 'fa'));
 }
 
-function selectedManagerIds(input: {
-  managerIds?: string[];
-  managerId?: string | null;
-}): string[] | undefined {
-  if (input.managerIds !== undefined) return [...new Set(input.managerIds)];
-  if (input.managerId !== undefined) return input.managerId ? [input.managerId] : [];
-  return undefined;
+async function assignManager(
+  d: Deps,
+  teamId: string,
+  managerId: string | null | undefined,
+): Promise<string[]> {
+  if (!managerId) return [];
+  const m = await d.store.get<User>(`users/${managerId}`);
+  if (!m || m.role !== 'manager' || m.status !== 'active')
+    throw new ApiError('VALIDATION', 'مدیر تیم باید کاربری فعال با نقش «مدیر فروش» باشد.');
+  const warnings: string[] = [];
+  // Moving a manager to another team frees the team they managed before — a team may not keep a
+  // `managerId` that no longer belongs to it.
+  if (m.teamId && m.teamId !== teamId) {
+    const prev = await d.store.get<Team>(`teams/${m.teamId}`);
+    if (prev && !prev.archived && prev.managerId === m.id) {
+      await d.store.update(`teams/${m.teamId}`, { managerId: null, updatedAt: nowIso(d) });
+      warnings.push(`تیم قبلی «${prev.name}» هم بدون مدیر ماند؛ برایش مدیر جدیدی انتخاب کنید.`);
+    }
+  }
+  await d.store.update(`users/${managerId}`, { teamId, updatedAt: nowIso(d) });
+  return warnings;
 }
 
 export async function createTeam(d: Deps, actor: Actor, input: z.infer<typeof teamSchema>) {
   const id = d.store.newId();
   const now = nowIso(d);
-  const area = normalizedTeamArea(input);
-  await ensureUniqueTeamArea(d, area);
-  const requested = selectedManagerIds(input) ?? [];
-  await validateManagerIds(d, id, requested);
+  const warnings = await assignManager(d, id, input.managerId);
   const team: Team = {
     name: input.name,
-    managerId: null,
-    ...area,
+    managerId: input.managerId ?? null,
     archived: false,
     createdAt: now,
     updatedAt: now,
   };
   await d.store.set(`teams/${id}`, team);
-  const warnings = await assignManagers(d, id, requested, team);
-  const saved = (await d.store.get<Team>(`teams/${id}`)) ?? team;
-  await audit(d, actor, 'team.created', 'teams', id, null, saved);
-  return { id, ...saved, managerIds: requested, warnings };
+  await audit(d, actor, 'team.created', 'teams', id, null, team);
+  return { id, ...team, warnings };
 }
 
 export async function updateTeam(
   d: Deps,
   actor: Actor,
   teamId: string,
-  input: z.infer<typeof teamPatchSchema>,
+  input: Partial<z.infer<typeof teamSchema>> & { archived?: boolean },
 ) {
   const team = await d.store.get<Team>(`teams/${teamId}`);
   if (!team) throw new ApiError('NOT_FOUND', 'تیم پیدا نشد.');
-  const area = normalizedTeamArea({
-    province: input.province === undefined ? (team.province ?? null) : input.province,
-    city: input.city === undefined ? (team.city ?? null) : input.city,
-  });
-  await ensureUniqueTeamArea(d, area, teamId);
-  const currentIds = await currentManagerIds(d, teamId, team);
-  const selected = selectedManagerIds(input);
-  const requested = input.archived ? [] : (selected ?? currentIds);
-  await validateManagerIds(d, teamId, requested);
-  const patch = {
-    ...(input.name !== undefined ? { name: input.name } : {}),
-    ...(input.archived !== undefined ? { archived: input.archived } : {}),
-    ...area,
-    managerId: team.managerId,
-    updatedAt: nowIso(d),
-  };
+  const managerChanged = input.managerId !== undefined && input.managerId !== team.managerId;
+  const warnings = managerChanged ? await assignManager(d, teamId, input.managerId) : [];
+  // The previous manager is detached from the team (also when the team is archived), so their panel
+  // no longer shows a team the admin list has already hidden.
+  if ((managerChanged || input.archived) && team.managerId) {
+    await d.store.update(`users/${team.managerId}`, { teamId: null, updatedAt: nowIso(d) });
+    warnings.push('مدیر قبلی از این تیم جدا شد.');
+  }
+  const patch = { ...input, updatedAt: nowIso(d) };
   await d.store.update(`teams/${teamId}`, patch);
-  const warnings = await assignManagers(d, teamId, requested, { ...team, ...patch });
-  if (input.archived && currentIds.length) warnings.push('مدیران قبلی از این تیم جدا شدند.');
-  const updated = (await d.store.get<Team>(`teams/${teamId}`)) ?? { ...team, ...patch };
   await audit(d, actor, 'team.updated', 'teams', teamId, team, patch);
-  return { ...updated, id: teamId, managerIds: requested, warnings };
+  return { ...team, ...patch, id: teamId, warnings };
 }
 
 /** Used by seed/bootstrap: first superadmin (never via public API). */

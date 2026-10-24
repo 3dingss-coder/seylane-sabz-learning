@@ -10,7 +10,7 @@ import { createPlaceholderMp4 } from '../seed/seed';
  * Local-mode blob endpoints (Firebase mode uses Storage signed URLs instead):
  *   PUT  /uploads/:token          — signed upload (streamed, size-capped)
  *   GET  /files/signed/:token     — signed private read (Range supported)
- *   GET  /files/public/...        — public image assets (catalog + randomized profile avatars)
+ *   GET  /files/public/brands/... — public catalog images only (brands/, products/, branding/)
  */
 export function localFilesRouter(blob: LocalBlobStore): Router {
   const r = Router();
@@ -90,7 +90,7 @@ export function localFilesRouter(blob: LocalBlobStore): Router {
     }
   });
 
-  r.get(/^\/files\/public\/((?:brands|products|branding|avatars)\/.+)$/, (req, res, next) => {
+  r.get(/^\/files\/public\/((?:brands|products|branding)\/.+)$/, (req, res, next) => {
     try {
       const p = decodeURIComponent((req.params as Record<string, string>)[0] ?? '');
       if (p.includes('..') || p.endsWith('.meta.json')) throw new ApiError('NOT_FOUND');

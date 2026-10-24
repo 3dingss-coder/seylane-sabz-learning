@@ -37,10 +37,6 @@ jobs:
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-24.04
-    container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble
-      options: --ipc=host
-    timeout-minutes: 30
     needs: quality
     steps:
       - uses: actions/checkout@v5
@@ -49,7 +45,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # The Playwright image preinstalls browser binaries + OS dependencies for this locked version.
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: apps/web
       # Build outside Playwright's webServer timeout; `vite preview` then serves apps/web/dist.
       - run: npm run build -w apps/web
       - run: npm run test:e2e

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Building2, Check, ChevronDown, MapPin, Search, X } from 'lucide-react';
+import { Check, ChevronDown, Search, X } from 'lucide-react';
 import { Spinner } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { motionOff } from '@/lib/motion';
@@ -33,9 +33,6 @@ interface LocationFieldProps {
   error?: string;
   /** Renders a clear (×) button — used where the field is optional (admin user dialog). */
   clearable?: boolean;
-  hideLabel?: boolean;
-  /** End-side cue icon (e.g. MapPin / Building2) as in the reference selects. */
-  icon?: import('react').ReactNode;
   onOpen: () => void;
   onSelect: (value: string) => void;
   onClear?: () => void;
@@ -63,8 +60,6 @@ function LocationField({
   disabled,
   error,
   clearable,
-  hideLabel,
-  icon,
   onOpen,
   onSelect,
   onClear,
@@ -156,7 +151,7 @@ function LocationField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'text-sm font-semibold text-text'}>
+      <label htmlFor={id} className="text-sm font-semibold text-text">
         {label}
       </label>
       {/* The panel is intentionally not closed from `blur`: clicking an option blurs the search box
@@ -182,14 +177,6 @@ function LocationField({
           <span className={cn('flex-1 truncate', value ? 'text-text' : 'text-muted-fg')}>
             {value || placeholder}
           </span>
-          {icon && (
-            <span
-              aria-hidden
-              className="pointer-events-none grid size-6 shrink-0 place-items-center text-muted-fg"
-            >
-              {icon}
-            </span>
-          )}
           {!clearable && (
             <ChevronDown
               aria-hidden
@@ -210,7 +197,7 @@ function LocationField({
                 onClear?.();
                 close(true);
               }}
-              className="pointer-events-auto grid size-12 place-items-center rounded-full text-muted-fg hover:bg-surface-2 focus:outline-none focus:ring-4 focus:ring-info/15"
+              className="pointer-events-auto grid size-8 place-items-center rounded-full text-muted-fg hover:bg-surface-2 focus:outline-none focus:ring-4 focus:ring-info/15"
             >
               <X aria-hidden className="size-4" />
             </button>
@@ -251,7 +238,7 @@ function LocationField({
                   setActive(0);
                 }}
                 onKeyDown={onKeyDown}
-                className="min-h-12 w-full bg-transparent text-base text-text outline-none placeholder:text-muted-fg"
+                className="min-h-11 w-full bg-transparent text-base text-text outline-none placeholder:text-muted-fg"
               />
               {status === 'loading' && <Spinner className="size-4 text-muted-fg" />}
             </div>
@@ -290,9 +277,9 @@ function LocationField({
                       data-value={option}
                       aria-selected={selected}
                       className={cn(
-                        'flex min-h-12 cursor-pointer items-center justify-between gap-2 px-3.5 text-sm',
+                        'flex min-h-11 cursor-pointer items-center justify-between gap-2 px-3.5 text-sm',
                         index === active && 'bg-primary-light',
-                        selected ? 'font-bold text-primary-fg' : 'text-text',
+                        selected ? 'font-bold text-primary' : 'text-text',
                       )}
                     >
                       <span className="truncate">{option}</span>
@@ -321,15 +308,6 @@ interface ResidencePickerProps {
   disabled?: boolean;
   /** Let the user clear the pair (optional field, e.g. the admin user dialog). */
   clearable?: boolean;
-  /** Sign-up wizard step 2 collects the province alone (city arrives on the next step). */
-  hideCity?: boolean;
-  /** Keep the label for screen readers only (the wizard's step-2 select uses its placeholder as the cue). */
-  hideLabel?: boolean;
-  /** Placeholder of the province trigger (default «استان خود را انتخاب کنید»). */
-  placeholder?: string;
-  /** Optional role-scoped icon overrides; shared staff/admin forms keep the default glyphs. */
-  provinceIcon?: import('react').ReactNode;
-  cityIcon?: import('react').ReactNode;
 }
 
 /**
@@ -346,11 +324,6 @@ export function ResidencePicker({
   cityError,
   disabled,
   clearable,
-  hideCity,
-  hideLabel,
-  placeholder,
-  provinceIcon,
-  cityIcon,
 }: ResidencePickerProps) {
   const [locations, setLocations] = useState<IranLocations | null>(null);
   const [failed, setFailed] = useState(false);
@@ -379,7 +352,7 @@ export function ResidencePicker({
         id={`${baseId}-province`}
         label={label}
         prompt="لطفا استان خود را وارد کنید"
-        placeholder={placeholder ?? 'استان خود را انتخاب کنید'}
+        placeholder="لطفا استان خود را انتخاب کنید"
         searchLabel="جستجوی استان"
         emptyText="استانی با این نام پیدا نشد."
         listLabel="استان‌های ایران"
@@ -389,18 +362,16 @@ export function ResidencePicker({
         disabled={disabled}
         error={provinceError}
         clearable={clearable}
-        hideLabel={hideLabel}
-        icon={provinceIcon ?? <MapPin className="size-4.5" aria-hidden />}
         onOpen={openList}
         onSelect={(province) => onChange({ province, city: '' })}
         onClear={() => onChange({ province: '', city: '' })}
       />
-      {!hideCity && value.province !== '' && (
+      {value.province !== '' && (
         <LocationField
           id={`${baseId}-city`}
           label="شهر"
           prompt="لطفا شهر خود را انتخاب کنید"
-          placeholder="شهر خود را انتخاب کنید"
+          placeholder="لطفا شهر خود را انتخاب کنید"
           searchLabel="جستجوی شهر"
           emptyText="شهری با این نام در این استان پیدا نشد."
           listLabel={`شهرهای استان ${value.province}`}
@@ -409,7 +380,6 @@ export function ResidencePicker({
           status={status}
           disabled={disabled}
           error={cityError}
-          icon={cityIcon ?? <Building2 className="size-4.5" aria-hidden />}
           onOpen={openList}
           onSelect={(city) => onChange({ ...value, city })}
         />

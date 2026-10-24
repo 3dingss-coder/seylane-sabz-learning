@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, RotateCcw, Search, ShieldAlert, Trash2, Users } from 'lucide-react';
-import { Button, Card, EmptyState, Input, KpiCard, TableSkeleton, useToast } from '@/components/ui';
+import { RotateCcw, Trash2 } from 'lucide-react';
+import { Button, EmptyState, TableSkeleton, useToast } from '@/components/ui';
 import { Tabs } from '@/components/common/Field';
 import { PageHeader } from '@/components/common/PageHeader';
 import { QueryState } from '@/components/common/QueryState';
@@ -25,38 +25,9 @@ export function ArchivePage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        variant="admin"
         title="آرشیو"
         subtitle="کاربران و گزارش‌های حذف‌شده. حذف از آرشیو، اطلاعات را برای همیشه از دیتابیس پاک می‌کند."
       />
-      <section aria-label="خلاصهٔ آرشیو" className="grid gap-3 sm:grid-cols-2">
-        <KpiCard
-          title="حساب‌های لیست سیاه"
-          value={users.data ? toPersianDigits(users.data.length) : '—'}
-          subtitle="قابل بازگردانی یا حذف دائمی"
-          icon={Users}
-          tone="danger"
-        />
-        <KpiCard
-          title="گزارش‌های بایگانی‌شده"
-          value={reports.data ? toPersianDigits(reports.data.length) : '—'}
-          subtitle="قابل بازگردانی یا پاک‌سازی دائمی"
-          icon={FileText}
-          tone="info"
-        />
-      </section>
-      <Card className="flex items-start gap-3 border-amber-200 bg-amber-50/70 p-3 sm:p-4">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white text-amber-800">
-          <ShieldAlert className="size-5" aria-hidden />
-        </span>
-        <div>
-          <h2 className="text-sm font-extrabold text-amber-950">بازگردانی با حذف دائمی فرق دارد</h2>
-          <p className="mt-1 text-sm leading-6 text-amber-900/80">
-            بازگردانی داده را دوباره در دسترس قرار می‌دهد؛ «حذف از آرشیو» برگشت‌ناپذیر است و پیش از
-            تأیید، جزئیات کامل نمایش داده می‌شود.
-          </p>
-        </div>
-      </Card>
       <Tabs
         label="آرشیو"
         value={tab}
@@ -77,18 +48,8 @@ function BlacklistTab() {
     group: PersonGroup<ArchivedUser>;
     mode: 'restore' | 'purge';
   } | null>(null);
-  const [search, setSearch] = useState('');
   return (
     <>
-      <div className="max-w-lg">
-        <Input
-          label="جستجو در کاربران بایگانی‌شده"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          icon={<Search className="size-4" aria-hidden />}
-          placeholder="نام، شماره یا شهر…"
-        />
-      </div>
       <p className="text-sm text-text-secondary">
         این شماره‌ها نمی‌توانند وارد اپ شوند یا ثبت‌نام کنند. با «بازگردانی» دوباره اجازه‌ی ورود
         دارند.
@@ -96,20 +57,12 @@ function BlacklistTab() {
       <QueryState query={q} loading={<TableSkeleton rows={5} />}>
         {(list) => {
           const people = groupByPerson(list, (u) => ({ name: u.name, phone: u.phone ?? u.email }));
-          const needle = search.trim().toLocaleLowerCase();
-          const visible = needle
-            ? people.filter((person) =>
-                [person.name, ...person.phones, ...person.rows.flatMap((u) => [u.city, u.province])]
-                  .filter(Boolean)
-                  .some((value) => value?.toLocaleLowerCase().includes(needle)),
-              )
-            : people;
-          return visible.length === 0 ? (
-            <EmptyState title={people.length === 0 ? 'لیست سیاه خالی است' : 'موردی پیدا نشد'} />
+          return people.length === 0 ? (
+            <EmptyState title="لیست سیاه خالی است" />
           ) : (
             <DataTable
               caption="لیست سیاه"
-              rows={visible}
+              rows={people}
               rowKey={(g) => g.key}
               columns={[
                 {
@@ -248,7 +201,7 @@ function UserActionDialog({
       <ul className="mt-3 flex flex-col gap-2">
         {group.rows.map((u) => (
           <li key={u.id}>
-            <label className="flex min-h-12 items-center gap-2">
+            <label className="flex min-h-11 items-center gap-2">
               <input
                 type="checkbox"
                 checked={picked.includes(u.id)}
@@ -271,7 +224,6 @@ function ReportsTab() {
   const qc = useQueryClient();
   const toast = useToast();
   const [purge, setPurge] = useState<ArchivedReportRow[] | null>(null);
-  const [search, setSearch] = useState('');
   const run = useMutation({
     mutationFn: async (v: { rows: ArchivedReportRow[]; mode: 'restore' | 'purge' }) => {
       for (const r of v.rows)
@@ -301,35 +253,16 @@ function ReportsTab() {
         گزارش‌هایی که از صفحه‌ی گزارش‌ها حذف شده‌اند. «حذف از آرشیو» پیشرفت و نتیجه‌ی آزمون‌های آن
         کاربر را برای همیشه پاک می‌کند.
       </p>
-      <div className="max-w-lg">
-        <Input
-          label="جستجو در گزارش‌های بایگانی‌شده"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          icon={<Search className="size-4" aria-hidden />}
-          placeholder="نام عضو، آموزش یا برند…"
-        />
-      </div>
       <QueryState query={q} loading={<TableSkeleton rows={5} />}>
         {(list) => {
-          const needle = search.trim().toLocaleLowerCase();
-          const visible = needle
-            ? list.filter((row) =>
-                [row.userName, row.phone, row.packageTitle, row.brandName, row.productName]
-                  .filter(Boolean)
-                  .some((value) => value?.toLocaleLowerCase().includes(needle)),
-              )
-            : list;
           const m = new Map<string, ArchivedReportRow[]>();
-          for (const r of visible) m.set(r.userId, [...(m.get(r.userId) ?? []), r]);
+          for (const r of list) m.set(r.userId, [...(m.get(r.userId) ?? []), r]);
           const accounts = [...m.values()].flatMap((rows) => {
             const first = rows[0];
             return first ? [{ id: first.userId, first, rows }] : [];
           });
           return accounts.length === 0 ? (
-            <EmptyState
-              title={list.length === 0 ? 'گزارشی در آرشیو نیست' : 'موردی با این جستجو پیدا نشد'}
-            />
+            <EmptyState title="گزارشی در آرشیو نیست" />
           ) : (
             <DataTable
               caption="گزارش‌های آرشیوشده"
