@@ -1,0 +1,95 @@
+name: Cards visual artifacts
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: d45ec53a1a1b83a2c0aa77a123b5fe2949521edc
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: npm run build -w apps/web
+      - name: Start local API and preview
+        run: |
+          LOCAL_PERSIST=false RESEED=true PORT=5001 PLAYBACK_BUDGET=off RATE_LIMIT_SCALE=5 nohup npx tsx functions/src/local.ts > /tmp/api.log 2>&1 &
+          API_PID=$!
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:5001/v1/health >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$API_PID" 2>/dev/null; then cat /tmp/api.log; exit 1; fi
+            sleep 1
+          done
+          cd apps/web
+          nohup npx vite preview --host 127.0.0.1 --port 4173 --strictPort > /tmp/web.log 2>&1 &
+          WEB_PID=$!
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:4173 >/dev/null 2>&1; then exit 0; fi
+            if ! kill -0 "$WEB_PID" 2>/dev/null; then cat /tmp/web.log; exit 1; fi
+            sleep 1
+          done
+          cat /tmp/web.log
+          exit 1
+      - name: Capture 390px and 1440px Cards screenshots
+        working-directory: apps/web
+        run: |
+          cat > cards-shot.mjs <<'EOF'
+          import { chromium } from '@playwright/test';
+          import fs from 'node:fs/promises';
+          const browser = await chromium.launch({ headless: true });
+          async function login(page) {
+            await page.goto('http://127.0.0.1:4173/login');
+            await page.getByLabel(/شماره موبایل/).fill('09120000005');
+            await page.getByRole('button', { name: 'ورود' }).click();
+            await page.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 15000 });
+            await page.goto('http://127.0.0.1:4173/cards');
+            await page.getByTestId('points-balance').waitFor({ state: 'visible', timeout: 15000 });
+            await page.waitForTimeout(900);
+          }
+          await fs.mkdir('/tmp/cards-artifacts', { recursive: true });
+          {
+            const context = await browser.newContext({
+              viewport: { width: 390, height: 844 },
+              deviceScaleFactor: 1,
+              locale: 'fa-IR',
+              colorScheme: 'light',
+              reducedMotion: 'reduce',
+            });
+            const page = await context.newPage();
+            await login(page);
+            await page.screenshot({ path: '/tmp/cards-artifacts/cards-mobile-390.png', fullPage: true });
+            await context.close();
+          }
+          {
+            const context = await browser.newContext({
+              viewport: { width: 1440, height: 1100 },
+              deviceScaleFactor: 1,
+              locale: 'fa-IR',
+              colorScheme: 'light',
+              reducedMotion: 'reduce',
+            });
+            const page = await context.newPage();
+            await login(page);
+            await page.screenshot({ path: '/tmp/cards-artifacts/cards-desktop-1440.png', fullPage: true });
+            await context.close();
+          }
+          await fs.writeFile('/tmp/cards-artifacts/source-sha.txt', 'd45ec53a1a1b83a2c0aa77a123b5fe2949521edc\n');
+          await browser.close();
+          EOF
+          node cards-shot.mjs
+      - uses: actions/upload-artifact@v6
+        with:
+          name: cards-visual-artifacts
+          path: /tmp/cards-artifacts
+          retention-days: 7
